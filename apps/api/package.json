@@ -19,10 +19,12 @@
     "prisma:migrate": "prisma migrate dev",
     "prisma:deploy": "prisma migrate deploy",
     "prisma:seed": "tsx prisma/seed.ts",
+    "prisma:bootstrap": "tsx prisma/bootstrap.ts",
     "prisma:studio": "prisma studio",
     "postinstall": "prisma generate"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1152.0",
     "@nestjs/common": "^12.0.1",
     "@nestjs/config": "^12.0.1",
     "@nestjs/core": "^12.0.1",

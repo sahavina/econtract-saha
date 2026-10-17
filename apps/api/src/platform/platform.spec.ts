@@ -31,7 +31,9 @@ describe('platform schemas', () => {
   it('rejects bad tenant codes and weak admin passwords', () => {
     expect(tenantCreateSchema.safeParse({ ...tenant, code: 'công ty' }).success).toBe(false);
     expect(tenantCreateSchema.safeParse({ ...tenant, code: '-abc' }).success).toBe(false);
-    expect(tenantCreateSchema.safeParse({ ...tenant, admin: { ...tenant.admin, password: '123' } }).success).toBe(false);
+    expect(tenantCreateSchema.safeParse({ ...tenant, admin: { ...tenant.admin, password: '123' } }).success).toBe(
+      false,
+    );
   });
 
   it('update schemas inject no defaults', () => {

@@ -7,7 +7,7 @@ import cookieParser from 'cookie-parser';
 import helmet from 'helmet';
 import { z } from 'zod';
 import { AppModule } from './app.module.js';
-import type { Env } from './config/env.js';
+import { type Env, productionWarnings } from './config/env.js';
 
 // Thông báo lỗi validation mặc định bằng tiếng Việt.
 z.config(z.locales.vi());
@@ -39,8 +39,15 @@ async function bootstrap() {
     SwaggerModule.setup('api/docs', app, SwaggerModule.createDocument(app, doc));
   }
 
+  const warnings = productionWarnings({
+    NODE_ENV: config.get('NODE_ENV', { infer: true }),
+    STORAGE_DRIVER: config.get('STORAGE_DRIVER', { infer: true }),
+    APP_URL: config.get('APP_URL', { infer: true }),
+  });
+  for (const w of warnings) Logger.warn(w, 'Config');
+
   const port = config.get('PORT', { infer: true });
   await app.listen(port);
-  Logger.log(`API chạy tại http://localhost:${port}/api/v1 – Swagger: /api/docs`, 'Bootstrap');
+  Logger.log(`API chạy tại cổng ${port}, tiền tố /api/v1`, 'Bootstrap');
 }
 await bootstrap();

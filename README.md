@@ -55,3 +55,7 @@ và đặt `DATABASE_POOL_MAX=1` (PGlite chỉ chịu một kết nối đồng 
 | `pnpm --filter @saha/api prisma:migrate` | Tạo migration mới sau khi sửa `schema.prisma` |
 
 Xem [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) để biết kiến trúc, quy ước bảo mật và lộ trình.
+
+## Triển khai production
+
+Xem [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md): Docker Compose (Caddy HTTPS, Postgres, MinIO), sao lưu, cập nhật phiên bản.

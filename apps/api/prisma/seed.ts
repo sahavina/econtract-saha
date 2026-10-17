@@ -7,7 +7,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import bcrypt from 'bcryptjs';
 import { type ClauseCategory, PrismaClient } from '../src/generated/prisma/client.js';
-import { DEFAULT_CONTRACT_TYPES, DEFAULT_ROLES as ROLES } from '../src/platform/default-roles.js';
+import { DEFAULT_CONTRACT_TYPES, DEFAULT_PLANS, DEFAULT_ROLES as ROLES } from '../src/platform/defaults.js';
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
@@ -15,45 +15,12 @@ const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: proc
 const DEV_PASSWORD = process.env.SEED_PASSWORD ?? 'Saha@123456';
 
 async function main() {
-  const plans = [
-    {
-      code: 'trial',
-      name: 'Dùng thử',
-      description: 'Dùng thử 30 ngày',
-      maxUsers: 5,
-      maxContractsYear: 50,
-      storageQuotaMb: 1024,
-      priceMonthly: 0,
-    },
-    {
-      code: 'starter',
-      name: 'Starter',
-      description: 'Doanh nghiệp nhỏ',
-      maxUsers: 10,
-      maxContractsYear: 500,
-      storageQuotaMb: 5120,
-      priceMonthly: 990000,
-    },
-    {
-      code: 'business',
-      name: 'Business',
-      description: 'Doanh nghiệp vừa',
-      maxUsers: 50,
-      maxContractsYear: 5000,
-      storageQuotaMb: 20480,
-      priceMonthly: 2990000,
-    },
-    {
-      code: 'enterprise',
-      name: 'Enterprise',
-      description: 'Tập đoàn, nhiều chi nhánh',
-      maxUsers: 500,
-      maxContractsYear: 100000,
-      storageQuotaMb: 204800,
-      priceMonthly: 9990000,
-    },
-  ];
-  for (const p of plans) await prisma.plan.upsert({ where: { code: p.code }, update: {}, create: p });
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_DEMO_SEED !== 'true') {
+    throw new Error(
+      'Seed tạo dữ liệu demo với mật khẩu mặc định – không chạy trên production. Dùng prisma/bootstrap.ts.',
+    );
+  }
+  for (const p of DEFAULT_PLANS) await prisma.plan.upsert({ where: { code: p.code }, update: {}, create: p });
   const businessPlan = await prisma.plan.findUniqueOrThrow({ where: { code: 'business' } });
 
   const tenant = await prisma.tenant.upsert({

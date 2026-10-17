@@ -150,6 +150,14 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Tổng quan nền tảng: số doanh nghiệp, MRR theo đơn giá gói, công nợ, thuê bao sắp hết hạn; nhật ký hệ thống liên tenant.
 - Phía doanh nghiệp: trang **Gói dịch vụ** (`settings.manage`) xem gói, mức sử dụng, hóa đơn.
 
+### Lưu trữ & triển khai
+
+- `StorageService` chọn driver theo `STORAGE_DRIVER`: `local` (thư mục, chặn path traversal) hoặc `s3` (S3/MinIO,
+  tiền tố key, mã hóa phía server tùy chọn). Key do backend sinh, được kiểm tra định dạng ở cả hai driver.
+- Health: `/health/live` (tiến trình) và `/health` (DB + kho lưu trữ, timeout 3 giây).
+- Production: `docker-compose.prod.yml` (Caddy HTTPS → web standalone → API → Postgres/MinIO), image ở `infra/docker`,
+  `prisma/bootstrap.ts` tạo gói mặc định + doanh nghiệp/Super Admin đầu tiên. Xem `docs/DEPLOYMENT.md`.
+
 ## 6. Quy tắc nghiệp vụ hiện có
 
 - Chỉ sửa được hợp đồng **Nháp** (phê duyệt chưa gửi/bị từ chối/yêu cầu sửa), chưa lưu trữ/xóa.
@@ -187,7 +195,7 @@ Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (kh�
 
 ## 8. Lộ trình đề xuất
 
-1. Hoàn thiện soạn thảo: driver S3/MinIO, quét virus (ClamAV), chuyển DOCX → PDF chuẩn để ký, xuất PDF phía server,
+1. Hoàn thiện soạn thảo: quét virus (ClamAV), chuyển DOCX → PDF chuẩn để ký, xuất PDF phía server,
    header/footer, chèn hình ảnh, quản lý & so sánh phiên bản nội dung; wizard 6 bước.
 2. Mở rộng mẫu: định dạng ngày/số/tiền tệ theo biến, so sánh phiên bản, trình thiết kế mẫu kéo thả.
 3. Phê duyệt nâng cao: trình thiết kế kéo thả, điều kiện tùy biến, thông báo (BullMQ + email/Zalo), nhắc hạn, ủy quyền duyệt.

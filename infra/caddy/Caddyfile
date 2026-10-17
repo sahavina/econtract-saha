@@ -1,0 +1,22 @@
+{
+	email {$ACME_EMAIL}
+}
+
+{$DOMAIN} {
+	encode zstd gzip
+
+	# Tài liệu hợp đồng tối đa 20 MB (MAX_UPLOAD_BYTES) + phần đầu multipart.
+	request_body {
+		max_size 25MB
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		-Server
+	}
+
+	# Caddy thay X-Forwarded-For bằng IP thật của client (không tin header từ client gửi lên).
+	reverse_proxy web:3000
+}

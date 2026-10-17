@@ -5,7 +5,7 @@ import type { AuthUser } from '../common/auth-user.js';
 import { paginated } from '../common/pagination.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { DEFAULT_CONTRACT_TYPES, DEFAULT_ROLES } from './default-roles.js';
+import { provisionTenant } from './defaults.js';
 import { PlanLimitsService, USABLE_SUBSCRIPTION_STATUSES } from './plan-limits.service.js';
 import {
   type InvoiceCreate,
@@ -267,51 +267,10 @@ export class PlatformService {
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({
-          data: {
-            code: input.code,
-            name: input.name,
-            taxCode: input.taxCode ?? null,
-            address: input.address ?? null,
-            email: input.email ?? null,
-            phone: input.phone ?? null,
-          },
-          select: tenantSelect,
-        });
-        let adminRoleId = '';
-        for (const r of DEFAULT_ROLES) {
-          const role = await tx.role.create({
-            data: {
-              tenantId: tenant.id,
-              code: r.code,
-              name: r.name,
-              isSystem: true,
-              permissions: { create: r.permissions.map((permission) => ({ permission })) },
-            },
-          });
-          if (r.code === 'tenant_admin') adminRoleId = role.id;
-        }
-        await tx.contractType.createMany({
-          data: DEFAULT_CONTRACT_TYPES.map(([code, name, codePattern]) => ({
-            tenantId: tenant.id,
-            code,
-            name,
-            codePattern,
-          })),
-        });
-        const admin = await tx.user.create({
-          data: {
-            tenantId: tenant.id,
-            email: input.admin.email,
-            fullName: input.admin.fullName,
-            jobTitle: 'Quản trị viên',
-            passwordHash,
-            roles: { create: { roleId: adminRoleId } },
-          },
-          select: { id: true, email: true, fullName: true },
-        });
-        await tx.subscription.create({
-          data: { tenantId: tenant.id, planId: plan.id, status: input.subscriptionStatus, startsAt, endsAt },
+        const { tenant, admin } = await provisionTenant(tx, {
+          tenant: input,
+          admin: { email: input.admin.email, fullName: input.admin.fullName, passwordHash },
+          subscription: { planId: plan.id, status: input.subscriptionStatus, startsAt, endsAt },
         });
         await this.audit.logPlatform(
           actor,
@@ -324,7 +283,7 @@ export class PlatformService {
           },
           tx,
         );
-        return { ...tenant, admin };
+        return { ...(await tx.tenant.findUniqueOrThrow({ where: { id: tenant.id }, select: tenantSelect })), admin };
       });
     } catch (e) {
       if (isUniqueViolation(e)) throw new ConflictException(`Mã doanh nghiệp "${input.code}" đã được sử dụng`);

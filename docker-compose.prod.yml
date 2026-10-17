@@ -1,0 +1,160 @@
+# SAHA eContract – triển khai production trên một máy chủ (Docker Compose).
+#   cp .env.production.example .env.production   # rồi điền giá trị thật
+#   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
+# Chi tiết: docs/DEPLOYMENT.md
+name: saha-econtract-prod
+
+x-restart: &restart
+  restart: unless-stopped
+
+services:
+  postgres:
+    <<: *restart
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: saha
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Đặt POSTGRES_PASSWORD}
+      POSTGRES_DB: saha_econtract
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U saha -d saha_econtract"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  minio:
+    <<: *restart
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:?Đặt MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:?Đặt MINIO_ROOT_PASSWORD}
+    volumes:
+      - miniodata:/data
+    # Console quản trị chỉ mở trên localhost của máy chủ (truy cập qua SSH tunnel).
+    ports:
+      - "127.0.0.1:9001:9001"
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  # Tạo bucket riêng tư và tài khoản truy cập riêng cho API (không dùng tài khoản root của MinIO).
+  minio-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+      S3_BUCKET: ${S3_BUCKET:-econtract}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID:?Đặt S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY:?Đặt S3_SECRET_ACCESS_KEY}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        mc alias set local http://minio:9000 "$$MINIO_ROOT_USER" "$$MINIO_ROOT_PASSWORD"
+        mc mb --ignore-existing "local/$$S3_BUCKET"
+        mc anonymous set none "local/$$S3_BUCKET"
+        mc admin user add local "$$S3_ACCESS_KEY_ID" "$$S3_SECRET_ACCESS_KEY"
+        mc admin policy attach local readwrite --user "$$S3_ACCESS_KEY_ID" || true
+
+  # Chạy migration + bootstrap (gói mặc định, doanh nghiệp & Super Admin đầu tiên) rồi thoát.
+  migrate:
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      target: migrate
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://saha:${POSTGRES_PASSWORD}@postgres:5432/saha_econtract?schema=public
+      BOOTSTRAP_TENANT_CODE: ${BOOTSTRAP_TENANT_CODE:-}
+      BOOTSTRAP_TENANT_NAME: ${BOOTSTRAP_TENANT_NAME:-}
+      BOOTSTRAP_ADMIN_EMAIL: ${BOOTSTRAP_ADMIN_EMAIL:-}
+      BOOTSTRAP_ADMIN_NAME: ${BOOTSTRAP_ADMIN_NAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+
+  api:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: infra/docker/api.Dockerfile
+      target: runtime
+    image: saha-econtract-api:${APP_VERSION:-latest}
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+      minio-init:
+        condition: service_completed_successfully
+    environment:
+      NODE_ENV: production
+      PORT: 4000
+      DATABASE_URL: postgresql://saha:${POSTGRES_PASSWORD}@postgres:5432/saha_econtract?schema=public
+      DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-10}
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:?Đặt JWT_ACCESS_SECRET}
+      JWT_ACCESS_TTL: ${JWT_ACCESS_TTL:-900}
+      JWT_REFRESH_TTL_DAYS: ${JWT_REFRESH_TTL_DAYS:-14}
+      APP_URL: https://${DOMAIN:?Đặt DOMAIN}
+      CORS_ORIGINS: https://${DOMAIN}
+      STORAGE_DRIVER: s3
+      S3_ENDPOINT: http://minio:9000
+      S3_REGION: us-east-1
+      S3_BUCKET: ${S3_BUCKET:-econtract}
+      S3_ACCESS_KEY_ID: ${S3_ACCESS_KEY_ID}
+      S3_SECRET_ACCESS_KEY: ${S3_SECRET_ACCESS_KEY}
+      S3_FORCE_PATH_STYLE: "true"
+      SMTP_HOST: ${SMTP_HOST:?Đặt SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      MAIL_FROM: ${MAIL_FROM:-SAHA eContract <no-reply@saha.vn>}
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/api/v1/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      start_period: 30s
+      retries: 5
+
+  web:
+    <<: *restart
+    build:
+      context: .
+      dockerfile: infra/docker/web.Dockerfile
+      args:
+        API_URL: http://api:4000
+    image: saha-econtract-web:${APP_VERSION:-latest}
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Reverse proxy + HTTPS tự động (Let's Encrypt). Bỏ service này nếu đã có proxy riêng,
+  # nhưng proxy đó PHẢI ghi đè X-Forwarded-For (API dùng để ghi IP vào nhật ký và chứng thư ký).
+  caddy:
+    <<: *restart
+    image: caddy:2.10-alpine
+    depends_on:
+      - web
+    environment:
+      DOMAIN: ${DOMAIN}
+      ACME_EMAIL: ${ACME_EMAIL:-}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./infra/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  pgdata:
+  miniodata:
+  caddy_data:
+  caddy_config:

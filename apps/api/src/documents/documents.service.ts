@@ -5,7 +5,7 @@ import type { AuthUser } from '../common/auth-user.js';
 import { ContractsService } from '../contracts/contracts.service.js';
 import { PlanLimitsService } from '../platform/plan-limits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { StorageService } from '../storage/storage.service.js';
+import { StorageNotFoundError, StorageService } from '../storage/storage.service.js';
 import { ALLOWED_EXTENSIONS, detectFileType, normalizeFileName } from './file-types.js';
 
 const documentSelect = {
@@ -63,7 +63,7 @@ export class DocumentsService {
     await this.limits.assertStorage(user.tenantId, file.size);
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
     const storageKey = `${user.tenantId}/contracts/${contractId}/${randomUUID()}`;
-    await this.storage.put(storageKey, file.buffer);
+    await this.storage.put(storageKey, file.buffer, mimeType);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
@@ -112,7 +112,12 @@ export class DocumentsService {
       where: { id: documentId, contractId, tenantId: user.tenantId, deletedAt: null },
     });
     if (!doc) throw new NotFoundException('Không tìm thấy tài liệu');
-    return { doc, stream: this.storage.read(doc.storageKey) };
+    try {
+      return { doc, stream: await this.storage.read(doc.storageKey) };
+    } catch (err) {
+      if (err instanceof StorageNotFoundError) throw new NotFoundException('File tài liệu không còn trong kho lưu trữ');
+      throw err;
+    }
   }
 
   /** Xóa mềm: giữ file trên storage để phục vụ truy vết. */

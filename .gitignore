@@ -12,3 +12,4 @@ coverage/
 .turbo/
 storage/
 .tmp/
+!.env.*.example
