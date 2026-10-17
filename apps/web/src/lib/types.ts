@@ -130,3 +130,16 @@ export interface DashboardSummary {
   expiringContracts: { id: string; code: string; title: string; expiryDate: string; owner: { fullName: string } | null }[];
   recentActivity: TimelineEntry[];
 }
+
+export interface ContractDocument {
+  id: string;
+  kind: 'MAIN' | 'ATTACHMENT';
+  fileName: string;
+  mimeType: string;
+  size: number;
+  sha256: string;
+  version: number;
+  scanStatus: 'NOT_SCANNED' | 'CLEAN' | 'INFECTED';
+  createdAt: string;
+  uploadedBy: { id: string; fullName: string };
+}

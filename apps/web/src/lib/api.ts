@@ -75,17 +75,18 @@ interface RequestOptions {
   method?: string;
   body?: unknown;
   query?: Query;
-  raw?: boolean;
+  /** Gửi multipart (upload file); không đặt Content-Type để trình duyệt tự thêm boundary. */
+  formData?: FormData;
 }
 
 async function send(path: string, opts: RequestOptions): Promise<Response> {
   const headers: Record<string, string> = {};
   if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
-  if (opts.body !== undefined) headers['Content-Type'] = 'application/json';
+  if (opts.body !== undefined && !opts.formData) headers['Content-Type'] = 'application/json';
   return fetch(`${BASE}${path}${buildQuery(opts.query)}`, {
     method: opts.method ?? 'GET',
     headers,
-    body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
+    body: opts.formData ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
     credentials: 'same-origin',
   });
 }
@@ -122,7 +123,8 @@ export async function downloadFile(path: string, query?: Query) {
   const res = await apiRaw(path, { query });
   const blob = await res.blob();
   const disposition = res.headers.get('Content-Disposition') ?? '';
-  const filename = /filename="([^"]+)"/.exec(disposition)?.[1] ?? 'download';
+  const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition)?.[1];
+  const filename = encoded ? decodeURIComponent(encoded) : (/filename="([^"]+)"/.exec(disposition)?.[1] ?? 'download');
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

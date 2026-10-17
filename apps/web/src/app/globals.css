@@ -131,3 +131,69 @@
     @apply font-sans;
   }
 }
+/* ───────── Nội dung hợp đồng (trình soạn thảo, xem trước A4, bản in) ───────── */
+@layer components {
+  .contract-content {
+    font-size: 0.95rem;
+    line-height: 1.65;
+  }
+  .contract-content > * + * {
+    margin-top: 0.6em;
+  }
+  /* Đoạn trống (ví dụ ô bảng mới) vẫn giữ chiều cao một dòng */
+  .contract-content p:empty { min-height: 1.65em; }
+  .contract-content h1 { font-size: 1.6em; font-weight: 700; }
+  .contract-content h2 { font-size: 1.35em; font-weight: 700; }
+  .contract-content h3 { font-size: 1.15em; font-weight: 600; }
+  .contract-content h4,
+  .contract-content h5,
+  .contract-content h6 { font-size: 1em; font-weight: 600; }
+  .contract-content ul { list-style: disc; padding-left: 1.5em; }
+  .contract-content ol { list-style: decimal; padding-left: 1.5em; }
+  .contract-content hr { border-color: var(--border); margin: 1em 0; }
+  .contract-content a { color: var(--primary); text-decoration: underline; }
+  .contract-content table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  .contract-content th,
+  .contract-content td { border: 1px solid var(--border); padding: 0.35em 0.5em; vertical-align: top; }
+  .contract-content th { background: var(--muted); font-weight: 600; text-align: left; }
+  .contract-content .selectedCell { background: color-mix(in oklch, var(--primary) 12%, transparent); }
+  .contract-content mark[data-missing] {
+    background: color-mix(in oklch, var(--destructive) 15%, transparent);
+    color: var(--destructive);
+    border-radius: 3px;
+    padding: 0 2px;
+  }
+  .contract-content p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    color: var(--muted-foreground);
+    float: left;
+    height: 0;
+    pointer-events: none;
+  }
+
+  /* Trang A4: 210mm, lề 20mm, nền giấy trắng cả ở chế độ tối */
+  .a4-page {
+    width: 210mm;
+    max-width: 100%;
+    min-height: 297mm;
+    margin: 0 auto;
+    padding: 20mm;
+    background: #fff;
+    color: #111;
+    box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
+    font-family: 'Times New Roman', Times, serif;
+  }
+  .a4-page .contract-content th { background: #f3f3f3; }
+  .a4-page .contract-content th,
+  .a4-page .contract-content td { border-color: #999; }
+}
+
+@media print {
+  @page { size: A4; margin: 0; }
+  body * { visibility: hidden; }
+  .print-area,
+  .print-area * { visibility: visible; }
+  .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; }
+  .print-area .a4-page { box-shadow: none; margin: 0; }
+  .print-area mark[data-missing] { background: none; color: inherit; }
+}

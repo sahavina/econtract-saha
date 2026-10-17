@@ -7,6 +7,8 @@ import { useParams, useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
+import { ContractContentTab } from '@/components/contract-content-tab';
+import { ContractDocumentsTab } from '@/components/contract-documents-tab';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -124,7 +126,9 @@ export default function ContractDetailPage() {
       <Tabs defaultValue="overview">
         <TabsList>
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
+          <TabsTrigger value="content">Nội dung hợp đồng</TabsTrigger>
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
+          <TabsTrigger value="documents">Tài liệu</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
 
@@ -164,6 +168,14 @@ export default function ContractDetailPage() {
               </dl>
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="content" className="mt-4">
+          <ContractContentTab key={c.id} contract={c} editable={editable && can('contract.update')} />
+        </TabsContent>
+
+        <TabsContent value="documents" className="mt-4">
+          <ContractDocumentsTab contractId={c.id} canManage={!c.deletedAt && !c.archivedAt && can('contract.update')} />
         </TabsContent>
 
         <TabsContent value="parties" className="mt-4 grid gap-4 md:grid-cols-2">
@@ -209,6 +221,7 @@ export default function ContractDetailPage() {
                       <span className="absolute -left-1.5 mt-1.5 size-3 rounded-full border-2 border-background bg-primary" />
                       <p className="text-sm">
                         <span className="font-medium">{t.actorName ?? 'Hệ thống'}</span> — {AUDIT_ACTION_LABELS[t.action] ?? t.action}
+                        {typeof t.data?.fileName === 'string' && <span className="text-muted-foreground">: {t.data.fileName}</span>}
                       </p>
                       <p className="text-xs text-muted-foreground">{formatDateTime(t.createdAt)}</p>
                     </li>

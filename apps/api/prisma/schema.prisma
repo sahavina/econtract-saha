@@ -57,18 +57,18 @@ model Subscription {
 }
 
 model Tenant {
-  id            String           @id @default(uuid()) @db.Uuid
-  code          String           @unique
+  id            String             @id @default(uuid()) @db.Uuid
+  code          String             @unique
   name          String
   taxCode       String?
   address       String?
   email         String?
   phone         String?
-  status        TenantStatus     @default(ACTIVE)
-  settings      Json             @default("{}")
-  storageUsedMb Int              @default(0)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  status        TenantStatus       @default(ACTIVE)
+  settings      Json               @default("{}")
+  storageUsedMb Int                @default(0)
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
   users         User[]
   branches      Branch[]
   departments   Department[]
@@ -79,6 +79,7 @@ model Tenant {
   sequences     NumberSequence[]
   auditLogs     AuditLog[]
   subscriptions Subscription[]
+  documents     ContractDocument[]
 }
 
 // ───────────────────────────── Tổ chức & Người dùng ─────────────────────────────
@@ -128,29 +129,30 @@ enum UserStatus {
 }
 
 model User {
-  id               String      @id @default(uuid()) @db.Uuid
-  tenantId         String      @db.Uuid
-  email            String
-  passwordHash     String
-  fullName         String
-  phone            String?
-  jobTitle         String?
-  departmentId     String?     @db.Uuid
-  branchId         String?     @db.Uuid
-  status           UserStatus  @default(ACTIVE)
-  isPlatformAdmin  Boolean     @default(false)
-  failedLogins     Int         @default(0)
-  lockedUntil      DateTime?
-  lastLoginAt      DateTime?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime    @updatedAt
-  tenant           Tenant      @relation(fields: [tenantId], references: [id])
-  department       Department? @relation("UserDepartment", fields: [departmentId], references: [id])
-  branch           Branch?     @relation(fields: [branchId], references: [id])
-  roles            UserRole[]
-  sessions         Session[]
-  ownedContracts   Contract[]  @relation("ContractOwner")
-  createdContracts Contract[]  @relation("ContractCreator")
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  email             String
+  passwordHash      String
+  fullName          String
+  phone             String?
+  jobTitle          String?
+  departmentId      String?            @db.Uuid
+  branchId          String?            @db.Uuid
+  status            UserStatus         @default(ACTIVE)
+  isPlatformAdmin   Boolean            @default(false)
+  failedLogins      Int                @default(0)
+  lockedUntil       DateTime?
+  lastLoginAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  department        Department?        @relation("UserDepartment", fields: [departmentId], references: [id])
+  branch            Branch?            @relation(fields: [branchId], references: [id])
+  roles             UserRole[]
+  sessions          Session[]
+  ownedContracts    Contract[]         @relation("ContractOwner")
+  createdContracts  Contract[]         @relation("ContractCreator")
+  uploadedDocuments ContractDocument[]
 
   @@unique([tenantId, email])
 }
@@ -344,39 +346,40 @@ enum Confidentiality {
 }
 
 model Contract {
-  id               String          @id @default(uuid()) @db.Uuid
-  tenantId         String          @db.Uuid
+  id               String             @id @default(uuid()) @db.Uuid
+  tenantId         String             @db.Uuid
   code             String
   title            String
-  contractTypeId   String?         @db.Uuid
+  contractTypeId   String?            @db.Uuid
   group            String?
   description      String?
-  value            Decimal         @default(0) @db.Decimal(20, 2)
-  currency         String          @default("VND")
-  vatRate          Decimal?        @db.Decimal(5, 2)
-  expectedSignDate DateTime?       @db.Date
-  signedDate       DateTime?       @db.Date
-  effectiveDate    DateTime?       @db.Date
-  expiryDate       DateTime?       @db.Date
-  departmentId     String?         @db.Uuid
-  ownerId          String?         @db.Uuid
-  confidentiality  Confidentiality @default(INTERNAL)
-  tags             String[]        @default([])
+  value            Decimal            @default(0) @db.Decimal(20, 2)
+  currency         String             @default("VND")
+  vatRate          Decimal?           @db.Decimal(5, 2)
+  expectedSignDate DateTime?          @db.Date
+  signedDate       DateTime?          @db.Date
+  effectiveDate    DateTime?          @db.Date
+  expiryDate       DateTime?          @db.Date
+  departmentId     String?            @db.Uuid
+  ownerId          String?            @db.Uuid
+  confidentiality  Confidentiality    @default(INTERNAL)
+  tags             String[]           @default([])
   note             String?
-  status           ContractStatus  @default(DRAFT)
-  approvalStatus   ApprovalStatus  @default(NOT_SUBMITTED)
-  signatureStatus  SignatureStatus @default(NOT_STARTED)
+  status           ContractStatus     @default(DRAFT)
+  approvalStatus   ApprovalStatus     @default(NOT_SUBMITTED)
+  signatureStatus  SignatureStatus    @default(NOT_STARTED)
   contentHtml      String?
-  createdById      String          @db.Uuid
+  createdById      String             @db.Uuid
   archivedAt       DateTime?
   deletedAt        DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-  tenant           Tenant          @relation(fields: [tenantId], references: [id])
-  contractType     ContractType?   @relation(fields: [contractTypeId], references: [id])
-  department       Department?     @relation(fields: [departmentId], references: [id])
-  owner            User?           @relation("ContractOwner", fields: [ownerId], references: [id])
-  createdBy        User            @relation("ContractCreator", fields: [createdById], references: [id])
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  tenant           Tenant             @relation(fields: [tenantId], references: [id])
+  contractType     ContractType?      @relation(fields: [contractTypeId], references: [id])
+  department       Department?        @relation(fields: [departmentId], references: [id])
+  owner            User?              @relation("ContractOwner", fields: [ownerId], references: [id])
+  createdBy        User               @relation("ContractCreator", fields: [createdById], references: [id])
+  documents        ContractDocument[]
   parties          ContractParty[]
 
   @@unique([tenantId, code])
@@ -412,4 +415,39 @@ model ContractParty {
   partner          Partner?        @relation(fields: [partnerId], references: [id])
 
   @@index([contractId])
+}
+
+// ───────────────────────────── Tài liệu hợp đồng ─────────────────────────────
+
+enum DocumentKind {
+  MAIN
+  ATTACHMENT
+}
+
+enum ScanStatus {
+  NOT_SCANNED
+  CLEAN
+  INFECTED
+}
+
+model ContractDocument {
+  id           String       @id @default(uuid()) @db.Uuid
+  tenantId     String       @db.Uuid
+  contractId   String       @db.Uuid
+  kind         DocumentKind @default(ATTACHMENT)
+  fileName     String
+  mimeType     String
+  size         Int
+  sha256       String
+  version      Int          @default(1)
+  storageKey   String       @unique
+  scanStatus   ScanStatus   @default(NOT_SCANNED)
+  uploadedById String       @db.Uuid
+  deletedAt    DateTime?
+  createdAt    DateTime     @default(now())
+  tenant       Tenant       @relation(fields: [tenantId], references: [id])
+  contract     Contract     @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  uploadedBy   User         @relation(fields: [uploadedById], references: [id])
+
+  @@index([tenantId, contractId])
 }

@@ -11,6 +11,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { paginated } from '../common/pagination.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { sanitizeContractHtml } from './sanitize-content.js';
 import { DEFAULT_CONTRACT_CODE_PATTERN, renderCode, sequenceKey } from './contract-code.js';
 import type {
   ContractCreate,
@@ -398,7 +399,7 @@ export class ContractsService {
       confidentiality: input.confidentiality,
       tags: input.tags,
       note: input.note,
-      contentHtml: input.contentHtml,
+      contentHtml: input.contentHtml ? sanitizeContractHtml(input.contentHtml) : input.contentHtml,
     };
   }
 

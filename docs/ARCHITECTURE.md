@@ -42,14 +42,25 @@ Token: `{TYPE} {DEPT} {BRANCH} {YYYY} {YY} {MM} {SEQUENCE[:n]}`. Bộ đếm tá
 (ví dụ có `{YYYY}` thì tự reset theo năm) và tăng nguyên tử bằng `INSERT … ON CONFLICT DO UPDATE … RETURNING`.
 Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung đột được thử lại.
 
-## 5. Quy tắc nghiệp vụ hiện có
+## 5. Nội dung & tài liệu
+
+- Nội dung soạn bằng Tiptap, lưu `Contract.contentHtml`. Backend **làm sạch HTML** (`sanitize-content.ts`, allowlist thẻ
+  định dạng/bảng, chỉ cho `text-align`) trước khi lưu ⇒ an toàn khi render lại.
+- Biến dữ liệu `{{contract.*}}`, `{{party_a.*}}`, `{{party_b.*}}` định nghĩa trong `packages/shared/src/template.ts`
+  (`renderTemplate` escape giá trị, đánh dấu biến thiếu/không hỗ trợ). Xem trước A4 và "In / Lưu PDF" qua trình duyệt.
+- Tài liệu đính kèm (`ContractDocument`): kiểm tra đuôi file + magic bytes (PDF/DOCX/XLSX/PNG/JPG, ≤ 20 MB), MIME lấy
+  theo bảng của server, SHA-256, tăng phiên bản khi trùng tên, xóa mềm, tải xuống kiểm tra phạm vi hợp đồng.
+  Lưu file qua `StorageService` (driver local `STORAGE_DIR`; S3/MinIO là bước tiếp theo). Chưa có quét virus
+  ⇒ trạng thái `NOT_SCANNED`.
+
+## 6. Quy tắc nghiệp vụ hiện có
 
 - Chỉ sửa được hợp đồng **Nháp** (phê duyệt chưa gửi/bị từ chối/yêu cầu sửa), chưa lưu trữ/xóa.
 - Chỉ xóa mềm hợp đồng **Nháp** hoặc **Đã hủy**; khôi phục từ Thùng rác.
 - Lưu ý Zod 4: `.partial()` vẫn áp `default()` ⇒ schema cập nhật dựng từ object **không default**
   (có test hồi quy trong `contract-code.spec.ts`).
 
-## 6. Hiện trạng (Giai đoạn 0 – nền tảng)
+## 7. Hiện trạng
 
 Đã có, chạy với dữ liệu thật:
 
@@ -59,14 +70,17 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Hợp đồng: danh sách (tìm kiếm, lọc, sắp xếp, phân trang server-side, ẩn/hiện cột, xem nhanh, chọn nhiều,
   lưu trữ/xóa hàng loạt, xuất CSV), tạo/sửa (thông tin chung + các bên, chọn đối tác tự điền), chi tiết
   (tổng quan, các bên, lịch sử), sao chép, lưu trữ, thùng rác.
+- Nội dung hợp đồng: trình soạn thảo (tiêu đề H1–H6, định dạng, danh sách, căn lề, bảng, chèn biến, undo/redo),
+  tự lưu nháp, xem trước A4, in/lưu PDF. Tài liệu đính kèm: tải lên/tải xuống/xóa, phiên bản, SHA-256.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 
 Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (không có nút giả).
 
-## 7. Lộ trình đề xuất
+## 8. Lộ trình đề xuất
 
-1. Wizard 6 bước đầy đủ: nội dung (Tiptap, mẫu, upload DOCX/PDF), tài liệu đính kèm (S3, SHA-256, quét virus).
+1. Hoàn thiện soạn thảo: driver S3/MinIO, quét virus (ClamAV), chuyển DOCX → PDF chuẩn để ký, xuất PDF phía server,
+   header/footer, chèn hình ảnh, quản lý & so sánh phiên bản nội dung; wizard 6 bước.
 2. Mẫu hợp đồng + biến dữ liệu `{{contract.*}}`, thư viện điều khoản có phiên bản.
 3. Workflow phê duyệt cấu hình được (ngưỡng giá trị, tuần tự/song song, điều kiện) + BullMQ, thông báo.
 4. Ký điện tử qua Signature Provider Gateway, khóa nội dung phiên bản đã ký.

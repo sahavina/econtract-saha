@@ -9,9 +9,11 @@ import { JwtAuthGuard, PermissionsGuard } from './common/guards.js';
 import { validateEnv } from './config/env.js';
 import { ContractsModule } from './contracts/contracts.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
+import { DocumentsModule } from './documents/documents.module.js';
 import { HealthController } from './health/health.controller.js';
 import { PartnersModule } from './partners/partners.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { StorageModule } from './storage/storage.module.js';
 
 @Module({
   imports: [
@@ -19,10 +21,12 @@ import { PrismaModule } from './prisma/prisma.module.js';
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 300 }]),
     PrismaModule,
     AuditModule,
+    StorageModule,
     AuthModule,
     PartnersModule,
     ContractsModule,
     DashboardModule,
+    DocumentsModule,
   ],
   controllers: [HealthController],
   providers: [

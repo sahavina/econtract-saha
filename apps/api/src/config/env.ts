@@ -10,6 +10,8 @@ const envSchema = z.object({
   JWT_ACCESS_SECRET: z.string().min(32, 'JWT_ACCESS_SECRET phải dài tối thiểu 32 ký tự'),
   JWT_ACCESS_TTL: z.coerce.number().int().positive().default(900),
   JWT_REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(14),
+  // Thư mục lưu file (driver local). Production nên dùng S3/MinIO.
+  STORAGE_DIR: z.string().default('./storage'),
   CORS_ORIGINS: z.string().default('http://localhost:3000'),
 });
 
