@@ -3,7 +3,7 @@ import { Reflector } from '@nestjs/core';
 import { AuthGuard } from '@nestjs/passport';
 import type { Permission } from '@saha/shared';
 import type { AuthUser } from './auth-user.js';
-import { IS_PUBLIC_KEY, PERMISSIONS_KEY, PERMISSIONS_MODE_KEY } from './decorators.js';
+import { IS_PUBLIC_KEY, PERMISSIONS_KEY, PERMISSIONS_MODE_KEY, PLATFORM_ADMIN_KEY } from './decorators.js';
 
 /** Guard toàn cục: mọi endpoint yêu cầu JWT trừ khi gắn @Public(). */
 @Injectable()
@@ -22,13 +22,18 @@ export class JwtAuthGuard extends AuthGuard('jwt') {
   }
 }
 
-/** Guard toàn cục: kiểm tra quyền khai báo bằng @RequirePermissions / @RequireAnyPermission. */
+/** Guard toàn cục: kiểm tra @PlatformAdminOnly và quyền khai báo bằng @RequirePermissions / @RequireAnyPermission. */
 @Injectable()
 export class PermissionsGuard implements CanActivate {
   constructor(private readonly reflector: Reflector) {}
 
   canActivate(context: ExecutionContext): boolean {
     const targets = [context.getHandler(), context.getClass()];
+    if (this.reflector.getAllAndOverride<boolean>(PLATFORM_ADMIN_KEY, targets)) {
+      const user = context.switchToHttp().getRequest().user as AuthUser | undefined;
+      if (!user?.isPlatformAdmin) throw new ForbiddenException('Chức năng chỉ dành cho Super Admin');
+      return true;
+    }
     const required = this.reflector.getAllAndOverride<Permission[] | undefined>(PERMISSIONS_KEY, targets);
     if (!required?.length) return true;
 

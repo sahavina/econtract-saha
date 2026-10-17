@@ -32,7 +32,8 @@ export function AppSidebar() {
   const pathname = usePathname();
   const search = useSearchParams();
 
-  const visible = (item: NavItem) => !item.permissions || can(...item.permissions);
+  const visible = (item: NavItem) =>
+    item.platformOnly ? !!user?.isPlatformAdmin : !item.permissions || can(...item.permissions);
 
   return (
     <Sidebar collapsible="icon">

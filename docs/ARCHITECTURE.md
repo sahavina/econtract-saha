@@ -23,6 +23,8 @@ Theo đề xuất của master prompt (dự án mới, chưa có nền tảng c�
 - Phạm vi xem hợp đồng: `contract.view_all` (toàn tenant) hoặc `contract.view_own` (mình phụ trách/tạo).
 - Guard toàn cục: `ThrottlerGuard` → `JwtAuthGuard` (bỏ qua với `@Public()`) → `PermissionsGuard`
   (`@RequirePermissions` / `@RequireAnyPermission`). Danh mục quyền: `packages/shared/src/permissions.ts`.
+- API liên doanh nghiệp (`/platform/*`) gắn `@PlatformAdminOnly()`: chỉ user có `isPlatformAdmin` (Super Admin) gọi được;
+  đây là ngoại lệ duy nhất được đọc/ghi dữ liệu của tenant khác, và mọi thao tác ghi đều vào nhật ký của tenant bị tác động.
 - Đăng nhập: bcrypt, khóa 15 phút sau 5 lần sai, so sánh hash giả khi không có user (chống dò tài khoản).
 - Access token JWT 15 phút trong bộ nhớ trình duyệt; refresh token ngẫu nhiên, lưu **hash SHA-256**, cookie httpOnly
   `SameSite=Lax` path `/api/v1/auth`, **xoay vòng** mỗi lần refresh; dùng lại token cũ ⇒ thu hồi mọi phiên.
@@ -132,6 +134,22 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Phòng ban/chi nhánh (`org.manage`): trưởng phòng (dùng cho bước duyệt "Trưởng phòng"), cây phòng ban có chặn vòng lặp.
 - Cấu hình (`settings.manage`): loại hợp đồng và mẫu mã, xem trước mã theo thời gian thực (hàm sinh mã dùng chung ở `@saha/shared`).
 
+### Super Admin & gói dịch vụ
+
+- Doanh nghiệp (`/platform/tenants`): tạo mới kèm vai trò hệ thống, loại hợp đồng mặc định (`src/platform/default-roles.ts`,
+  dùng chung với seed), tài khoản quản trị đầu tiên và subscription; sửa thông tin; tạm ngưng/đóng ⇒ thu hồi mọi phiên,
+  người dùng không đăng nhập được. Không tạm ngưng được doanh nghiệp chứa chính tài khoản Super Admin.
+- Gói (`Plan`): hạn mức người dùng (không tính tài khoản vô hiệu), hợp đồng tạo trong năm (tính cả hợp đồng đã xóa),
+  dung lượng (tổng kích thước tài liệu, kể cả bản đã xóa mềm vì file vẫn lưu), đơn giá/tháng.
+- Subscription hiệu lực = mới nhất có trạng thái TRIAL/ACTIVE/PAST_DUE, đã bắt đầu, chưa kết thúc. Đổi gói/gia hạn
+  ⇒ gói đang chạy kết thúc tại ngày gói mới bắt đầu (gói hẹn trước bị hủy).
+- `PlanLimitsService` (module toàn cục) chặn tạo hợp đồng, thêm/kích hoạt lại người dùng, tải tài liệu khi vượt hạn mức
+  hoặc không có subscription hiệu lực (403 kèm thông điệp); dữ liệu hiện có vẫn xem/xử lý bình thường.
+- Hóa đơn (`Invoice`): số `INV-YYYYMM-NNNN` theo kỳ, mặc định đơn giá gói × số tháng, hạn 15 ngày; ghi nhận thanh toán
+  hoặc hủy (kèm lý do) chỉ từ trạng thái chờ thanh toán; "quá hạn" là trạng thái suy ra.
+- Tổng quan nền tảng: số doanh nghiệp, MRR theo đơn giá gói, công nợ, thuê bao sắp hết hạn; nhật ký hệ thống liên tenant.
+- Phía doanh nghiệp: trang **Gói dịch vụ** (`settings.manage`) xem gói, mức sử dụng, hóa đơn.
+
 ## 6. Quy tắc nghiệp vụ hiện có
 
 - Chỉ sửa được hợp đồng **Nháp** (phê duyệt chưa gửi/bị từ chối/yêu cầu sửa), chưa lưu trữ/xóa.
@@ -161,6 +179,7 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Quản trị: người dùng, phòng ban & chi nhánh, vai trò & phân quyền, loại hợp đồng & mẫu mã, đổi mật khẩu.
 - Vòng đời: phụ lục/gia hạn, nghĩa vụ & tiến độ, nghiệm thu, lịch thanh toán, thanh lý, tự động hiệu lực/hết hạn, nhắc hạn, lịch hợp đồng.
 - Thông báo trong ứng dụng và báo cáo quản trị.
+- Super Admin: doanh nghiệp, gói dịch vụ & hạn mức, subscription, hóa đơn thuê bao, tổng quan, nhật ký hệ thống.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 
@@ -174,7 +193,8 @@ Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (kh�
 3. Phê duyệt nâng cao: trình thiết kế kéo thả, điều kiện tùy biến, thông báo (BullMQ + email/Zalo), nhắc hạn, ủy quyền duyệt.
 4. Tích hợp chữ ký số CA (VNPT/Viettel/FPT) + TSA, xuất PDF/A ký số phía server, thông báo nhắc ký.
 5. Vòng đời nâng cao: ký phụ lục qua luồng ký điện tử, thông báo trong ứng dụng, đối soát thanh toán với kế toán/ERP.
-6. Quản trị nâng cao: mời người dùng qua email, SSO, tích hợp CRM/ERP; Super Admin (tenant, gói dịch vụ, billing, usage).
+6. Quản trị nâng cao: mời người dùng qua email, SSO, tích hợp CRM/ERP; thanh toán trực tuyến hóa đơn thuê bao,
+   tự chuyển PAST_DUE/EXPIRED theo hóa đơn quá hạn, xuất hóa đơn điện tử.
 
 > Ghi chú: file master prompt nguồn kết thúc giữa mục 12.2 (Workflow phê duyệt). Các phần sau đó cần bổ sung
 > trước khi thiết kế chi tiết giai đoạn 3 trở đi.

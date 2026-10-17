@@ -3,6 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { ContractsService } from '../contracts/contracts.service.js';
+import { PlanLimitsService } from '../platform/plan-limits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { ALLOWED_EXTENSIONS, detectFileType, normalizeFileName } from './file-types.js';
@@ -27,6 +28,7 @@ export class DocumentsService {
     private readonly storage: StorageService,
     private readonly contracts: ContractsService,
     private readonly audit: AuditService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   async list(user: AuthUser, contractId: string) {
@@ -58,6 +60,7 @@ export class DocumentsService {
       );
     }
 
+    await this.limits.assertStorage(user.tenantId, file.size);
     const sha256 = createHash('sha256').update(file.buffer).digest('hex');
     const storageKey = `${user.tenantId}/contracts/${contractId}/${randomUUID()}`;
     await this.storage.put(storageKey, file.buffer);

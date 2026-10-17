@@ -47,6 +47,26 @@ export class AuditService {
     });
   }
 
+  /**
+   * Thao tác của Super Admin lên một doanh nghiệp: ghi vào nhật ký của doanh nghiệp đó để quản trị viên
+   * doanh nghiệp cũng thấy; action luôn có tiền tố "platform.".
+   */
+  async logPlatform(actor: AuthUser, tenantId: string, entry: AuditEntry, db: Db = this.prisma) {
+    await db.auditLog.create({
+      data: {
+        tenantId,
+        actorId: actor.userId,
+        actorName: `${actor.fullName} (Super Admin)`,
+        action: entry.action,
+        entityType: entry.entityType,
+        entityId: entry.entityId ?? null,
+        data: entry.data,
+        ip: actor.ip,
+        userAgent: actor.userAgent,
+      },
+    });
+  }
+
   /** Ghi nhật ký cho tác nhân không đăng nhập (ví dụ đối tác ký qua liên kết). */
   async logExternal(
     tenantId: string,

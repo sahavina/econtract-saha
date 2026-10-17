@@ -6,6 +6,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { optionalString, paginated, paginationSchema } from '../common/pagination.js';
+import { PlanLimitsService } from '../platform/plan-limits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 const password = z.string().refine(isStrongPassword, PASSWORD_RULE_MESSAGE);
@@ -77,6 +78,7 @@ export class UsersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   async list(user: AuthUser, q: UserQuery) {
@@ -116,6 +118,7 @@ export class UsersService {
     await this.assertReferences(user, input);
     const passwordHash = await bcrypt.hash(input.password, 10);
     return this.prisma.$transaction(async (tx) => {
+      if (input.status !== 'DISABLED') await this.limits.assertCanAddUser(user.tenantId, tx);
       const created = await tx.user.create({
         data: {
           tenantId: user.tenantId,
@@ -141,7 +144,11 @@ export class UsersService {
   }
 
   async update(user: AuthUser, id: string, input: UserUpdate) {
-    await this.get(user, id);
+    const current = await this.get(user, id);
+    // Kích hoạt lại tài khoản đã vô hiệu hóa ⇒ tính lại vào hạn mức người dùng của gói.
+    if (current.status === 'DISABLED' && input.status && input.status !== 'DISABLED') {
+      await this.limits.assertCanAddUser(user.tenantId);
+    }
     if (id === user.userId && input.status !== undefined && input.status !== 'ACTIVE') {
       throw new BadRequestException('Không thể tự khóa hoặc vô hiệu hóa tài khoản của mình');
     }

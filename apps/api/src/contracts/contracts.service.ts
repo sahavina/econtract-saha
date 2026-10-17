@@ -10,6 +10,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { paginated } from '../common/pagination.js';
+import { PlanLimitsService } from '../platform/plan-limits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { TemplatesService } from '../templates/templates.service.js';
 import { sanitizeContractHtml } from './sanitize-content.js';
@@ -63,6 +64,7 @@ export class ContractsService {
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
     private readonly templates: TemplatesService,
+    private readonly limits: PlanLimitsService,
   ) {}
 
   /** Phạm vi dữ liệu theo quyền: xem tất cả trong tenant, hoặc chỉ hợp đồng mình phụ trách/tạo/được giao duyệt. */
@@ -184,6 +186,7 @@ export class ContractsService {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await this.prisma.$transaction(async (tx) => {
+          await this.limits.assertCanCreateContract(user.tenantId, tx);
           const code = input.code ?? (await this.nextCode(tx, user, refs));
           const contract = await tx.contract.create({
             data: {

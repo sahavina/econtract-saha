@@ -5,6 +5,10 @@ import {
   Bell,
   Building,
   Building2,
+  Boxes,
+  CreditCard,
+  Gauge,
+  Receipt,
   CalendarDays,
   CalendarX2,
   FileCheck2,
@@ -36,6 +40,8 @@ export interface NavItem {
   /** Chưa có href ⇒ phân hệ chưa triển khai, hiển thị mờ kèm nhãn "Sắp có". */
   href?: string;
   permissions?: Permission[];
+  /** Chỉ hiển thị cho Super Admin (quản trị nền tảng). */
+  platformOnly?: boolean;
 }
 
 export interface NavGroup {
@@ -112,7 +118,18 @@ export const NAV: NavGroup[] = [
       { title: 'Vai trò và phân quyền', icon: ShieldCheck, href: '/admin/roles', permissions: [PERMISSIONS.ROLE_MANAGE] },
       { title: 'Quy trình phê duyệt', icon: Workflow, href: '/workflows', permissions: [PERMISSIONS.WORKFLOW_MANAGE] },
       { title: 'Cấu hình', icon: Settings, href: '/admin/settings', permissions: [PERMISSIONS.SETTINGS_MANAGE] },
+      { title: 'Gói dịch vụ', icon: CreditCard, href: '/admin/billing', permissions: [PERMISSIONS.SETTINGS_MANAGE] },
       { title: 'Nhật ký hoạt động', icon: History, href: '/audit-logs', permissions: [PERMISSIONS.AUDIT_VIEW] },
+    ],
+  },
+  {
+    label: 'Super Admin',
+    items: [
+      { title: 'Tổng quan nền tảng', icon: Gauge, href: '/platform', platformOnly: true },
+      { title: 'Doanh nghiệp', icon: Building2, href: '/platform/tenants', platformOnly: true },
+      { title: 'Gói dịch vụ', icon: Boxes, href: '/platform/plans', platformOnly: true },
+      { title: 'Hóa đơn thuê bao', icon: Receipt, href: '/platform/invoices', platformOnly: true },
+      { title: 'Nhật ký hệ thống', icon: History, href: '/platform/audit-logs', platformOnly: true },
     ],
   },
 ];
