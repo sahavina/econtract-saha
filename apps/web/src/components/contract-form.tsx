@@ -18,7 +18,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { toDateInput } from '@/lib/format';
 import { useLookups } from '@/lib/queries';
-import type { ContractDetail, Partner } from '@/lib/types';
+import type { ContractDetail, Partner, TemplateListItem } from '@/lib/types';
 
 const PARTY_ROLES = [
   { value: 'PARTY_A', label: 'Bên A' },
@@ -54,6 +54,7 @@ const partySchema = z.object({
 const schema = z
   .object({
     code: z.string().trim().max(60),
+    templateId: z.string(),
     title: z.string().trim().min(1, 'Vui lòng nhập tên hợp đồng').max(500),
     contractTypeId: z.string(),
     group: z.string(),
@@ -95,13 +96,14 @@ const emptyParty = (role: FormValues['parties'][number]['role']): FormValues['pa
 function toForm(c?: ContractDetail): FormValues {
   if (!c) {
     return {
-      code: '', title: '', contractTypeId: '', group: '', description: '', value: '0', currency: 'VND', vatRate: '',
+      code: '', templateId: '', title: '', contractTypeId: '', group: '', description: '', value: '0', currency: 'VND', vatRate: '',
       expectedSignDate: '', effectiveDate: '', expiryDate: '', departmentId: '', ownerId: '', confidentiality: 'INTERNAL',
       tags: '', note: '', parties: [emptyParty('PARTY_A'), emptyParty('PARTY_B')],
     };
   }
   return {
     code: c.code,
+    templateId: c.template?.id ?? '',
     title: c.title,
     contractTypeId: c.contractTypeId ?? '',
     group: c.group ?? '',
@@ -165,7 +167,7 @@ function toPayload(v: FormValues, isEdit: boolean) {
       authorizationRef: nul(p.authorizationRef),
     })),
   };
-  return isEdit ? payload : { ...payload, code: nul(v.code) };
+  return isEdit ? payload : { ...payload, code: nul(v.code), templateId: nul(v.templateId) };
 }
 
 function Field({ label, error, children, className }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
@@ -233,10 +235,50 @@ export function ContractForm({ contract }: { contract?: ContractDetail }) {
   };
 
   const contractTypeId = useWatch({ control, name: 'contractTypeId' });
-  const selectedType = lookups.data?.contractTypes.find((t) => t.id === contractTypeId);
+  const templateId = useWatch({ control, name: 'templateId' });
+  const templates = useQuery({
+    queryKey: ['templates', 'usable'],
+    queryFn: () => api<Paginated<TemplateListItem>>('/templates', { query: { usable: true, pageSize: 100 } }),
+    enabled: !isEdit,
+  });
+  const selectedTemplate = templates.data?.items.find((t) => t.id === templateId);
+  const selectedType =
+    lookups.data?.contractTypes.find((t) => t.id === contractTypeId) ??
+    (selectedTemplate?.contractType ? lookups.data?.contractTypes.find((t) => t.id === selectedTemplate.contractType?.id) : undefined);
 
   return (
     <form onSubmit={form.handleSubmit((v) => save.mutate(v))} className="space-y-4" noValidate>
+      {!isEdit && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Mẫu hợp đồng</CardTitle>
+            <CardDescription>Chọn mẫu để sao chép sẵn nội dung và loại hợp đồng; có thể soạn lại sau khi tạo.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            <Controller
+              control={control}
+              name="templateId"
+              render={({ field }) => (
+                <FilterSelect
+                  className="w-full md:w-96"
+                  allLabel="— Không dùng mẫu (soạn từ đầu) —"
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  options={(templates.data?.items ?? []).map((t) => ({ value: t.id, label: `${t.name} · v${t.version}` }))}
+                  ariaLabel="Mẫu hợp đồng"
+                />
+              )}
+            />
+            {selectedTemplate && (
+              <p className="text-sm text-muted-foreground">
+                {selectedTemplate.description ?? selectedTemplate.name}
+                {selectedTemplate.requiredVariables.length > 0 &&
+                  ` · Dữ liệu bắt buộc: ${selectedTemplate.requiredVariables.map((k) => `{{${k}}}`).join(', ')}`}
+              </p>
+            )}
+          </CardContent>
+        </Card>
+      )}
       <Card>
         <CardHeader>
           <CardTitle>Thông tin chung</CardTitle>
@@ -271,7 +313,7 @@ export function ContractForm({ contract }: { contract?: ContractDetail }) {
               name="confidentiality"
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full" aria-label="Mức độ bảo mật"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {CONFIDENTIALITY.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
                   </SelectContent>
@@ -288,7 +330,7 @@ export function ContractForm({ contract }: { contract?: ContractDetail }) {
               name="currency"
               render={({ field }) => (
                 <Select value={field.value} onValueChange={field.onChange}>
-                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-full" aria-label="Tiền tệ"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {['VND', 'USD', 'EUR'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
                   </SelectContent>

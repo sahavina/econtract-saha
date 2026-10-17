@@ -11,6 +11,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { paginated } from '../common/pagination.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { TemplatesService } from '../templates/templates.service.js';
 import { sanitizeContractHtml } from './sanitize-content.js';
 import { DEFAULT_CONTRACT_CODE_PATTERN, renderCode, sequenceKey } from './contract-code.js';
 import type {
@@ -61,6 +62,7 @@ export class ContractsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly templates: TemplatesService,
   ) {}
 
   /** Phạm vi dữ liệu theo quyền: xem tất cả trong tenant hoặc chỉ hợp đồng mình phụ trách/tạo. */
@@ -152,13 +154,22 @@ export class ContractsService {
         owner: { select: { id: true, fullName: true, email: true } },
         createdBy: { select: { id: true, fullName: true } },
         parties: { orderBy: { sortOrder: 'asc' } },
+        template: { select: { id: true, code: true, name: true, version: true, requiredVariables: true } },
       },
     });
     if (!contract) throw new NotFoundException('Không tìm thấy hợp đồng');
     return contract;
   }
 
-  async create(user: AuthUser, input: ContractCreate) {
+  async create(user: AuthUser, rawInput: ContractCreate) {
+    const template = rawInput.templateId ? await this.templates.getUsable(user, rawInput.templateId) : null;
+    const input: ContractCreate = template
+      ? {
+          ...rawInput,
+          contractTypeId: rawInput.contractTypeId ?? template.contractTypeId,
+          contentHtml: rawInput.contentHtml ?? template.contentHtml,
+        }
+      : rawInput;
     const refs = await this.assertReferences(user, input);
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -174,6 +185,8 @@ export class ContractsService {
               ownerId: input.ownerId ?? user.userId,
               departmentId: input.departmentId ?? user.departmentId,
               parties: { create: input.parties.map((p, i) => this.mapParty(p, i)) },
+              templateId: template?.id ?? null,
+              templateVersion: template?.version ?? null,
             },
           });
           await this.audit.log(
@@ -182,7 +195,11 @@ export class ContractsService {
               action: 'contract.create',
               entityType: 'contract',
               entityId: contract.id,
-              data: { code, title: contract.title },
+              data: {
+                code,
+                title: contract.title,
+                template: template ? `${template.code} v${template.version}` : undefined,
+              },
             },
             tx,
           );

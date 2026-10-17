@@ -18,6 +18,7 @@ export const PERMISSIONS = {
 
   TEMPLATE_VIEW: 'template.view',
   TEMPLATE_MANAGE: 'template.manage',
+  CLAUSE_APPROVE: 'clause.approve',
 
   USER_VIEW: 'user.view',
   USER_MANAGE: 'user.manage',
@@ -42,8 +43,9 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'contract.export': 'Xuất dữ liệu hợp đồng',
   'partner.view': 'Xem đối tác',
   'partner.manage': 'Quản lý đối tác',
-  'template.view': 'Xem mẫu hợp đồng',
-  'template.manage': 'Quản lý mẫu hợp đồng',
+  'template.view': 'Xem mẫu hợp đồng, điều khoản',
+  'template.manage': 'Quản lý mẫu hợp đồng, điều khoản',
+  'clause.approve': 'Phê duyệt điều khoản',
   'user.view': 'Xem người dùng',
   'user.manage': 'Quản lý người dùng',
   'role.manage': 'Quản lý vai trò',

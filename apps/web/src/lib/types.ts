@@ -71,6 +71,8 @@ export interface ContractDetail extends Omit<ContractListItem, 'parties'> {
   contentHtml: string | null;
   updatedAt: string;
   createdBy: { id: string; fullName: string };
+  template: { id: string; code: string; name: string; version: number; requiredVariables: string[] } | null;
+  templateVersion: number | null;
   department: { id: string; code: string; name: string } | null;
   owner: { id: string; fullName: string; email: string } | null;
   parties: ContractParty[];
@@ -142,4 +144,49 @@ export interface ContractDocument {
   scanStatus: 'NOT_SCANNED' | 'CLEAN' | 'INFECTED';
   createdAt: string;
   uploadedBy: { id: string; fullName: string };
+}
+
+export type TemplateStatus = 'DRAFT' | 'ACTIVE' | 'ARCHIVED';
+
+export interface TemplateListItem {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  status: TemplateStatus;
+  version: number;
+  requiredVariables: string[];
+  departmentIds: string[];
+  updatedAt: string;
+  contractType: { id: string; code: string; name: string } | null;
+  createdBy: { id: string; fullName: string };
+  _count: { contracts: number };
+}
+
+export interface TemplateDetail extends TemplateListItem {
+  contractTypeId: string | null;
+  contentHtml: string;
+  variables: string[];
+  versions: { id: string; version: number; createdAt: string; createdBy: { fullName: string } }[];
+}
+
+export type ClauseStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'ARCHIVED';
+
+export interface Clause {
+  id: string;
+  code: string;
+  title: string;
+  category: import('@saha/shared').ClauseCategory;
+  contentHtml: string;
+  version: number;
+  status: ClauseStatus;
+  reviewNote: string | null;
+  approvedAt: string | null;
+  updatedAt: string;
+  createdBy: { id: string; fullName: string };
+  approvedBy: { id: string; fullName: string } | null;
+}
+
+export interface ClauseDetail extends Clause {
+  versions: { id: string; version: number; title: string; contentHtml: string; createdAt: string; createdBy: { fullName: string } }[];
 }

@@ -62,6 +62,8 @@ export const contractCreateSchema = contractBase
     confidentiality: contractBase.shape.confidentiality.default('INTERNAL'),
     tags: contractBase.shape.tags.default([]),
     parties: contractBase.shape.parties.default([]),
+    // Lập hợp đồng từ mẫu: sao chép nội dung & loại hợp đồng của mẫu (nếu không truyền).
+    templateId: z.preprocess(emptyToNull, z.uuid().nullable().optional()),
   })
   .refine(datesInOrder, DATE_ORDER_MSG);
 export type ContractCreate = z.infer<typeof contractCreateSchema>;

@@ -1,0 +1,180 @@
+'use client';
+
+import { zodResolver } from '@hookform/resolvers/zod';
+import { TEMPLATE_STATUS_LABELS } from '@saha/shared';
+import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Plus } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { toast } from 'sonner';
+import { z } from 'zod';
+import { FilterSelect } from '@/components/filter-select';
+import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { TemplateStatusBadge } from '@/components/status-badge';
+import { Button } from '@/components/ui/button';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { api, ApiError, type Paginated } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
+import { formatDateTime } from '@/lib/format';
+import { useLookups } from '@/lib/queries';
+import type { TemplateListItem, TemplateStatus } from '@/lib/types';
+
+const createSchema = z.object({
+  code: z.string().trim().min(1, 'Nhập mã mẫu').max(50),
+  name: z.string().trim().min(1, 'Nhập tên mẫu').max(255),
+});
+
+function CreateTemplateDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const router = useRouter();
+  const form = useForm<z.infer<typeof createSchema>>({ resolver: zodResolver(createSchema), defaultValues: { code: '', name: '' } });
+  const create = useMutation({
+    meta: { silent: true },
+    mutationFn: (v: z.infer<typeof createSchema>) => api<{ id: string }>('/templates', { method: 'POST', body: v }),
+    onSuccess: (t) => {
+      toast.success('Đã tạo mẫu nháp');
+      router.push(`/templates/${t.id}`);
+    },
+    onError: (err) => {
+      if (err instanceof ApiError && err.status === 409) form.setError('code', { message: 'Mã mẫu đã tồn tại' });
+      else toast.error(err instanceof Error ? err.message : 'Tạo mẫu thất bại');
+    },
+  });
+  const errors = form.formState.errors;
+  return (
+    <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Tạo mẫu hợp đồng</DialogTitle>
+        </DialogHeader>
+        <form id="tpl-create" onSubmit={form.handleSubmit((v) => create.mutate(v))} className="space-y-3" noValidate>
+          <div className="space-y-1.5">
+            <Label htmlFor="tpl-code">Mã mẫu *</Label>
+            <Input id="tpl-code" placeholder="VD: MAU-HDDV-01" aria-invalid={!!errors.code} {...form.register('code')} />
+            {errors.code && <p className="text-xs text-destructive">{errors.code.message}</p>}
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="tpl-name">Tên mẫu *</Label>
+            <Input id="tpl-name" aria-invalid={!!errors.name} {...form.register('name')} />
+            {errors.name && <p className="text-xs text-destructive">{errors.name.message}</p>}
+          </div>
+        </form>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>
+            Hủy
+          </Button>
+          <Button type="submit" form="tpl-create" disabled={create.isPending}>
+            {create.isPending && <Loader2 className="animate-spin" />} Tạo và soạn nội dung
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+export default function TemplatesPage() {
+  const { can } = useAuth();
+  const qc = useQueryClient();
+  const lookups = useLookups();
+  const [search, setSearch] = useState('');
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<string | undefined>();
+  const [contractTypeId, setContractTypeId] = useState<string | undefined>();
+  const [creating, setCreating] = useState(false);
+
+  useEffect(() => {
+    const t = setTimeout(() => setQ(search.trim()), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const list = useQuery({
+    queryKey: ['templates', { q, status, contractTypeId }],
+    queryFn: () => api<Paginated<TemplateListItem>>('/templates', { query: { q, status, contractTypeId, pageSize: 100 } }),
+    placeholderData: keepPreviousData,
+  });
+
+  const deptName = (id: string) => lookups.data?.departments.find((d) => d.id === id)?.name ?? '…';
+
+  return (
+    <>
+      <PageHeader
+        title="Mẫu hợp đồng"
+        description="Mẫu dùng biến dữ liệu {{…}} để tự điền khi lập hợp đồng. Chỉ mẫu Đang sử dụng mới được chọn khi tạo hợp đồng."
+        crumbs={[{ label: 'Soạn thảo' }, { label: 'Mẫu hợp đồng' }]}
+        actions={
+          can('template.manage') && (
+            <Button onClick={() => setCreating(true)}>
+              <Plus /> Tạo mẫu
+            </Button>
+          )
+        }
+      />
+      <div className="mb-3 flex flex-wrap gap-2">
+        <Input className="w-64" placeholder="Tìm theo tên, mã mẫu…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm mẫu" />
+        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={setStatus} options={(Object.keys(TEMPLATE_STATUS_LABELS) as TemplateStatus[]).map((s) => ({ value: s, label: TEMPLATE_STATUS_LABELS[s] }))} />
+        <FilterSelect allLabel="Mọi loại HĐ" value={contractTypeId} onChange={setContractTypeId} options={(lookups.data?.contractTypes ?? []).map((t) => ({ value: t.id, label: t.name }))} />
+      </div>
+
+      {list.isError ? (
+        <ErrorState error={list.error} onRetry={() => list.refetch()} />
+      ) : (
+        <div className="rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Mã mẫu</TableHead>
+                <TableHead>Tên mẫu</TableHead>
+                <TableHead>Loại hợp đồng</TableHead>
+                <TableHead>Phiên bản</TableHead>
+                <TableHead>Trạng thái</TableHead>
+                <TableHead>Phòng ban được dùng</TableHead>
+                <TableHead className="text-right">Đã dùng</TableHead>
+                <TableHead>Cập nhật</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {list.isPending ? (
+                <TableRow>
+                  <TableCell colSpan={8}>
+                    <Skeleton className="h-24" />
+                  </TableCell>
+                </TableRow>
+              ) : !list.data.items.length ? (
+                <TableRow>
+                  <TableCell colSpan={8} className="p-4">
+                    <EmptyState title="Chưa có mẫu hợp đồng" />
+                  </TableCell>
+                </TableRow>
+              ) : (
+                list.data.items.map((t) => (
+                  <TableRow key={t.id}>
+                    <TableCell>
+                      <Link href={`/templates/${t.id}`} className="font-medium text-primary hover:underline" onMouseEnter={() => qc.prefetchQuery({ queryKey: ['template', t.id], queryFn: () => api(`/templates/${t.id}`) })}>
+                        {t.code}
+                      </Link>
+                    </TableCell>
+                    <TableCell>{t.name}</TableCell>
+                    <TableCell>{t.contractType?.name ?? '—'}</TableCell>
+                    <TableCell>v{t.version}</TableCell>
+                    <TableCell>
+                      <TemplateStatusBadge status={t.status} />
+                    </TableCell>
+                    <TableCell className="text-sm">{t.departmentIds.length ? t.departmentIds.map(deptName).join(', ') : 'Tất cả'}</TableCell>
+                    <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDateTime(t.updatedAt)}</TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+      <CreateTemplateDialog open={creating} onClose={() => setCreating(false)} />
+    </>
+  );
+}

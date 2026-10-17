@@ -53,6 +53,17 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
   Lưu file qua `StorageService` (driver local `STORAGE_DIR`; S3/MinIO là bước tiếp theo). Chưa có quét virus
   ⇒ trạng thái `NOT_SCANNED`.
 
+### Mẫu hợp đồng & thư viện điều khoản
+
+- `ContractTemplate`: Nháp → Đang sử dụng → Lưu trữ. Giới hạn theo phòng ban (`departmentIds`, rỗng = tất cả),
+  danh sách **biến bắt buộc** (`requiredVariables`). Kích hoạt yêu cầu nội dung không rỗng và không có biến lạ.
+- Phiên bản mẫu: ảnh chụp `ContractTemplateVersion` khi kích hoạt và mỗi lần sửa nội dung mẫu đang sử dụng (tăng `version`).
+  Hợp đồng lập từ mẫu **sao chép** nội dung và lưu `templateId` + `templateVersion` ⇒ sửa mẫu không ảnh hưởng hợp đồng cũ.
+- Người chỉ có quyền tạo hợp đồng (không có `template.view`) chỉ thấy mẫu đang sử dụng mà phòng ban mình được dùng.
+- `Clause`: Nháp → Chờ duyệt → Đã duyệt / Bị từ chối (bắt buộc lý do) → Lưu trữ. Quyền duyệt `clause.approve`;
+  **không được tự duyệt** điều khoản do mình soạn. Sửa điều khoản đã duyệt ⇒ phiên bản mới ở trạng thái Nháp;
+  mỗi lần duyệt lưu ảnh chụp `ClauseVersion`. Chỉ điều khoản Đã duyệt chèn được vào hợp đồng/mẫu.
+
 ## 6. Quy tắc nghiệp vụ hiện có
 
 - Chỉ sửa được hợp đồng **Nháp** (phê duyệt chưa gửi/bị từ chối/yêu cầu sửa), chưa lưu trữ/xóa.
@@ -72,6 +83,9 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
   (tổng quan, các bên, lịch sử), sao chép, lưu trữ, thùng rác.
 - Nội dung hợp đồng: trình soạn thảo (tiêu đề H1–H6, định dạng, danh sách, căn lề, bảng, chèn biến, undo/redo),
   tự lưu nháp, xem trước A4, in/lưu PDF. Tài liệu đính kèm: tải lên/tải xuống/xóa, phiên bản, SHA-256.
+- Mẫu hợp đồng: danh sách, soạn mẫu, biến bắt buộc, phòng ban được dùng, kích hoạt/lưu trữ/xóa, lịch sử phiên bản;
+  tạo hợp đồng từ mẫu với cảnh báo thiếu dữ liệu bắt buộc.
+- Thư viện điều khoản: soạn, gửi duyệt, duyệt/từ chối, phiên bản đã duyệt; chèn điều khoản vào hợp đồng và mẫu.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 
@@ -81,7 +95,7 @@ Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (kh�
 
 1. Hoàn thiện soạn thảo: driver S3/MinIO, quét virus (ClamAV), chuyển DOCX → PDF chuẩn để ký, xuất PDF phía server,
    header/footer, chèn hình ảnh, quản lý & so sánh phiên bản nội dung; wizard 6 bước.
-2. Mẫu hợp đồng + biến dữ liệu `{{contract.*}}`, thư viện điều khoản có phiên bản.
+2. Mở rộng mẫu: định dạng ngày/số/tiền tệ theo biến, so sánh phiên bản, trình thiết kế mẫu kéo thả.
 3. Workflow phê duyệt cấu hình được (ngưỡng giá trị, tuần tự/song song, điều kiện) + BullMQ, thông báo.
 4. Ký điện tử qua Signature Provider Gateway, khóa nội dung phiên bản đã ký.
 5. Vòng đời: phụ lục, gia hạn, nghĩa vụ, thanh toán, nghiệm thu, thanh lý; job tự chuyển ACTIVE/EXPIRED.

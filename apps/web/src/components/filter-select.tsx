@@ -12,6 +12,7 @@ export function FilterSelect({
   allLabel,
   className,
   ariaLabel,
+  disabled,
 }: {
   value: string | undefined;
   onChange: (value: string | undefined) => void;
@@ -19,9 +20,10 @@ export function FilterSelect({
   allLabel: string;
   className?: string;
   ariaLabel?: string;
+  disabled?: boolean;
 }) {
   return (
-    <Select value={value || ALL} onValueChange={(v) => onChange(v === ALL ? undefined : v)}>
+    <Select value={value || ALL} onValueChange={(v) => onChange(v === ALL ? undefined : v)} disabled={disabled}>
       <SelectTrigger className={className ?? 'w-44'} aria-label={ariaLabel ?? allLabel}>
         <SelectValue placeholder={allLabel} />
       </SelectTrigger>

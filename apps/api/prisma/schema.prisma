@@ -80,6 +80,8 @@ model Tenant {
   auditLogs     AuditLog[]
   subscriptions Subscription[]
   documents     ContractDocument[]
+  templates     ContractTemplate[]
+  clauses       Clause[]
 }
 
 // ───────────────────────────── Tổ chức & Người dùng ─────────────────────────────
@@ -129,30 +131,35 @@ enum UserStatus {
 }
 
 model User {
-  id                String             @id @default(uuid()) @db.Uuid
-  tenantId          String             @db.Uuid
+  id                String                    @id @default(uuid()) @db.Uuid
+  tenantId          String                    @db.Uuid
   email             String
   passwordHash      String
   fullName          String
   phone             String?
   jobTitle          String?
-  departmentId      String?            @db.Uuid
-  branchId          String?            @db.Uuid
-  status            UserStatus         @default(ACTIVE)
-  isPlatformAdmin   Boolean            @default(false)
-  failedLogins      Int                @default(0)
+  departmentId      String?                   @db.Uuid
+  branchId          String?                   @db.Uuid
+  status            UserStatus                @default(ACTIVE)
+  isPlatformAdmin   Boolean                   @default(false)
+  failedLogins      Int                       @default(0)
   lockedUntil       DateTime?
   lastLoginAt       DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  tenant            Tenant             @relation(fields: [tenantId], references: [id])
-  department        Department?        @relation("UserDepartment", fields: [departmentId], references: [id])
-  branch            Branch?            @relation(fields: [branchId], references: [id])
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  tenant            Tenant                    @relation(fields: [tenantId], references: [id])
+  department        Department?               @relation("UserDepartment", fields: [departmentId], references: [id])
+  branch            Branch?                   @relation(fields: [branchId], references: [id])
   roles             UserRole[]
   sessions          Session[]
-  ownedContracts    Contract[]         @relation("ContractOwner")
-  createdContracts  Contract[]         @relation("ContractCreator")
+  ownedContracts    Contract[]                @relation("ContractOwner")
+  createdContracts  Contract[]                @relation("ContractCreator")
   uploadedDocuments ContractDocument[]
+  createdTemplates  ContractTemplate[]        @relation("TemplateCreator")
+  templateVersions  ContractTemplateVersion[]
+  createdClauses    Clause[]                  @relation("ClauseCreator")
+  approvedClauses   Clause[]                  @relation("ClauseApprover")
+  clauseVersions    ClauseVersion[]
 
   @@unique([tenantId, email])
 }
@@ -294,17 +301,18 @@ model PartnerContact {
 // ───────────────────────────── Hợp đồng ─────────────────────────────
 
 model ContractType {
-  id          String     @id @default(uuid()) @db.Uuid
-  tenantId    String     @db.Uuid
+  id          String             @id @default(uuid()) @db.Uuid
+  tenantId    String             @db.Uuid
   code        String
   name        String
   // Mẫu mã: hỗ trợ {TYPE} {DEPT} {BRANCH} {YYYY} {YY} {MM} {SEQUENCE} {SEQUENCE:5}
-  codePattern String     @default("HD-{YYYY}-{SEQUENCE:5}")
-  isActive    Boolean    @default(true)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  codePattern String             @default("HD-{YYYY}-{SEQUENCE:5}")
+  isActive    Boolean            @default(true)
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
   contracts   Contract[]
+  templates   ContractTemplate[]
 
   @@unique([tenantId, code])
 }
@@ -380,6 +388,9 @@ model Contract {
   owner            User?              @relation("ContractOwner", fields: [ownerId], references: [id])
   createdBy        User               @relation("ContractCreator", fields: [createdById], references: [id])
   documents        ContractDocument[]
+  templateId       String?            @db.Uuid
+  templateVersion  Int?
+  template         ContractTemplate?  @relation(fields: [templateId], references: [id])
   parties          ContractParty[]
 
   @@unique([tenantId, code])
@@ -450,4 +461,115 @@ model ContractDocument {
   uploadedBy   User         @relation(fields: [uploadedById], references: [id])
 
   @@index([tenantId, contractId])
+}
+
+// ───────────────────────────── Mẫu hợp đồng ─────────────────────────────
+
+enum TemplateStatus {
+  DRAFT
+  ACTIVE
+  ARCHIVED
+}
+
+model ContractTemplate {
+  id                String                    @id @default(uuid()) @db.Uuid
+  tenantId          String                    @db.Uuid
+  code              String
+  name              String
+  contractTypeId    String?                   @db.Uuid
+  description       String?
+  contentHtml       String                    @default("")
+  // Biến bắt buộc phải có dữ liệu khi lập hợp đồng từ mẫu.
+  requiredVariables String[]                  @default([])
+  // Phòng ban được dùng mẫu; rỗng = mọi phòng ban.
+  departmentIds     String[]                  @default([]) @db.Uuid
+  version           Int                       @default(1)
+  status            TemplateStatus            @default(DRAFT)
+  createdById       String                    @db.Uuid
+  deletedAt         DateTime?
+  createdAt         DateTime                  @default(now())
+  updatedAt         DateTime                  @updatedAt
+  tenant            Tenant                    @relation(fields: [tenantId], references: [id])
+  contractType      ContractType?             @relation(fields: [contractTypeId], references: [id])
+  createdBy         User                      @relation("TemplateCreator", fields: [createdById], references: [id])
+  versions          ContractTemplateVersion[]
+  contracts         Contract[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+}
+
+// Ảnh chụp nội dung mỗi khi nội dung mẫu thay đổi.
+model ContractTemplateVersion {
+  id          String           @id @default(uuid()) @db.Uuid
+  templateId  String           @db.Uuid
+  version     Int
+  contentHtml String
+  createdById String           @db.Uuid
+  createdAt   DateTime         @default(now())
+  template    ContractTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  createdBy   User             @relation(fields: [createdById], references: [id])
+
+  @@unique([templateId, version])
+}
+
+// ───────────────────────────── Thư viện điều khoản ─────────────────────────────
+
+enum ClauseCategory {
+  PAYMENT
+  WARRANTY
+  CONFIDENTIALITY
+  PENALTY
+  COMPENSATION
+  TERMINATION
+  DISPUTE
+  FORCE_MAJEURE
+  OTHER
+}
+
+enum ClauseStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+  ARCHIVED
+}
+
+model Clause {
+  id           String          @id @default(uuid()) @db.Uuid
+  tenantId     String          @db.Uuid
+  code         String
+  title        String
+  category     ClauseCategory
+  contentHtml  String
+  version      Int             @default(1)
+  status       ClauseStatus    @default(DRAFT)
+  reviewNote   String?
+  createdById  String          @db.Uuid
+  approvedById String?         @db.Uuid
+  approvedAt   DateTime?
+  deletedAt    DateTime?
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  tenant       Tenant          @relation(fields: [tenantId], references: [id])
+  createdBy    User            @relation("ClauseCreator", fields: [createdById], references: [id])
+  approvedBy   User?           @relation("ClauseApprover", fields: [approvedById], references: [id])
+  versions     ClauseVersion[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, category, status])
+}
+
+model ClauseVersion {
+  id          String   @id @default(uuid()) @db.Uuid
+  clauseId    String   @db.Uuid
+  version     Int
+  title       String
+  contentHtml String
+  createdById String   @db.Uuid
+  createdAt   DateTime @default(now())
+  clause      Clause   @relation(fields: [clauseId], references: [id], onDelete: Cascade)
+  createdBy   User     @relation(fields: [createdById], references: [id])
+
+  @@unique([clauseId, version])
 }

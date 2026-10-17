@@ -17,13 +17,25 @@ type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved'; at: st
 
 function A4Preview({ contract, html }: { contract: ContractDetail; html: string }) {
   const rendered = useMemo(() => renderTemplate(html, buildTemplateValues(contract)), [contract, html]);
+  // Biến bắt buộc của mẫu: chưa có dữ liệu (dù có hay không có trong nội dung).
+  const values = useMemo(() => buildTemplateValues(contract), [contract]);
+  const requiredMissing = (contract.template?.requiredVariables ?? []).filter((k) => !values[k]);
+  const optionalMissing = rendered.missing.filter((k) => !requiredMissing.includes(k));
   return (
     <div className="space-y-3">
-      {(rendered.missing.length > 0 || rendered.unknown.length > 0) && (
+      {requiredMissing.length > 0 && (
+        <div role="alert" className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+          <AlertTriangle className="mt-0.5 size-4 shrink-0" />
+          <p>
+            Thiếu dữ liệu bắt buộc theo mẫu {contract.template?.name}: {requiredMissing.map((k) => `{{${k}}}`).join(', ')}. Bổ sung ở thông tin chung / các bên.
+          </p>
+        </div>
+      )}
+      {(optionalMissing.length > 0 || rendered.unknown.length > 0) && (
         <div role="status" className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
           <div>
-            {rendered.missing.length > 0 && <p>Biến chưa có dữ liệu: {rendered.missing.map((k) => `{{${k}}}`).join(', ')}</p>}
+            {optionalMissing.length > 0 && <p>Biến chưa có dữ liệu: {optionalMissing.map((k) => `{{${k}}}`).join(', ')}</p>}
             {rendered.unknown.length > 0 && <p>Biến không hỗ trợ: {rendered.unknown.map((k) => `{{${k}}}`).join(', ')}</p>}
           </div>
         </div>
@@ -134,10 +146,15 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
         </div>
       </div>
 
+      {contract.template && (
+        <p className="text-xs text-muted-foreground">
+          Lập từ mẫu <span className="font-medium">{contract.template.name}</span> (phiên bản {contract.templateVersion}).
+        </p>
+      )}
       {!editable && !html ? (
         <EmptyState title="Hợp đồng chưa có nội dung" description="Nội dung chỉ được soạn khi hợp đồng ở trạng thái Nháp." />
       ) : mode === 'edit' && editable ? (
-        <ContractEditor value={draft} onChange={setDraft} />
+        <ContractEditor value={draft} onChange={setDraft} enableClauses />
       ) : (
         <A4Preview contract={contract} html={html} />
       )}

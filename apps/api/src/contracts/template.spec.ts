@@ -40,3 +40,14 @@ describe('sanitizeContractHtml', () => {
     );
   });
 });
+
+describe('extractVariables', () => {
+  it('returns unique variables in order of appearance', async () => {
+    const { extractVariables } = await import('@saha/shared');
+    expect(extractVariables('{{party_b.name}} {{ contract.code }} {{party_b.name}} {{foo.bar}}')).toEqual([
+      'party_b.name',
+      'contract.code',
+      'foo.bar',
+    ]);
+  });
+});

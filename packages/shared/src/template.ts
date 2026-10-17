@@ -142,3 +142,47 @@ export function renderTemplate(html: string, values: Record<string, string | nul
   });
   return { html: out, missing: [...missing], unknown: [...unknown] };
 }
+
+/** Danh sách biến (không trùng, theo thứ tự xuất hiện) có trong nội dung. */
+export function extractVariables(html: string): string[] {
+  return [...new Set([...html.matchAll(VARIABLE_PATTERN)].map((m) => m[1]))];
+}
+
+export const CLAUSE_CATEGORIES = [
+  'PAYMENT',
+  'WARRANTY',
+  'CONFIDENTIALITY',
+  'PENALTY',
+  'COMPENSATION',
+  'TERMINATION',
+  'DISPUTE',
+  'FORCE_MAJEURE',
+  'OTHER',
+] as const;
+export type ClauseCategory = (typeof CLAUSE_CATEGORIES)[number];
+
+export const CLAUSE_CATEGORY_LABELS: Record<ClauseCategory, string> = {
+  PAYMENT: 'Thanh toán',
+  WARRANTY: 'Bảo hành',
+  CONFIDENTIALITY: 'Bảo mật',
+  PENALTY: 'Phạt vi phạm',
+  COMPENSATION: 'Bồi thường',
+  TERMINATION: 'Chấm dứt',
+  DISPUTE: 'Giải quyết tranh chấp',
+  FORCE_MAJEURE: 'Bất khả kháng',
+  OTHER: 'Khác',
+};
+
+export const CLAUSE_STATUS_LABELS = {
+  DRAFT: 'Nháp',
+  PENDING_APPROVAL: 'Chờ duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Bị từ chối',
+  ARCHIVED: 'Lưu trữ',
+} as const;
+
+export const TEMPLATE_STATUS_LABELS = {
+  DRAFT: 'Nháp',
+  ACTIVE: 'Đang sử dụng',
+  ARCHIVED: 'Lưu trữ',
+} as const;

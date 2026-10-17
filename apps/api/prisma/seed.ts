@@ -7,7 +7,7 @@ import 'dotenv/config';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { ALL_PERMISSIONS, PERMISSIONS, type Permission } from '@saha/shared';
 import bcrypt from 'bcryptjs';
-import { PrismaClient } from '../src/generated/prisma/client.js';
+import { type ClauseCategory, PrismaClient } from '../src/generated/prisma/client.js';
 
 const prisma = new PrismaClient({ adapter: new PrismaPg({ connectionString: process.env.DATABASE_URL! }) });
 
@@ -28,6 +28,7 @@ const ROLES: { code: string; name: string; permissions: Permission[] }[] = [
       P.PARTNER_MANAGE,
       P.TEMPLATE_VIEW,
       P.TEMPLATE_MANAGE,
+      P.CLAUSE_APPROVE,
       P.AUDIT_VIEW,
     ],
   },
@@ -198,6 +199,87 @@ async function main() {
       position: 'Tổng giám đốc',
     },
   });
+
+  // ── Mẫu hợp đồng & điều khoản mẫu ──
+  const admin = await prisma.user.findUniqueOrThrow({
+    where: { tenantId_email: { tenantId: t, email: 'admin@saha.vn' } },
+  });
+  const clauses: [string, string, ClauseCategory, string][] = [
+    [
+      'DK-TT-01',
+      'Thanh toán chuyển khoản 2 đợt',
+      'PAYMENT',
+      '<p>Bên B thanh toán cho Bên A làm 02 đợt bằng chuyển khoản: đợt 1 tạm ứng 30% giá trị hợp đồng trong vòng 05 ngày làm việc kể từ ngày ký; đợt 2 thanh toán 70% còn lại trong vòng 15 ngày kể từ ngày nghiệm thu, bàn giao.</p>',
+    ],
+    [
+      'DK-BM-01',
+      'Bảo mật thông tin',
+      'CONFIDENTIALITY',
+      '<p>Các bên cam kết giữ bí mật mọi thông tin trao đổi trong quá trình thực hiện hợp đồng, không tiết lộ cho bên thứ ba khi chưa có sự đồng ý bằng văn bản của bên kia, trừ trường hợp theo yêu cầu của cơ quan nhà nước có thẩm quyền.</p>',
+    ],
+    [
+      'DK-BKK-01',
+      'Bất khả kháng',
+      'FORCE_MAJEURE',
+      '<p>Sự kiện bất khả kháng là sự kiện xảy ra một cách khách quan, không thể lường trước và không thể khắc phục được mặc dù đã áp dụng mọi biện pháp cần thiết. Bên gặp sự kiện bất khả kháng phải thông báo cho bên kia trong vòng 07 ngày.</p>',
+    ],
+    [
+      'DK-TC-01',
+      'Giải quyết tranh chấp',
+      'DISPUTE',
+      '<p>Mọi tranh chấp phát sinh được giải quyết trước hết bằng thương lượng. Trường hợp không thương lượng được trong 30 ngày, tranh chấp sẽ được đưa ra Tòa án nhân dân có thẩm quyền nơi Bên A đặt trụ sở.</p>',
+    ],
+  ];
+  for (const [code, title, category, contentHtml] of clauses) {
+    const exists = await prisma.clause.findUnique({ where: { tenantId_code: { tenantId: t, code } } });
+    if (exists) continue;
+    await prisma.clause.create({
+      data: {
+        tenantId: t,
+        code,
+        title,
+        category,
+        contentHtml,
+        status: 'APPROVED',
+        createdById: admin.id,
+        approvedById: admin.id,
+        approvedAt: new Date(),
+        versions: { create: { version: 1, title, contentHtml, createdById: admin.id } },
+      },
+    });
+  }
+
+  const hdmb = await prisma.contractType.findUniqueOrThrow({ where: { tenantId_code: { tenantId: t, code: 'HDMB' } } });
+  const templateHtml = [
+    '<p style="text-align:center"><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><br>Độc lập – Tự do – Hạnh phúc</p>',
+    '<h1 style="text-align:center">HỢP ĐỒNG MUA BÁN HÀNG HÓA</h1>',
+    '<p style="text-align:center">Số: {{contract.code}}</p>',
+    '<h3>BÊN BÁN (BÊN A): {{party_a.name}}</h3><p>Mã số thuế: {{party_a.tax_code}} – Địa chỉ: {{party_a.address}}</p><p>Đại diện: {{party_a.representative}} – Chức vụ: {{party_a.position}}</p>',
+    '<h3>BÊN MUA (BÊN B): {{party_b.name}}</h3><p>Mã số thuế: {{party_b.tax_code}} – Địa chỉ: {{party_b.address}}</p><p>Đại diện: {{party_b.representative}} – Chức vụ: {{party_b.position}}</p>',
+    '<h2>Điều 1. Giá trị hợp đồng</h2><p>Tổng giá trị hợp đồng: {{contract.value}} {{contract.currency}} (đã bao gồm thuế VAT {{contract.vat_rate}}%).</p>',
+    '<h2>Điều 2. Thời hạn</h2><p>Hợp đồng có hiệu lực từ ngày {{contract.start_date}} đến hết ngày {{contract.end_date}}.</p>',
+    '<h2>Điều 3. Thanh toán</h2>' + clauses[0][3],
+    '<h2>Điều 4. Giải quyết tranh chấp</h2>' + clauses[3][3],
+  ].join('');
+  const tpl = await prisma.contractTemplate.findUnique({
+    where: { tenantId_code: { tenantId: t, code: 'MAU-HDMB-01' } },
+  });
+  if (!tpl) {
+    await prisma.contractTemplate.create({
+      data: {
+        tenantId: t,
+        code: 'MAU-HDMB-01',
+        name: 'Hợp đồng mua bán hàng hóa (chuẩn)',
+        contractTypeId: hdmb.id,
+        description: 'Mẫu hợp đồng mua bán keo, silicone cho khách hàng doanh nghiệp',
+        contentHtml: templateHtml,
+        status: 'ACTIVE',
+        createdById: admin.id,
+        requiredVariables: ['party_a.name', 'party_b.name', 'party_b.tax_code', 'contract.value'],
+        versions: { create: { version: 1, contentHtml: templateHtml, createdById: admin.id } },
+      },
+    });
+  }
 
   console.log(
     `Seed xong. Đăng nhập: mã DN "saha", email admin@saha.vn, mật khẩu ${process.env.SEED_PASSWORD ? '(SEED_PASSWORD)' : DEV_PASSWORD}`,

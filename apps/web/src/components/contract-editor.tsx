@@ -13,6 +13,7 @@ import {
   AlignRight,
   Bold,
   Braces,
+  ClipboardCheck,
   Columns3,
   Italic,
   List,
@@ -26,6 +27,7 @@ import {
   Underline,
   Undo2,
 } from 'lucide-react';
+import { ClausePicker } from '@/components/clause-picker';
 import { Button } from '@/components/ui/button';
 import {
   DropdownMenu,
@@ -38,6 +40,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
+import { escapeHtml } from '@saha/shared';
+import { useState } from 'react';
 import { cn } from '@/lib/utils';
 
 const BLOCKS = [
@@ -76,7 +80,8 @@ function ToolButton({
   );
 }
 
-function Toolbar({ editor }: { editor: Editor }) {
+function Toolbar({ editor, enableClauses }: { editor: Editor; enableClauses?: boolean }) {
+  const [clauseOpen, setClauseOpen] = useState(false);
   const s = useEditorState({
     editor,
     selector: ({ editor: e }) => ({
@@ -209,12 +214,37 @@ function Toolbar({ editor }: { editor: Editor }) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+      {enableClauses && (
+        <>
+          <Button type="button" variant="ghost" size="sm" onMouseDown={(e) => e.preventDefault()} onClick={() => setClauseOpen(true)}>
+            <ClipboardCheck /> Chèn điều khoản
+          </Button>
+          <ClausePicker
+            open={clauseOpen}
+            onOpenChange={setClauseOpen}
+            onPick={(c, withTitle) => {
+              const html = (withTitle ? `<h3>${escapeHtml(c.title)}</h3>` : '') + c.contentHtml;
+              editor.chain().focus().insertContent(html).run();
+              setClauseOpen(false);
+            }}
+          />
+        </>
+      )}
     </div>
   );
 }
 
 /** Trình soạn thảo nội dung hợp đồng (Tiptap). */
-export function ContractEditor({ value, onChange }: { value: string; onChange: (html: string) => void }) {
+export function ContractEditor({
+  value,
+  onChange,
+  enableClauses,
+}: {
+  value: string;
+  onChange: (html: string) => void;
+  /** Hiện nút chèn điều khoản từ thư viện (cần quyền xem điều khoản). */
+  enableClauses?: boolean;
+}) {
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
@@ -237,7 +267,7 @@ export function ContractEditor({ value, onChange }: { value: string; onChange: (
 
   return (
     <div className="overflow-hidden rounded-lg border bg-background">
-      {editor ? <Toolbar editor={editor} /> : <div className="h-11 border-b bg-muted/30" />}
+      {editor ? <Toolbar editor={editor} enableClauses={enableClauses} /> : <div className="h-11 border-b bg-muted/30" />}
       <EditorContent editor={editor} />
     </div>
   );

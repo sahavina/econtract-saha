@@ -4,6 +4,7 @@ import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
+import { ClausesModule } from './clauses/clauses.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { JwtAuthGuard, PermissionsGuard } from './common/guards.js';
 import { validateEnv } from './config/env.js';
@@ -14,6 +15,7 @@ import { HealthController } from './health/health.controller.js';
 import { PartnersModule } from './partners/partners.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { StorageModule } from './storage/storage.module.js';
+import { TemplatesModule } from './templates/templates.module.js';
 
 @Module({
   imports: [
@@ -27,6 +29,8 @@ import { StorageModule } from './storage/storage.module.js';
     ContractsModule,
     DashboardModule,
     DocumentsModule,
+    TemplatesModule,
+    ClausesModule,
   ],
   controllers: [HealthController],
   providers: [

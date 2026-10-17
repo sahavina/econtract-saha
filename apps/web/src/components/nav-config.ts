@@ -60,8 +60,8 @@ export const NAV: NavGroup[] = [
     label: 'Soạn thảo',
     items: [
       { title: 'Tạo hợp đồng', icon: FilePen, href: '/contracts/new', permissions: [PERMISSIONS.CONTRACT_CREATE] },
-      { title: 'Mẫu hợp đồng', icon: ScrollText },
-      { title: 'Thư viện điều khoản', icon: ClipboardCheck },
+      { title: 'Mẫu hợp đồng', icon: ScrollText, href: '/templates', permissions: [PERMISSIONS.TEMPLATE_VIEW] },
+      { title: 'Thư viện điều khoản', icon: ClipboardCheck, href: '/clauses', permissions: [PERMISSIONS.TEMPLATE_VIEW] },
     ],
   },
   {
