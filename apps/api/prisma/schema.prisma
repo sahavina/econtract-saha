@@ -133,40 +133,41 @@ enum UserStatus {
 }
 
 model User {
-  id                 String                    @id @default(uuid()) @db.Uuid
-  tenantId           String                    @db.Uuid
-  email              String
-  passwordHash       String
-  fullName           String
-  phone              String?
-  jobTitle           String?
-  departmentId       String?                   @db.Uuid
-  branchId           String?                   @db.Uuid
-  status             UserStatus                @default(ACTIVE)
-  isPlatformAdmin    Boolean                   @default(false)
-  failedLogins       Int                       @default(0)
-  lockedUntil        DateTime?
-  lastLoginAt        DateTime?
-  createdAt          DateTime                  @default(now())
-  updatedAt          DateTime                  @updatedAt
-  tenant             Tenant                    @relation(fields: [tenantId], references: [id])
-  department         Department?               @relation("UserDepartment", fields: [departmentId], references: [id])
-  branch             Branch?                   @relation(fields: [branchId], references: [id])
-  roles              UserRole[]
-  sessions           Session[]
-  ownedContracts     Contract[]                @relation("ContractOwner")
-  createdContracts   Contract[]                @relation("ContractCreator")
-  uploadedDocuments  ContractDocument[]
-  createdTemplates   ContractTemplate[]        @relation("TemplateCreator")
-  templateVersions   ContractTemplateVersion[]
-  createdClauses     Clause[]                  @relation("ClauseCreator")
-  approvedClauses    Clause[]                  @relation("ClauseApprover")
-  clauseVersions     ClauseVersion[]
-  managedDepartments Department[]              @relation("DepartmentManager")
-  approvalTasks      ApprovalTask[]
-  signatureRequests  SignatureRequest[]
-  signerAssignments  Signer[]
-  approvalRequests   ApprovalRequest[]
+  id                  String                    @id @default(uuid()) @db.Uuid
+  tenantId            String                    @db.Uuid
+  email               String
+  passwordHash        String
+  fullName            String
+  phone               String?
+  jobTitle            String?
+  departmentId        String?                   @db.Uuid
+  branchId            String?                   @db.Uuid
+  status              UserStatus                @default(ACTIVE)
+  isPlatformAdmin     Boolean                   @default(false)
+  failedLogins        Int                       @default(0)
+  lockedUntil         DateTime?
+  lastLoginAt         DateTime?
+  createdAt           DateTime                  @default(now())
+  updatedAt           DateTime                  @updatedAt
+  tenant              Tenant                    @relation(fields: [tenantId], references: [id])
+  department          Department?               @relation("UserDepartment", fields: [departmentId], references: [id])
+  branch              Branch?                   @relation(fields: [branchId], references: [id])
+  roles               UserRole[]
+  sessions            Session[]
+  ownedContracts      Contract[]                @relation("ContractOwner")
+  createdContracts    Contract[]                @relation("ContractCreator")
+  uploadedDocuments   ContractDocument[]
+  createdTemplates    ContractTemplate[]        @relation("TemplateCreator")
+  templateVersions    ContractTemplateVersion[]
+  createdClauses      Clause[]                  @relation("ClauseCreator")
+  approvedClauses     Clause[]                  @relation("ClauseApprover")
+  clauseVersions      ClauseVersion[]
+  managedDepartments  Department[]              @relation("DepartmentManager")
+  approvalTasks       ApprovalTask[]
+  signatureRequests   SignatureRequest[]
+  signerAssignments   Signer[]
+  assignedObligations ContractObligation[]
+  approvalRequests    ApprovalRequest[]
 
   @@unique([tenantId, email])
 }
@@ -361,45 +362,51 @@ enum Confidentiality {
 }
 
 model Contract {
-  id                String             @id @default(uuid()) @db.Uuid
-  tenantId          String             @db.Uuid
+  id                String               @id @default(uuid()) @db.Uuid
+  tenantId          String               @db.Uuid
   code              String
   title             String
-  contractTypeId    String?            @db.Uuid
+  contractTypeId    String?              @db.Uuid
   group             String?
   description       String?
-  value             Decimal            @default(0) @db.Decimal(20, 2)
-  currency          String             @default("VND")
-  vatRate           Decimal?           @db.Decimal(5, 2)
-  expectedSignDate  DateTime?          @db.Date
-  signedDate        DateTime?          @db.Date
-  effectiveDate     DateTime?          @db.Date
-  expiryDate        DateTime?          @db.Date
-  departmentId      String?            @db.Uuid
-  ownerId           String?            @db.Uuid
-  confidentiality   Confidentiality    @default(INTERNAL)
-  tags              String[]           @default([])
+  value             Decimal              @default(0) @db.Decimal(20, 2)
+  currency          String               @default("VND")
+  vatRate           Decimal?             @db.Decimal(5, 2)
+  expectedSignDate  DateTime?            @db.Date
+  signedDate        DateTime?            @db.Date
+  effectiveDate     DateTime?            @db.Date
+  expiryDate        DateTime?            @db.Date
+  departmentId      String?              @db.Uuid
+  ownerId           String?              @db.Uuid
+  confidentiality   Confidentiality      @default(INTERNAL)
+  tags              String[]             @default([])
   note              String?
-  status            ContractStatus     @default(DRAFT)
-  approvalStatus    ApprovalStatus     @default(NOT_SUBMITTED)
-  signatureStatus   SignatureStatus    @default(NOT_STARTED)
+  status            ContractStatus       @default(DRAFT)
+  approvalStatus    ApprovalStatus       @default(NOT_SUBMITTED)
+  signatureStatus   SignatureStatus      @default(NOT_STARTED)
   contentHtml       String?
-  createdById       String             @db.Uuid
+  createdById       String               @db.Uuid
   archivedAt        DateTime?
   deletedAt         DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  tenant            Tenant             @relation(fields: [tenantId], references: [id])
-  contractType      ContractType?      @relation(fields: [contractTypeId], references: [id])
-  department        Department?        @relation(fields: [departmentId], references: [id])
-  owner             User?              @relation("ContractOwner", fields: [ownerId], references: [id])
-  createdBy         User               @relation("ContractCreator", fields: [createdById], references: [id])
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  tenant            Tenant               @relation(fields: [tenantId], references: [id])
+  contractType      ContractType?        @relation(fields: [contractTypeId], references: [id])
+  department        Department?          @relation(fields: [departmentId], references: [id])
+  owner             User?                @relation("ContractOwner", fields: [ownerId], references: [id])
+  createdBy         User                 @relation("ContractCreator", fields: [createdById], references: [id])
   documents         ContractDocument[]
-  templateId        String?            @db.Uuid
+  templateId        String?              @db.Uuid
   templateVersion   Int?
-  template          ContractTemplate?  @relation(fields: [templateId], references: [id])
+  template          ContractTemplate?    @relation(fields: [templateId], references: [id])
   approvalRequests  ApprovalRequest[]
   signatureRequests SignatureRequest[]
+  appendices        ContractAppendix[]
+  obligations       ContractObligation[]
+  payments          PaymentInstallment[]
+  acceptances       ContractAcceptance[]
+  liquidatedAt      DateTime?
+  liquidationNote   String?
   parties           ContractParty[]
 
   @@unique([tenantId, code])
@@ -757,4 +764,126 @@ model Signer {
 
   @@index([tenantId, userId, status])
   @@index([requestId, order])
+}
+
+// ───────────────────────────── Vòng đời hợp đồng ─────────────────────────────
+
+enum AppendixKind {
+  AMENDMENT
+  EXTENSION
+  OTHER
+}
+
+enum AppendixStatus {
+  DRAFT
+  EFFECTIVE
+  CANCELLED
+}
+
+// Phụ lục / gia hạn. Khi chuyển "Có hiệu lực": gia hạn ⇒ cập nhật ngày hết hạn; thay đổi giá trị ⇒ cộng vào giá trị HĐ.
+model ContractAppendix {
+  id            String         @id @default(uuid()) @db.Uuid
+  tenantId      String         @db.Uuid
+  contractId    String         @db.Uuid
+  seq           Int
+  code          String
+  title         String
+  kind          AppendixKind
+  contentHtml   String?
+  valueChange   Decimal?       @db.Decimal(20, 2)
+  newExpiryDate DateTime?      @db.Date
+  effectiveDate DateTime?      @db.Date
+  status        AppendixStatus @default(DRAFT)
+  appliedAt     DateTime?
+  createdById   String         @db.Uuid
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+  contract      Contract       @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, seq])
+  @@index([tenantId, status])
+}
+
+enum ObligationStatus {
+  OPEN
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+model ContractObligation {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  contractId  String           @db.Uuid
+  title       String
+  description String?
+  partyRole   PartyRole?
+  assigneeId  String?          @db.Uuid
+  dueDate     DateTime?        @db.Date
+  progress    Int              @default(0)
+  status      ObligationStatus @default(OPEN)
+  completedAt DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  contract    Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  assignee    User?            @relation(fields: [assigneeId], references: [id])
+
+  @@index([tenantId, status, dueDate])
+  @@index([contractId])
+}
+
+enum PaymentStatus {
+  PLANNED
+  PARTIAL
+  PAID
+  CANCELLED
+}
+
+model PaymentInstallment {
+  id         String        @id @default(uuid()) @db.Uuid
+  tenantId   String        @db.Uuid
+  contractId String        @db.Uuid
+  seq        Int
+  title      String
+  amount     Decimal       @db.Decimal(20, 2)
+  dueDate    DateTime?     @db.Date
+  paidAmount Decimal       @default(0) @db.Decimal(20, 2)
+  paidDate   DateTime?     @db.Date
+  invoiceNo  String?
+  status     PaymentStatus @default(PLANNED)
+  note       String?
+  createdAt  DateTime      @default(now())
+  updatedAt  DateTime      @updatedAt
+  contract   Contract      @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status, dueDate])
+  @@index([contractId])
+}
+
+enum AcceptanceResult {
+  PASSED
+  CONDITIONAL
+  FAILED
+}
+
+model ContractAcceptance {
+  id           String           @id @default(uuid()) @db.Uuid
+  tenantId     String           @db.Uuid
+  contractId   String           @db.Uuid
+  title        String
+  acceptedDate DateTime         @db.Date
+  result       AcceptanceResult
+  note         String?
+  createdById  String           @db.Uuid
+  createdAt    DateTime         @default(now())
+  contract     Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@index([contractId])
+}
+
+// Chống gửi trùng nhắc hạn: mỗi khóa (ví dụ "exp:<id>:30") chỉ gửi một lần.
+model ReminderLog {
+  key      String   @id
+  tenantId String   @db.Uuid
+  sentAt   DateTime @default(now())
 }

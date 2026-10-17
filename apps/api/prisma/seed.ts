@@ -24,6 +24,7 @@ const ROLES: { code: string; name: string; permissions: Permission[] }[] = [
       P.CONTRACT_UPDATE,
       P.CONTRACT_ARCHIVE,
       P.CONTRACT_EXPORT,
+      P.CONTRACT_LIQUIDATE,
       P.PARTNER_VIEW,
       P.PARTNER_MANAGE,
       P.TEMPLATE_VIEW,

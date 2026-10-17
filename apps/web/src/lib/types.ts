@@ -394,3 +394,83 @@ export interface AdminContractType {
   example: string;
   _count: { contracts: number };
 }
+
+// ───────── Vòng đời ─────────
+
+export interface Appendix {
+  id: string;
+  seq: number;
+  code: string;
+  title: string;
+  kind: 'AMENDMENT' | 'EXTENSION' | 'OTHER';
+  contentHtml: string | null;
+  valueChange: string | null;
+  newExpiryDate: string | null;
+  effectiveDate: string | null;
+  status: 'DRAFT' | 'EFFECTIVE' | 'CANCELLED';
+  appliedAt: string | null;
+  createdAt: string;
+}
+
+export interface Obligation {
+  id: string;
+  title: string;
+  description: string | null;
+  partyRole: PartyRole | null;
+  assigneeId: string | null;
+  assignee: { id: string; fullName: string } | null;
+  dueDate: string | null;
+  progress: number;
+  status: 'OPEN' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+  completedAt: string | null;
+  overdue: boolean;
+}
+
+export interface Payment {
+  id: string;
+  seq: number;
+  title: string;
+  amount: string;
+  dueDate: string | null;
+  paidAmount: string;
+  paidDate: string | null;
+  invoiceNo: string | null;
+  status: 'PLANNED' | 'PARTIAL' | 'PAID' | 'CANCELLED';
+  note: string | null;
+  overdue: boolean;
+}
+
+export interface Acceptance {
+  id: string;
+  title: string;
+  acceptedDate: string;
+  result: 'PASSED' | 'CONDITIONAL' | 'FAILED';
+  note: string | null;
+}
+
+export interface LifecycleOverview {
+  contract: { id: string; code: string; status: ContractStatus; value: string; currency: string; expiryDate: string | null; liquidatedAt: string | null; liquidationNote: string | null };
+  appendices: Appendix[];
+  obligations: Obligation[];
+  payments: Payment[];
+  acceptances: Acceptance[];
+  summary: {
+    scheduled: string;
+    paid: string;
+    remaining: string;
+    scheduleMismatch: boolean;
+    overduePayments: number;
+    progress: number | null;
+    openObligations: number;
+    overdueObligations: number;
+  };
+}
+
+export interface CalendarEvent {
+  date: string;
+  type: 'EXPIRY' | 'EFFECTIVE' | 'PAYMENT' | 'OBLIGATION';
+  title: string;
+  contractId: string;
+  contractCode: string;
+  done: boolean;
+}

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AdminModule } from './admin/admin.module.js';
 import { ApprovalsModule } from './approvals/approvals.module.js';
@@ -14,6 +15,7 @@ import { ContractsModule } from './contracts/contracts.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { HealthController } from './health/health.controller.js';
+import { LifecycleModule } from './lifecycle/lifecycle.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { PartnersModule } from './partners/partners.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -25,6 +27,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true, validate: validateEnv }),
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 300 }]),
     PrismaModule,
     AuditModule,
@@ -41,6 +44,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     ApprovalsModule,
     SignaturesModule,
     AdminModule,
+    LifecycleModule,
   ],
   controllers: [HealthController],
   providers: [

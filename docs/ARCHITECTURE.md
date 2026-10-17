@@ -98,6 +98,21 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - **Chưa có**: chữ ký số có chứng thư CA (VNPT-CA, Viettel-CA, FPT-CA…), dấu thời gian (TSA), xuất PDF/A có nhúng chữ ký phía server.
   Trường `SignatureRequest.provider` dành cho việc tích hợp các nhà cung cấp này.
 
+### Vòng đời hợp đồng
+
+- **Phụ lục** (`ContractAppendix`, số `{mã HĐ}-PL01`): sửa đổi/bổ sung, gia hạn (bắt buộc ngày hết hạn mới, phải sau ngày hiện tại),
+  điều chỉnh giá trị (+/−). Chuyển "Có hiệu lực" ⇒ cập nhật `expiryDate`/`value` của hợp đồng (ghi nhật ký trước → sau);
+  gia hạn hợp đồng đã hết hiệu lực ⇒ Đang hiệu lực trở lại. Phụ lục hiện được ký ngoài hệ thống (chưa đi qua luồng ký).
+- **Nghĩa vụ** (bên thực hiện, người phụ trách, hạn, tiến độ %, trạng thái; 100% ⇒ Hoàn thành) và **biên bản nghiệm thu**.
+- **Lịch thanh toán** theo đợt; ghi nhận thu (không vượt số còn phải thu), Thanh toán một phần/đủ, số hóa đơn; cảnh báo tổng
+  lịch lệch giá trị hợp đồng; quá hạn tính theo ngày.
+- **Thanh lý** (`contract.liquidate`): chỉ hợp đồng đã ký; còn thanh toán/nghĩa vụ/phụ lục nháp ⇒ trả cảnh báo, cần xác nhận
+  (`force`). Sau thanh lý mọi dữ liệu vòng đời chỉ đọc.
+- **Tác vụ hằng ngày** (`LifecycleJobs`, 01:00 giờ VN + khi khởi động; chạy tay `POST /lifecycle/jobs/run`): Đã ký → Đang hiệu lực
+  khi tới ngày hiệu lực; Đang hiệu lực → Hết hiệu lực khi quá hạn; email nhắc hết hạn (30/7/1 ngày), thanh toán & nghĩa vụ sắp
+  đến hạn (3 ngày) / quá hạn. `ReminderLog` chống gửi trùng.
+- Trang **Vòng đời** (tổng hợp liên hợp đồng theo nhóm/bộ lọc) và **Lịch hợp đồng** (theo tháng).
+
 ### Quản trị
 
 - Người dùng (`user.view`/`user.manage`): tạo với mật khẩu ban đầu (≥ 8 ký tự, có chữ và số), gán nhiều vai trò, phòng ban,
@@ -135,6 +150,7 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Ký điện tử: gửi ký (nội bộ + đối tác), ký lần lượt/đồng thời, OTP email, chữ ký vẽ/gõ, từ chối, hủy, cấp lại liên kết,
   bản đã ký + chứng thư, danh sách yêu cầu ký theo trạng thái.
 - Quản trị: người dùng, phòng ban & chi nhánh, vai trò & phân quyền, loại hợp đồng & mẫu mã, đổi mật khẩu.
+- Vòng đời: phụ lục/gia hạn, nghĩa vụ & tiến độ, nghiệm thu, lịch thanh toán, thanh lý, tự động hiệu lực/hết hạn, nhắc hạn, lịch hợp đồng.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 
@@ -147,7 +163,7 @@ Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (kh�
 2. Mở rộng mẫu: định dạng ngày/số/tiền tệ theo biến, so sánh phiên bản, trình thiết kế mẫu kéo thả.
 3. Phê duyệt nâng cao: trình thiết kế kéo thả, điều kiện tùy biến, thông báo (BullMQ + email/Zalo), nhắc hạn, ủy quyền duyệt.
 4. Tích hợp chữ ký số CA (VNPT/Viettel/FPT) + TSA, xuất PDF/A ký số phía server, thông báo nhắc ký.
-5. Vòng đời: phụ lục, gia hạn, nghĩa vụ, thanh toán, nghiệm thu, thanh lý; job tự chuyển ACTIVE/EXPIRED.
+5. Vòng đời nâng cao: ký phụ lục qua luồng ký điện tử, thông báo trong ứng dụng, đối soát thanh toán với kế toán/ERP.
 6. Quản trị nâng cao: mời người dùng qua email, SSO, tích hợp CRM/ERP; Super Admin (tenant, gói dịch vụ, billing, usage).
 
 > Ghi chú: file master prompt nguồn kết thúc giữa mục 12.2 (Workflow phê duyệt). Các phần sau đó cần bổ sung

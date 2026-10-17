@@ -13,6 +13,8 @@ export class ApiError extends Error {
     public status: number,
     message: string,
     public errors: FieldError[] = [],
+    /** Toàn bộ nội dung lỗi từ máy chủ (ví dụ danh sách cảnh báo). */
+    public body: Record<string, unknown> = {},
   ) {
     super(message);
   }
@@ -100,14 +102,16 @@ export async function apiRaw(path: string, opts: RequestOptions = {}): Promise<R
   if (!res.ok) {
     let message = `Lỗi ${res.status}`;
     let errors: FieldError[] = [];
+    let raw: Record<string, unknown> = {};
     try {
       const body = await res.json();
+      raw = body;
       message = Array.isArray(body.message) ? body.message.join(', ') : (body.message ?? message);
       errors = body.errors ?? [];
     } catch {
       /* phản hồi không phải JSON */
     }
-    throw new ApiError(res.status, message, errors);
+    throw new ApiError(res.status, message, errors, raw);
   }
   return res;
 }

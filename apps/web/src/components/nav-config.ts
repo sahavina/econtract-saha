@@ -8,7 +8,10 @@ import {
   CalendarDays,
   CalendarX2,
   FileCheck2,
+  FilePlus2,
   FileX2,
+  ListChecks,
+  Wallet,
   PenLine,
   ClipboardCheck,
   ClipboardList,
@@ -49,7 +52,7 @@ export const NAV: NavGroup[] = [
       { title: 'Dashboard', icon: LayoutDashboard, href: '/', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
       { title: 'Công việc của tôi', icon: ClipboardList, href: '/tasks', permissions: VIEW_CONTRACT },
       { title: 'Thông báo', icon: Bell },
-      { title: 'Lịch hợp đồng', icon: CalendarDays },
+      { title: 'Lịch hợp đồng', icon: CalendarDays, href: '/calendar', permissions: VIEW_CONTRACT },
     ],
   },
   {
@@ -80,6 +83,16 @@ export const NAV: NavGroup[] = [
       { title: 'Đã hoàn tất', icon: FileCheck2, href: '/signatures?view=completed', permissions: VIEW_CONTRACT },
       { title: 'Bị từ chối', icon: FileX2, href: '/signatures?view=rejected', permissions: VIEW_CONTRACT },
       { title: 'Hết hạn yêu cầu ký', icon: CalendarX2, href: '/signatures?view=expired', permissions: VIEW_CONTRACT },
+    ],
+  },
+  {
+    label: 'Vòng đời hợp đồng',
+    items: [
+      { title: 'Phụ lục & gia hạn', icon: FilePlus2, href: '/lifecycle?kind=appendices', permissions: VIEW_CONTRACT },
+      { title: 'Nghĩa vụ & tiến độ', icon: ListChecks, href: '/lifecycle?kind=obligations', permissions: VIEW_CONTRACT },
+      { title: 'Thanh toán', icon: Wallet, href: '/lifecycle?kind=payments', permissions: VIEW_CONTRACT },
+      { title: 'Nghiệm thu', icon: ClipboardCheck, href: '/lifecycle?kind=acceptances', permissions: VIEW_CONTRACT },
+      { title: 'Đã thanh lý', icon: FileX2, href: '/contracts?view=liquidated', permissions: VIEW_CONTRACT },
     ],
   },
   {

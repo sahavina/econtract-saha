@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Copy, Pencil, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Copy, FileX2, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -10,6 +10,8 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { ContractApprovalTab } from '@/components/contract-approval-tab';
 import { ContractContentTab } from '@/components/contract-content-tab';
 import { ContractDocumentsTab } from '@/components/contract-documents-tab';
+import { ContractLifecycleTab } from '@/components/contract-lifecycle-tab';
+import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
@@ -42,6 +44,7 @@ export default function ContractDetailPage() {
   const { can } = useAuth();
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [liquidating, setLiquidating] = useState(false);
 
   const q = useQuery({ queryKey: ['contract', id], queryFn: () => api<ContractDetail>(`/contracts/${id}`) });
   const timeline = useQuery({ queryKey: ['contract', id, 'timeline'], queryFn: () => api<TimelineEntry[]>(`/contracts/${id}/timeline`) });
@@ -89,6 +92,11 @@ export default function ContractDetailPage() {
                   </Link>
                 </Button>
               )}
+              {can('contract.liquidate') && ['SIGNED', 'ACTIVE', 'EXPIRED'].includes(c.status) && !c.archivedAt && (
+                <Button variant="outline" onClick={() => setLiquidating(true)}>
+                  <FileX2 /> Thanh lý
+                </Button>
+              )}
               {can('contract.create') && (
                 <Button variant="outline" onClick={() => op.mutate('duplicate', { onSuccess: (r) => { toast.success('Đã tạo bản sao'); if (r) router.push(`/contracts/${r.id}`); } })}>
                   <Copy /> Sao chép
@@ -133,6 +141,7 @@ export default function ContractDetailPage() {
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
           <TabsTrigger value="approval">Phê duyệt</TabsTrigger>
           <TabsTrigger value="signature">Ký điện tử</TabsTrigger>
+          <TabsTrigger value="lifecycle">Vòng đời</TabsTrigger>
           <TabsTrigger value="documents">Tài liệu</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
@@ -181,6 +190,10 @@ export default function ContractDetailPage() {
 
         <TabsContent value="approval" className="mt-4">
           <ContractApprovalTab contract={c} />
+        </TabsContent>
+
+        <TabsContent value="lifecycle" className="mt-4">
+          <ContractLifecycleTab contract={c} />
         </TabsContent>
 
         <TabsContent value="signature" className="mt-4">
@@ -253,6 +266,7 @@ export default function ContractDetailPage() {
       </Tabs>
 
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+      <LiquidateDialog contractId={c.id} code={c.code} open={liquidating} onClose={() => setLiquidating(false)} />
     </>
   );
 }

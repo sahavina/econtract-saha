@@ -12,6 +12,7 @@ export const PERMISSIONS = {
   CONTRACT_DELETE: 'contract.delete',
   CONTRACT_ARCHIVE: 'contract.archive',
   CONTRACT_EXPORT: 'contract.export',
+  CONTRACT_LIQUIDATE: 'contract.liquidate',
 
   PARTNER_VIEW: 'partner.view',
   PARTNER_MANAGE: 'partner.manage',
@@ -42,6 +43,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'contract.delete': 'Xóa hợp đồng',
   'contract.archive': 'Lưu trữ hợp đồng',
   'contract.export': 'Xuất dữ liệu hợp đồng',
+  'contract.liquidate': 'Thanh lý hợp đồng',
   'partner.view': 'Xem đối tác',
   'partner.manage': 'Quản lý đối tác',
   'template.view': 'Xem mẫu hợp đồng, điều khoản',
