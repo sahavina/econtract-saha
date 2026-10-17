@@ -10,6 +10,7 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { ContractApprovalTab } from '@/components/contract-approval-tab';
 import { ContractContentTab } from '@/components/contract-content-tab';
 import { ContractDocumentsTab } from '@/components/contract-documents-tab';
+import { ContractSignatureTab } from '@/components/contract-signature-tab';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -131,6 +132,7 @@ export default function ContractDetailPage() {
           <TabsTrigger value="content">Nội dung hợp đồng</TabsTrigger>
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
           <TabsTrigger value="approval">Phê duyệt</TabsTrigger>
+          <TabsTrigger value="signature">Ký điện tử</TabsTrigger>
           <TabsTrigger value="documents">Tài liệu</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
@@ -181,8 +183,16 @@ export default function ContractDetailPage() {
           <ContractApprovalTab contract={c} />
         </TabsContent>
 
+        <TabsContent value="signature" className="mt-4">
+          <ContractSignatureTab contract={c} />
+        </TabsContent>
+
         <TabsContent value="documents" className="mt-4">
-          <ContractDocumentsTab contractId={c.id} canManage={!c.deletedAt && !c.archivedAt && c.status !== 'PENDING_APPROVAL' && can('contract.update')} />
+          <ContractDocumentsTab
+            contractId={c.id}
+            canManage={!c.deletedAt && !c.archivedAt && !['PENDING_APPROVAL', 'PENDING_SIGNATURE'].includes(c.status) && can('contract.update')}
+            canDelete={!c.deletedAt && !c.archivedAt && !['PENDING_APPROVAL', 'PENDING_SIGNATURE'].includes(c.status) && c.signatureStatus !== 'COMPLETED' && can('contract.update')}
+          />
         </TabsContent>
 
         <TabsContent value="parties" className="mt-4 grid gap-4 md:grid-cols-2">

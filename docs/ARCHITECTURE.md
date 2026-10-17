@@ -81,6 +81,23 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Giới hạn hiện tại: chưa có trình thiết kế kéo thả (node Condition/Notification/Signature), chưa gửi thông báo
   email/Zalo khi đến lượt duyệt; đặc tả nguồn bị cắt sau mục 12.2 nên các quy tắc chi tiết hơn cần bổ sung.
 
+### Ký điện tử
+
+- Điều kiện: hợp đồng **Đã phê duyệt**. Khi gửi ký, nội dung được **đóng băng** (`SignatureRequest.contentSnapshot` =
+  nội dung đã thay biến + danh sách tài liệu đính kèm kèm SHA-256) và băm **SHA-256** (`documentHash`). Biến thiếu dữ liệu ⇒ chặn gửi.
+- Nhà cung cấp hiện có: `INTERNAL` (chữ ký điện tử): người ký nội bộ xác nhận bằng mật khẩu tài khoản; người ký bên ngoài
+  mở liên kết `/sign/{token}` (chỉ lưu hash token, có thể cấp lại – vô hiệu link cũ) và xác thực **OTP 6 số qua email**
+  (hiệu lực 10 phút, tối đa 5 lần sai, gửi lại sau 60 giây). Chữ ký vẽ tay (PNG) hoặc gõ họ tên + đồng ý ký điện tử.
+- Ký lần lượt hoặc đồng thời; hạn ký (hết hạn xử lý "lười" khi truy cập). Ký hết ⇒ hợp đồng **Đang hiệu lực** (hoặc
+  **Đã ký** nếu chưa tới ngày hiệu lực), ghi `signedDate`. Từ chối (bắt buộc lý do) / hủy / hết hạn ⇒ về **Đã phê duyệt** để gửi lại.
+- Bằng chứng: mỗi người ký lưu thời điểm, IP, user-agent, phương thức, mã băm đã ký; chứng thư hiển thị trên bản đã ký;
+  nhật ký ghi cả hành động của người ký bên ngoài (`AuditService.logExternal`). Không được xóa tài liệu sau khi ký xong;
+  khóa thay đổi tài liệu khi đang chờ ký.
+- Email: `MailService` gửi qua SMTP (`SMTP_HOST`, Mailpit trong docker-compose); dev không có SMTP thì ghi email ra log API.
+  Production bắt buộc cấu hình SMTP.
+- **Chưa có**: chữ ký số có chứng thư CA (VNPT-CA, Viettel-CA, FPT-CA…), dấu thời gian (TSA), xuất PDF/A có nhúng chữ ký phía server.
+  Trường `SignatureRequest.provider` dành cho việc tích hợp các nhà cung cấp này.
+
 ## 6. Quy tắc nghiệp vụ hiện có
 
 - Chỉ sửa được hợp đồng **Nháp** (phê duyệt chưa gửi/bị từ chối/yêu cầu sửa), chưa lưu trữ/xóa.
@@ -105,6 +122,8 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Thư viện điều khoản: soạn, gửi duyệt, duyệt/từ chối, phiên bản đã duyệt; chèn điều khoản vào hợp đồng và mẫu.
 - Phê duyệt: cấu hình quy trình theo giá trị/loại HĐ, gửi duyệt, duyệt nhiều cấp/song song, từ chối, yêu cầu sửa,
   rút lại, lịch sử phê duyệt, Công việc của tôi.
+- Ký điện tử: gửi ký (nội bộ + đối tác), ký lần lượt/đồng thời, OTP email, chữ ký vẽ/gõ, từ chối, hủy, cấp lại liên kết,
+  bản đã ký + chứng thư, danh sách yêu cầu ký theo trạng thái.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 
@@ -116,7 +135,7 @@ Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (kh�
    header/footer, chèn hình ảnh, quản lý & so sánh phiên bản nội dung; wizard 6 bước.
 2. Mở rộng mẫu: định dạng ngày/số/tiền tệ theo biến, so sánh phiên bản, trình thiết kế mẫu kéo thả.
 3. Phê duyệt nâng cao: trình thiết kế kéo thả, điều kiện tùy biến, thông báo (BullMQ + email/Zalo), nhắc hạn, ủy quyền duyệt.
-4. Ký điện tử qua Signature Provider Gateway, khóa nội dung phiên bản đã ký.
+4. Tích hợp chữ ký số CA (VNPT/Viettel/FPT) + TSA, xuất PDF/A ký số phía server, thông báo nhắc ký.
 5. Vòng đời: phụ lục, gia hạn, nghĩa vụ, thanh toán, nghiệm thu, thanh lý; job tự chuyển ACTIVE/EXPIRED.
 6. Quản trị: người dùng, phòng ban, vai trò, cấu hình mẫu mã, tích hợp CRM/ERP; Super Admin (tenant, gói, billing).
 

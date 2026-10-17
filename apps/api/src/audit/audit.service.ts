@@ -47,6 +47,28 @@ export class AuditService {
     });
   }
 
+  /** Ghi nhật ký cho tác nhân không đăng nhập (ví dụ đối tác ký qua liên kết). */
+  async logExternal(
+    tenantId: string,
+    actor: { name: string; ip?: string; userAgent?: string },
+    entry: AuditEntry,
+    db: Db = this.prisma,
+  ) {
+    await db.auditLog.create({
+      data: {
+        tenantId,
+        actorId: null,
+        actorName: actor.name,
+        action: entry.action,
+        entityType: entry.entityType,
+        entityId: entry.entityId ?? null,
+        data: entry.data,
+        ip: actor.ip,
+        userAgent: actor.userAgent?.slice(0, 500),
+      },
+    });
+  }
+
   async list(user: AuthUser, q: AuditQuery) {
     const where: Prisma.AuditLogWhereInput = {
       tenantId: user.tenantId,

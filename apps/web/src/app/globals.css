@@ -188,6 +188,10 @@
   .a4-page .contract-content td { border-color: #999; }
 }
 
+@layer components {
+  .signature-script { font-family: var(--font-signature), cursive; }
+}
+
 @media print {
   @page { size: A4; margin: 0; }
   body * { visibility: hidden; }

@@ -13,8 +13,10 @@ import { ContractsModule } from './contracts/contracts.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { HealthController } from './health/health.controller.js';
+import { MailModule } from './mail/mail.module.js';
 import { PartnersModule } from './partners/partners.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
+import { SignaturesModule } from './signatures/signatures.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { TemplatesModule } from './templates/templates.module.js';
 import { WorkflowsModule } from './workflows/workflows.module.js';
@@ -26,6 +28,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     PrismaModule,
     AuditModule,
     StorageModule,
+    MailModule,
     AuthModule,
     PartnersModule,
     ContractsModule,
@@ -35,6 +38,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     ClausesModule,
     WorkflowsModule,
     ApprovalsModule,
+    SignaturesModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -273,3 +273,60 @@ export interface WorkflowLookups {
   contractTypes: { id: string; name: string }[];
   departments: { id: string; name: string; manager: { id: string; fullName: string } | null }[];
 }
+
+// ───────── Ký điện tử ─────────
+
+export type SignerStatus = 'WAITING' | 'PENDING' | 'SIGNED' | 'REJECTED' | 'SKIPPED';
+export type SignatureRequestStatus = 'IN_PROGRESS' | 'COMPLETED' | 'REJECTED' | 'EXPIRED' | 'CANCELLED';
+
+export interface SignerInfo {
+  id: string;
+  order: number;
+  partyRole: PartyRole | null;
+  name: string;
+  email: string;
+  title: string | null;
+  userId: string | null;
+  method: 'INTERNAL_PASSWORD' | 'EMAIL_OTP';
+  status: SignerStatus;
+  signatureImage: string | null;
+  signedAt: string | null;
+  signedHash: string | null;
+  ip: string | null;
+  rejectReason: string | null;
+}
+
+export interface SignatureRequestInfo {
+  id: string;
+  provider: string;
+  status: SignatureRequestStatus;
+  signingOrder: 'SEQUENTIAL' | 'PARALLEL';
+  message: string | null;
+  documentHash: string;
+  contentSnapshot: string;
+  expiresAt: string;
+  createdAt: string;
+  completedAt: string | null;
+  createdBy: { id: string; fullName: string };
+  signers: SignerInfo[];
+}
+
+export interface SignatureListItem {
+  id: string;
+  status: SignatureRequestStatus;
+  signingOrder: 'SEQUENTIAL' | 'PARALLEL';
+  expiresAt: string;
+  createdAt: string;
+  completedAt: string | null;
+  createdBy: { fullName: string };
+  contract: { id: string; code: string; title: string };
+  signers: { id: string; name: string; status: SignerStatus; userId: string | null; order: number }[];
+}
+
+export interface PublicSignView {
+  organization: string;
+  contract: { code: string; title: string };
+  request: { status: SignatureRequestStatus; expiresAt: string; documentHash: string; message: string | null; contentSnapshot: string };
+  signer: { id: string; name: string; email: string; status: SignerStatus; otpSentAt: string | null };
+  signers: { id: string; order: number; name: string; title: string | null; partyRole: PartyRole | null; status: SignerStatus; signedAt: string | null; signatureImage: string | null }[];
+}

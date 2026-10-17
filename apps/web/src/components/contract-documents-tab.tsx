@@ -29,7 +29,16 @@ function formatSize(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function ContractDocumentsTab({ contractId, canManage }: { contractId: string; canManage: boolean }) {
+export function ContractDocumentsTab({
+  contractId,
+  canManage,
+  canDelete = canManage,
+}: {
+  contractId: string;
+  canManage: boolean;
+  /** Sau khi ký xong chỉ được bổ sung, không được xóa tài liệu. */
+  canDelete?: boolean;
+}) {
   const qc = useQueryClient();
   const input = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
@@ -134,7 +143,7 @@ export function ContractDocumentsTab({ contractId, canManage }: { contractId: st
                     >
                       <Download />
                     </Button>
-                    {canManage && (
+                    {canDelete && (
                       <Button
                         variant="ghost"
                         size="icon-sm"

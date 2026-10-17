@@ -164,6 +164,8 @@ model User {
   clauseVersions     ClauseVersion[]
   managedDepartments Department[]              @relation("DepartmentManager")
   approvalTasks      ApprovalTask[]
+  signatureRequests  SignatureRequest[]
+  signerAssignments  Signer[]
   approvalRequests   ApprovalRequest[]
 
   @@unique([tenantId, email])
@@ -359,45 +361,46 @@ enum Confidentiality {
 }
 
 model Contract {
-  id               String             @id @default(uuid()) @db.Uuid
-  tenantId         String             @db.Uuid
-  code             String
-  title            String
-  contractTypeId   String?            @db.Uuid
-  group            String?
-  description      String?
-  value            Decimal            @default(0) @db.Decimal(20, 2)
-  currency         String             @default("VND")
-  vatRate          Decimal?           @db.Decimal(5, 2)
-  expectedSignDate DateTime?          @db.Date
-  signedDate       DateTime?          @db.Date
-  effectiveDate    DateTime?          @db.Date
-  expiryDate       DateTime?          @db.Date
-  departmentId     String?            @db.Uuid
-  ownerId          String?            @db.Uuid
-  confidentiality  Confidentiality    @default(INTERNAL)
-  tags             String[]           @default([])
-  note             String?
-  status           ContractStatus     @default(DRAFT)
-  approvalStatus   ApprovalStatus     @default(NOT_SUBMITTED)
-  signatureStatus  SignatureStatus    @default(NOT_STARTED)
-  contentHtml      String?
-  createdById      String             @db.Uuid
-  archivedAt       DateTime?
-  deletedAt        DateTime?
-  createdAt        DateTime           @default(now())
-  updatedAt        DateTime           @updatedAt
-  tenant           Tenant             @relation(fields: [tenantId], references: [id])
-  contractType     ContractType?      @relation(fields: [contractTypeId], references: [id])
-  department       Department?        @relation(fields: [departmentId], references: [id])
-  owner            User?              @relation("ContractOwner", fields: [ownerId], references: [id])
-  createdBy        User               @relation("ContractCreator", fields: [createdById], references: [id])
-  documents        ContractDocument[]
-  templateId       String?            @db.Uuid
-  templateVersion  Int?
-  template         ContractTemplate?  @relation(fields: [templateId], references: [id])
-  approvalRequests ApprovalRequest[]
-  parties          ContractParty[]
+  id                String             @id @default(uuid()) @db.Uuid
+  tenantId          String             @db.Uuid
+  code              String
+  title             String
+  contractTypeId    String?            @db.Uuid
+  group             String?
+  description       String?
+  value             Decimal            @default(0) @db.Decimal(20, 2)
+  currency          String             @default("VND")
+  vatRate           Decimal?           @db.Decimal(5, 2)
+  expectedSignDate  DateTime?          @db.Date
+  signedDate        DateTime?          @db.Date
+  effectiveDate     DateTime?          @db.Date
+  expiryDate        DateTime?          @db.Date
+  departmentId      String?            @db.Uuid
+  ownerId           String?            @db.Uuid
+  confidentiality   Confidentiality    @default(INTERNAL)
+  tags              String[]           @default([])
+  note              String?
+  status            ContractStatus     @default(DRAFT)
+  approvalStatus    ApprovalStatus     @default(NOT_SUBMITTED)
+  signatureStatus   SignatureStatus    @default(NOT_STARTED)
+  contentHtml       String?
+  createdById       String             @db.Uuid
+  archivedAt        DateTime?
+  deletedAt         DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  tenant            Tenant             @relation(fields: [tenantId], references: [id])
+  contractType      ContractType?      @relation(fields: [contractTypeId], references: [id])
+  department        Department?        @relation(fields: [departmentId], references: [id])
+  owner             User?              @relation("ContractOwner", fields: [ownerId], references: [id])
+  createdBy         User               @relation("ContractCreator", fields: [createdById], references: [id])
+  documents         ContractDocument[]
+  templateId        String?            @db.Uuid
+  templateVersion   Int?
+  template          ContractTemplate?  @relation(fields: [templateId], references: [id])
+  approvalRequests  ApprovalRequest[]
+  signatureRequests SignatureRequest[]
+  parties           ContractParty[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -669,4 +672,89 @@ model ApprovalTask {
 
   @@index([tenantId, approverId, status])
   @@index([requestId, stepOrder])
+}
+
+// ───────────────────────────── Ký điện tử ─────────────────────────────
+
+enum SignatureRequestStatus {
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  EXPIRED
+  CANCELLED
+}
+
+enum SigningOrder {
+  SEQUENTIAL
+  PARALLEL
+}
+
+// Một lượt gửi ký. Nội dung được đóng băng (contentSnapshot) và băm SHA-256 để làm bằng chứng toàn vẹn.
+model SignatureRequest {
+  id              String                 @id @default(uuid()) @db.Uuid
+  tenantId        String                 @db.Uuid
+  contractId      String                 @db.Uuid
+  // Mã nhà cung cấp chữ ký (INTERNAL = chữ ký điện tử nội bộ: mật khẩu / OTP email).
+  provider        String                 @default("INTERNAL")
+  status          SignatureRequestStatus @default(IN_PROGRESS)
+  signingOrder    SigningOrder           @default(SEQUENTIAL)
+  message         String?
+  contentSnapshot String
+  documentHash    String
+  expiresAt       DateTime
+  createdById     String                 @db.Uuid
+  createdAt       DateTime               @default(now())
+  completedAt     DateTime?
+  contract        Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  createdBy       User                   @relation(fields: [createdById], references: [id])
+  signers         Signer[]
+
+  @@index([tenantId, status])
+  @@index([contractId])
+}
+
+enum SignerStatus {
+  WAITING
+  PENDING
+  SIGNED
+  REJECTED
+  SKIPPED
+}
+
+enum SignMethod {
+  INTERNAL_PASSWORD
+  EMAIL_OTP
+}
+
+model Signer {
+  id             String           @id @default(uuid()) @db.Uuid
+  tenantId       String           @db.Uuid
+  requestId      String           @db.Uuid
+  order          Int
+  partyRole      PartyRole?
+  name           String
+  email          String
+  title          String?
+  // Người ký nội bộ (đăng nhập hệ thống); null = người ký bên ngoài qua liên kết + OTP.
+  userId         String?          @db.Uuid
+  method         SignMethod
+  status         SignerStatus
+  // Liên kết ký bên ngoài: chỉ lưu hash của token.
+  tokenHash      String?          @unique
+  otpHash        String?
+  otpExpiresAt   DateTime?
+  otpSentAt      DateTime?
+  otpAttempts    Int              @default(0)
+  signatureImage String?
+  signedAt       DateTime?
+  signedHash     String?
+  ip             String?
+  userAgent      String?
+  rejectReason   String?
+  createdAt      DateTime         @default(now())
+  request        SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  user           User?            @relation(fields: [userId], references: [id])
+
+  @@index([tenantId, userId, status])
+  @@index([requestId, order])
 }

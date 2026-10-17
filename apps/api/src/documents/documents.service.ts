@@ -44,8 +44,10 @@ export class DocumentsService {
     if (contract.deletedAt || contract.archivedAt) {
       throw new BadRequestException('Hợp đồng đã lưu trữ hoặc ở thùng rác, không thể thêm tài liệu');
     }
-    if (contract.status === 'PENDING_APPROVAL') {
-      throw new BadRequestException('Hợp đồng đang chờ phê duyệt, hãy rút lại yêu cầu trước khi thay đổi tài liệu');
+    if (contract.status === 'PENDING_APPROVAL' || contract.status === 'PENDING_SIGNATURE') {
+      throw new BadRequestException(
+        'Hợp đồng đang chờ phê duyệt/ký, hãy rút lại hoặc hủy yêu cầu trước khi thay đổi tài liệu',
+      );
     }
 
     const fileName = normalizeFileName(file.originalname);
@@ -116,8 +118,13 @@ export class DocumentsService {
     if (contract.deletedAt || contract.archivedAt) {
       throw new BadRequestException('Hợp đồng đã lưu trữ hoặc ở thùng rác, không thể xóa tài liệu');
     }
-    if (contract.status === 'PENDING_APPROVAL') {
-      throw new BadRequestException('Hợp đồng đang chờ phê duyệt, hãy rút lại yêu cầu trước khi thay đổi tài liệu');
+    if (contract.status === 'PENDING_APPROVAL' || contract.status === 'PENDING_SIGNATURE') {
+      throw new BadRequestException(
+        'Hợp đồng đang chờ phê duyệt/ký, hãy rút lại hoặc hủy yêu cầu trước khi thay đổi tài liệu',
+      );
+    }
+    if (contract.signatureStatus === 'COMPLETED') {
+      throw new BadRequestException('Hợp đồng đã ký, không được xóa tài liệu (tài liệu là một phần bằng chứng ký)');
     }
     const doc = await this.prisma.contractDocument.findFirst({
       where: { id: documentId, contractId, tenantId: user.tenantId, deletedAt: null },

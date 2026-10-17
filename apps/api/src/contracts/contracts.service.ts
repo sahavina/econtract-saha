@@ -76,6 +76,8 @@ export class ContractsService {
           { createdById: user.userId },
           // Người được giao phê duyệt cũng xem được hợp đồng.
           { approvalRequests: { some: { tasks: { some: { approverId: user.userId } } } } },
+          // Người ký nội bộ được chỉ định.
+          { signatureRequests: { some: { signers: { some: { userId: user.userId } } } } },
         ],
       };
     }

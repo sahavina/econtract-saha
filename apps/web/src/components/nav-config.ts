@@ -5,6 +5,10 @@ import {
   Bell,
   Building2,
   CalendarDays,
+  CalendarX2,
+  FileCheck2,
+  FileX2,
+  PenLine,
   ClipboardCheck,
   ClipboardList,
   FilePen,
@@ -68,7 +72,14 @@ export const NAV: NavGroup[] = [
   },
   {
     label: 'Ký điện tử',
-    items: [{ title: 'Yêu cầu ký', icon: FileSignature }],
+    items: [
+      { title: 'Yêu cầu ký', icon: FileSignature, href: '/signatures', permissions: VIEW_CONTRACT },
+      { title: 'Chờ tôi ký', icon: PenLine, href: '/signatures?view=mine', permissions: VIEW_CONTRACT },
+      { title: 'Đang chờ đối tác', icon: Hourglass, href: '/signatures?view=waiting_partner', permissions: VIEW_CONTRACT },
+      { title: 'Đã hoàn tất', icon: FileCheck2, href: '/signatures?view=completed', permissions: VIEW_CONTRACT },
+      { title: 'Bị từ chối', icon: FileX2, href: '/signatures?view=rejected', permissions: VIEW_CONTRACT },
+      { title: 'Hết hạn yêu cầu ký', icon: CalendarX2, href: '/signatures?view=expired', permissions: VIEW_CONTRACT },
+    ],
   },
   {
     label: 'Đối tác',
