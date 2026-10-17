@@ -25,6 +25,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useNow } from '@/hooks/use-now';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AUDIT_ACTION_LABELS, formatCompact, formatDate, formatDateTime, formatMoney } from '@/lib/format';
@@ -68,6 +69,7 @@ export default function DashboardPage() {
   });
   const set = (patch: Partial<Filters>) => setFilters((f) => ({ ...f, ...patch }));
   const k = summary.data?.kpis;
+  const now = useNow();
 
   return (
     <>
@@ -123,6 +125,36 @@ export default function DashboardPage() {
                 </>
               )}
           </div>
+
+          {summary.data && summary.data.myApprovals.length > 0 && (
+            <Card className="mt-4 border-amber-500/50">
+              <CardHeader className="flex flex-row items-center justify-between">
+                <CardTitle className="text-base">Hợp đồng cần tôi phê duyệt</CardTitle>
+                <Link href="/tasks" className="text-sm text-primary hover:underline">
+                  Xem tất cả
+                </Link>
+              </CardHeader>
+              <CardContent>
+                <ul className="divide-y">
+                  {summary.data.myApprovals.map((t) => (
+                    <li key={t.id} className="flex items-center justify-between gap-3 py-2.5">
+                      <Link href={`/contracts/${t.request.contract.id}?tab=approval`} className="min-w-0 hover:underline">
+                        <p className="truncate text-sm font-medium">{t.request.contract.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {t.request.contract.code} · {t.stepName}
+                        </p>
+                      </Link>
+                      {t.dueAt && (
+                        <span className={`shrink-0 text-xs ${new Date(t.dueAt).getTime() < now ? 'font-medium text-destructive' : 'text-muted-foreground'}`}>
+                          Hạn {formatDateTime(t.dueAt)}
+                        </span>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
+          )}
 
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">

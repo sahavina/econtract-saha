@@ -3,10 +3,11 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, Copy, Pencil, RotateCcw, Trash2 } from 'lucide-react';
 import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
+import { ContractApprovalTab } from '@/components/contract-approval-tab';
 import { ContractContentTab } from '@/components/contract-content-tab';
 import { ContractDocumentsTab } from '@/components/contract-documents-tab';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
@@ -36,6 +37,7 @@ function Info({ label, children }: { label: string; children: React.ReactNode })
 export default function ContractDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const initialTab = useSearchParams().get('tab') ?? 'overview';
   const { can } = useAuth();
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
@@ -123,11 +125,12 @@ export default function ContractDetailPage() {
         }
       />
 
-      <Tabs defaultValue="overview">
+      <Tabs defaultValue={initialTab}>
         <TabsList>
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="content">Nội dung hợp đồng</TabsTrigger>
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
+          <TabsTrigger value="approval">Phê duyệt</TabsTrigger>
           <TabsTrigger value="documents">Tài liệu</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
@@ -174,8 +177,12 @@ export default function ContractDetailPage() {
           <ContractContentTab key={c.id} contract={c} editable={editable && can('contract.update')} />
         </TabsContent>
 
+        <TabsContent value="approval" className="mt-4">
+          <ContractApprovalTab contract={c} />
+        </TabsContent>
+
         <TabsContent value="documents" className="mt-4">
-          <ContractDocumentsTab contractId={c.id} canManage={!c.deletedAt && !c.archivedAt && can('contract.update')} />
+          <ContractDocumentsTab contractId={c.id} canManage={!c.deletedAt && !c.archivedAt && c.status !== 'PENDING_APPROVAL' && can('contract.update')} />
         </TabsContent>
 
         <TabsContent value="parties" className="mt-4 grid gap-4 md:grid-cols-2">
@@ -222,6 +229,8 @@ export default function ContractDetailPage() {
                       <p className="text-sm">
                         <span className="font-medium">{t.actorName ?? 'Hệ thống'}</span> — {AUDIT_ACTION_LABELS[t.action] ?? t.action}
                         {typeof t.data?.fileName === 'string' && <span className="text-muted-foreground">: {t.data.fileName}</span>}
+                        {typeof t.data?.step === 'string' && <span className="text-muted-foreground"> ({t.data.step})</span>}
+                        {typeof t.data?.comment === 'string' && t.data.comment && <span className="block text-xs text-muted-foreground">“{t.data.comment}”</span>}
                       </p>
                       <p className="text-xs text-muted-foreground">{formatDateTime(t.createdAt)}</p>
                     </li>

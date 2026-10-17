@@ -65,11 +65,19 @@ export class ContractsService {
     private readonly templates: TemplatesService,
   ) {}
 
-  /** Phạm vi dữ liệu theo quyền: xem tất cả trong tenant hoặc chỉ hợp đồng mình phụ trách/tạo. */
+  /** Phạm vi dữ liệu theo quyền: xem tất cả trong tenant, hoặc chỉ hợp đồng mình phụ trách/tạo/được giao duyệt. */
   scopeWhere(user: AuthUser): Prisma.ContractWhereInput {
     if (user.permissions.has(PERMISSIONS.CONTRACT_VIEW_ALL)) return { tenantId: user.tenantId };
     if (user.permissions.has(PERMISSIONS.CONTRACT_VIEW_OWN)) {
-      return { tenantId: user.tenantId, OR: [{ ownerId: user.userId }, { createdById: user.userId }] };
+      return {
+        tenantId: user.tenantId,
+        OR: [
+          { ownerId: user.userId },
+          { createdById: user.userId },
+          // Người được giao phê duyệt cũng xem được hợp đồng.
+          { approvalRequests: { some: { tasks: { some: { approverId: user.userId } } } } },
+        ],
+      };
     }
     throw new ForbiddenException('Bạn không có quyền xem hợp đồng');
   }

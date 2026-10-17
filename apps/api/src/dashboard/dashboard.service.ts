@@ -75,7 +75,18 @@ export class DashboardService {
         status: 'ACTIVE',
         expiryDate: { gte: today, lte: new Date(today.getTime() + EXPIRING_SOON_DAYS * DAY) },
       }),
-      count({ status: { in: ['PENDING_APPROVAL', 'PENDING_SIGNATURE'] }, expectedSignDate: { lt: today } }),
+      // Quá hạn xử lý: có bước duyệt quá hạn, hoặc chờ ký đã qua ngày dự kiến ký.
+      count({
+        OR: [
+          {
+            status: 'PENDING_APPROVAL',
+            approvalRequests: {
+              some: { status: 'PENDING', tasks: { some: { status: 'PENDING', dueAt: { lt: now } } } },
+            },
+          },
+          { status: 'PENDING_SIGNATURE', expectedSignDate: { lt: today } },
+        ],
+      }),
       count({ signatureStatus: 'REJECTED' }),
       count({ signatureStatus: 'EXPIRED' }),
       this.prisma.contract.aggregate({ where: w({ status: { not: 'CANCELLED' } }), _sum: { value: true } }),
@@ -120,6 +131,19 @@ export class DashboardService {
       select: { id: true, action: true, actorName: true, entityId: true, data: true, createdAt: true },
     });
 
+    // Hợp đồng đang chờ chính người dùng phê duyệt.
+    const myApprovals = await this.prisma.approvalTask.findMany({
+      where: { tenantId: user.tenantId, approverId: user.userId, status: 'PENDING', request: { status: 'PENDING' } },
+      orderBy: [{ dueAt: { sort: 'asc', nulls: 'last' } }, { createdAt: 'asc' }],
+      take: 5,
+      select: {
+        id: true,
+        stepName: true,
+        dueAt: true,
+        request: { select: { contract: { select: { id: true, code: true, title: true } } } },
+      },
+    });
+
     return {
       kpis: {
         total,
@@ -139,6 +163,7 @@ export class DashboardService {
       monthly: [...months.values()],
       expiringContracts: expiringList,
       recentActivity,
+      myApprovals,
     };
   }
 }

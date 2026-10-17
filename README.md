@@ -41,6 +41,9 @@ và đặt `DATABASE_POOL_MAX=1` (PGlite chỉ chịu một kết nối đồng 
 | admin@saha.vn | Quản trị doanh nghiệp | Toàn quyền |
 | phapche@saha.vn | Pháp chế | Xem tất cả hợp đồng, xuất, lưu trữ, nhật ký |
 | kinhdoanh@saha.vn | Nhân viên | Chỉ hợp đồng mình phụ trách/tạo |
+| truongkd@saha.vn | Trưởng phòng Kinh doanh | Duyệt bước "Trưởng phòng" |
+| ketoan@saha.vn | Kế toán | Duyệt bước "Kế toán" |
+| giamdoc@saha.vn / tonggiamdoc@saha.vn | Giám đốc / Tổng giám đốc | Duyệt bước cuối |
 
 ## Lệnh thường dùng
 

@@ -131,6 +131,7 @@ export interface DashboardSummary {
   monthly: { month: string; count: number; value: number }[];
   expiringContracts: { id: string; code: string; title: string; expiryDate: string; owner: { fullName: string } | null }[];
   recentActivity: TimelineEntry[];
+  myApprovals: { id: string; stepName: string; dueAt: string | null; request: { contract: { id: string; code: string; title: string } } }[];
 }
 
 export interface ContractDocument {
@@ -189,4 +190,86 @@ export interface Clause {
 
 export interface ClauseDetail extends Clause {
   versions: { id: string; version: number; title: string; contentHtml: string; createdAt: string; createdBy: { fullName: string } }[];
+}
+
+// ───────── Phê duyệt ─────────
+
+export interface ResolvedStep {
+  order: number;
+  name: string;
+  mode: 'ALL' | 'ANY';
+  dueHours: number | null;
+  approvers: { id: string; fullName: string }[];
+  skipped?: string;
+  error?: string;
+}
+
+export interface ApprovalPreview {
+  canSubmit: boolean;
+  issues: string[];
+  workflow: { id: string; name: string } | null;
+  steps: ResolvedStep[];
+}
+
+export type ApprovalTaskStatus = 'WAITING' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'SKIPPED';
+export type ApprovalRequestStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED' | 'CANCELLED';
+
+export interface ApprovalRequest {
+  id: string;
+  workflowName: string;
+  status: ApprovalRequestStatus;
+  currentStep: number;
+  totalSteps: number;
+  submitNote: string | null;
+  submittedAt: string;
+  completedAt: string | null;
+  submittedBy: { id: string; fullName: string };
+  steps: ResolvedStep[];
+  tasks: {
+    id: string;
+    stepOrder: number;
+    stepName: string;
+    mode: 'ALL' | 'ANY';
+    status: ApprovalTaskStatus;
+    comment: string | null;
+    dueAt: string | null;
+    decidedAt: string | null;
+    approver: { id: string; fullName: string; jobTitle: string | null };
+  }[];
+}
+
+export interface MyApprovalTask {
+  id: string;
+  stepName: string;
+  stepOrder: number;
+  dueAt: string | null;
+  createdAt: string;
+  request: {
+    id: string;
+    workflowName: string;
+    totalSteps: number;
+    submittedAt: string;
+    submittedBy: { fullName: string };
+    contract: { id: string; code: string; title: string; value: string; currency: string; department: { name: string } | null };
+  };
+}
+
+export interface Workflow {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  priority: number;
+  contractTypeIds: string[];
+  minValue: string | null;
+  maxValue: string | null;
+  steps: import('@saha/shared').ApprovalStepConfig[];
+  _count?: { requests: number };
+}
+
+export interface WorkflowLookups {
+  roles: { id: string; code: string; name: string }[];
+  users: { id: string; fullName: string; jobTitle: string | null }[];
+  contractTypes: { id: string; name: string }[];
+  departments: { id: string; name: string; manager: { id: string; fullName: string } | null }[];
 }

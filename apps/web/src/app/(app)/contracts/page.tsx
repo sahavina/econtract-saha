@@ -482,7 +482,7 @@ export default function ContractsPage() {
       )}
 
       <Sheet open={!!quickView} onOpenChange={(o) => !o && setQuickView(null)}>
-        <SheetContent className="sm:max-w-md">
+        <SheetContent className="data-[side=right]:sm:max-w-md">
           {quickView && (
             <>
               <SheetHeader>

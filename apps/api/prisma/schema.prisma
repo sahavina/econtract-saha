@@ -82,6 +82,7 @@ model Tenant {
   documents     ContractDocument[]
   templates     ContractTemplate[]
   clauses       Clause[]
+  workflows     ApprovalWorkflow[]
 }
 
 // ───────────────────────────── Tổ chức & Người dùng ─────────────────────────────
@@ -110,6 +111,7 @@ model Department {
   code      String
   name      String
   managerId String?      @db.Uuid
+  manager   User?        @relation("DepartmentManager", fields: [managerId], references: [id])
   isActive  Boolean      @default(true)
   createdAt DateTime     @default(now())
   updatedAt DateTime     @updatedAt
@@ -131,35 +133,38 @@ enum UserStatus {
 }
 
 model User {
-  id                String                    @id @default(uuid()) @db.Uuid
-  tenantId          String                    @db.Uuid
-  email             String
-  passwordHash      String
-  fullName          String
-  phone             String?
-  jobTitle          String?
-  departmentId      String?                   @db.Uuid
-  branchId          String?                   @db.Uuid
-  status            UserStatus                @default(ACTIVE)
-  isPlatformAdmin   Boolean                   @default(false)
-  failedLogins      Int                       @default(0)
-  lockedUntil       DateTime?
-  lastLoginAt       DateTime?
-  createdAt         DateTime                  @default(now())
-  updatedAt         DateTime                  @updatedAt
-  tenant            Tenant                    @relation(fields: [tenantId], references: [id])
-  department        Department?               @relation("UserDepartment", fields: [departmentId], references: [id])
-  branch            Branch?                   @relation(fields: [branchId], references: [id])
-  roles             UserRole[]
-  sessions          Session[]
-  ownedContracts    Contract[]                @relation("ContractOwner")
-  createdContracts  Contract[]                @relation("ContractCreator")
-  uploadedDocuments ContractDocument[]
-  createdTemplates  ContractTemplate[]        @relation("TemplateCreator")
-  templateVersions  ContractTemplateVersion[]
-  createdClauses    Clause[]                  @relation("ClauseCreator")
-  approvedClauses   Clause[]                  @relation("ClauseApprover")
-  clauseVersions    ClauseVersion[]
+  id                 String                    @id @default(uuid()) @db.Uuid
+  tenantId           String                    @db.Uuid
+  email              String
+  passwordHash       String
+  fullName           String
+  phone              String?
+  jobTitle           String?
+  departmentId       String?                   @db.Uuid
+  branchId           String?                   @db.Uuid
+  status             UserStatus                @default(ACTIVE)
+  isPlatformAdmin    Boolean                   @default(false)
+  failedLogins       Int                       @default(0)
+  lockedUntil        DateTime?
+  lastLoginAt        DateTime?
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+  tenant             Tenant                    @relation(fields: [tenantId], references: [id])
+  department         Department?               @relation("UserDepartment", fields: [departmentId], references: [id])
+  branch             Branch?                   @relation(fields: [branchId], references: [id])
+  roles              UserRole[]
+  sessions           Session[]
+  ownedContracts     Contract[]                @relation("ContractOwner")
+  createdContracts   Contract[]                @relation("ContractCreator")
+  uploadedDocuments  ContractDocument[]
+  createdTemplates   ContractTemplate[]        @relation("TemplateCreator")
+  templateVersions   ContractTemplateVersion[]
+  createdClauses     Clause[]                  @relation("ClauseCreator")
+  approvedClauses    Clause[]                  @relation("ClauseApprover")
+  clauseVersions     ClauseVersion[]
+  managedDepartments Department[]              @relation("DepartmentManager")
+  approvalTasks      ApprovalTask[]
+  approvalRequests   ApprovalRequest[]
 
   @@unique([tenantId, email])
 }
@@ -391,6 +396,7 @@ model Contract {
   templateId       String?            @db.Uuid
   templateVersion  Int?
   template         ContractTemplate?  @relation(fields: [templateId], references: [id])
+  approvalRequests ApprovalRequest[]
   parties          ContractParty[]
 
   @@unique([tenantId, code])
@@ -572,4 +578,95 @@ model ClauseVersion {
   createdBy   User     @relation(fields: [createdById], references: [id])
 
   @@unique([clauseId, version])
+}
+
+// ───────────────────────────── Quy trình phê duyệt ─────────────────────────────
+
+// Quy trình áp dụng khi hợp đồng thỏa điều kiện (loại HĐ, khoảng giá trị); chọn quy trình có priority nhỏ nhất.
+model ApprovalWorkflow {
+  id              String            @id @default(uuid()) @db.Uuid
+  tenantId        String            @db.Uuid
+  name            String
+  description     String?
+  isActive        Boolean           @default(true)
+  priority        Int               @default(100)
+  // Điều kiện: rỗng = mọi loại hợp đồng.
+  contractTypeIds String[]          @default([]) @db.Uuid
+  // Khoảng giá trị [minValue, maxValue) theo đơn vị tiền của hợp đồng; null = không giới hạn.
+  minValue        Decimal?          @db.Decimal(20, 2)
+  maxValue        Decimal?          @db.Decimal(20, 2)
+  steps           Json
+  createdAt       DateTime          @default(now())
+  updatedAt       DateTime          @updatedAt
+  deletedAt       DateTime?
+  tenant          Tenant            @relation(fields: [tenantId], references: [id])
+  requests        ApprovalRequest[]
+
+  @@index([tenantId, isActive])
+}
+
+enum ApprovalRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  CANCELLED
+}
+
+// Một lần gửi phê duyệt; lưu ảnh chụp các bước tại thời điểm gửi.
+model ApprovalRequest {
+  id            String                @id @default(uuid()) @db.Uuid
+  tenantId      String                @db.Uuid
+  contractId    String                @db.Uuid
+  workflowId    String                @db.Uuid
+  workflowName  String
+  status        ApprovalRequestStatus @default(PENDING)
+  currentStep   Int                   @default(1)
+  totalSteps    Int
+  // Ảnh chụp các bước đã giải quyết người duyệt tại thời điểm gửi.
+  stepsSnapshot Json
+  submittedById String                @db.Uuid
+  submitNote    String?
+  submittedAt   DateTime              @default(now())
+  completedAt   DateTime?
+  contract      Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  workflow      ApprovalWorkflow      @relation(fields: [workflowId], references: [id])
+  submittedBy   User                  @relation(fields: [submittedById], references: [id])
+  tasks         ApprovalTask[]
+
+  @@index([tenantId, contractId])
+}
+
+enum ApprovalTaskStatus {
+  WAITING
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+  SKIPPED
+}
+
+enum ApprovalMode {
+  ALL
+  ANY
+}
+
+model ApprovalTask {
+  id         String             @id @default(uuid()) @db.Uuid
+  tenantId   String             @db.Uuid
+  requestId  String             @db.Uuid
+  stepOrder  Int
+  stepName   String
+  mode       ApprovalMode
+  approverId String             @db.Uuid
+  status     ApprovalTaskStatus
+  comment    String?
+  dueAt      DateTime?
+  decidedAt  DateTime?
+  createdAt  DateTime           @default(now())
+  request    ApprovalRequest    @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  approver   User               @relation(fields: [approverId], references: [id])
+
+  @@index([tenantId, approverId, status])
+  @@index([requestId, stepOrder])
 }

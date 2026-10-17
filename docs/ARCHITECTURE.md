@@ -64,6 +64,23 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
   **không được tự duyệt** điều khoản do mình soạn. Sửa điều khoản đã duyệt ⇒ phiên bản mới ở trạng thái Nháp;
   mỗi lần duyệt lưu ảnh chụp `ClauseVersion`. Chỉ điều khoản Đã duyệt chèn được vào hợp đồng/mẫu.
 
+### Quy trình phê duyệt
+
+- `ApprovalWorkflow` (Quản trị → Quy trình phê duyệt, quyền `workflow.manage`): điều kiện theo loại hợp đồng và khoảng
+  giá trị `[minValue, maxValue)`, độ ưu tiên; các bước chạy **tuần tự**, trong một bước duyệt **song song** với chế độ
+  "một người là đủ" (ANY) hoặc "tất cả" (ALL). Người duyệt: trưởng phòng ban phụ trách hợp đồng, theo vai trò/chức danh,
+  hoặc người dùng chỉ định; hạn xử lý theo giờ. Ngưỡng giá trị cấu hình được (seed sẵn 3 quy trình theo ví dụ đặc tả).
+- Gửi duyệt (`contract.update`): kiểm tra Bên A/B, phòng ban, có nội dung hoặc tài liệu, dữ liệu bắt buộc của mẫu; chọn
+  quy trình khớp đầu tiên; giải quyết người duyệt và lưu **ảnh chụp** (`stepsSnapshot`) ⇒ sửa quy trình không ảnh hưởng
+  yêu cầu đang chạy. Người gửi không tự duyệt; nếu người gửi là trưởng phòng thì bước trưởng phòng được bỏ qua.
+- Người duyệt: Phê duyệt / Từ chối / Yêu cầu chỉnh sửa (2 lựa chọn sau bắt buộc ý kiến). Từ chối/yêu cầu sửa ⇒ hợp đồng
+  về Nháp để sửa và gửi lại; duyệt hết bước cuối ⇒ hợp đồng **Đã phê duyệt**. Người gửi/phụ trách được rút lại.
+- Khi đang chờ duyệt: khóa sửa nội dung, thông tin và tài liệu. Người được giao duyệt xem được hợp đồng dù chỉ có quyền
+  `contract.view_own`. Xử lý đồng thời dùng khóa lạc quan (`updateMany` theo trạng thái).
+- "Công việc của tôi" và widget dashboard liệt kê nhiệm vụ chờ xử lý; KPI "Quá hạn xử lý" tính bước duyệt quá hạn.
+- Giới hạn hiện tại: chưa có trình thiết kế kéo thả (node Condition/Notification/Signature), chưa gửi thông báo
+  email/Zalo khi đến lượt duyệt; đặc tả nguồn bị cắt sau mục 12.2 nên các quy tắc chi tiết hơn cần bổ sung.
+
 ## 6. Quy tắc nghiệp vụ hiện có
 
 - Chỉ sửa được hợp đồng **Nháp** (phê duyệt chưa gửi/bị từ chối/yêu cầu sửa), chưa lưu trữ/xóa.
@@ -86,6 +103,8 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Mẫu hợp đồng: danh sách, soạn mẫu, biến bắt buộc, phòng ban được dùng, kích hoạt/lưu trữ/xóa, lịch sử phiên bản;
   tạo hợp đồng từ mẫu với cảnh báo thiếu dữ liệu bắt buộc.
 - Thư viện điều khoản: soạn, gửi duyệt, duyệt/từ chối, phiên bản đã duyệt; chèn điều khoản vào hợp đồng và mẫu.
+- Phê duyệt: cấu hình quy trình theo giá trị/loại HĐ, gửi duyệt, duyệt nhiều cấp/song song, từ chối, yêu cầu sửa,
+  rút lại, lịch sử phê duyệt, Công việc của tôi.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 
@@ -96,7 +115,7 @@ Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (kh�
 1. Hoàn thiện soạn thảo: driver S3/MinIO, quét virus (ClamAV), chuyển DOCX → PDF chuẩn để ký, xuất PDF phía server,
    header/footer, chèn hình ảnh, quản lý & so sánh phiên bản nội dung; wizard 6 bước.
 2. Mở rộng mẫu: định dạng ngày/số/tiền tệ theo biến, so sánh phiên bản, trình thiết kế mẫu kéo thả.
-3. Workflow phê duyệt cấu hình được (ngưỡng giá trị, tuần tự/song song, điều kiện) + BullMQ, thông báo.
+3. Phê duyệt nâng cao: trình thiết kế kéo thả, điều kiện tùy biến, thông báo (BullMQ + email/Zalo), nhắc hạn, ủy quyền duyệt.
 4. Ký điện tử qua Signature Provider Gateway, khóa nội dung phiên bản đã ký.
 5. Vòng đời: phụ lục, gia hạn, nghĩa vụ, thanh toán, nghiệm thu, thanh lý; job tự chuyển ACTIVE/EXPIRED.
 6. Quản trị: người dùng, phòng ban, vai trò, cấu hình mẫu mã, tích hợp CRM/ERP; Super Admin (tenant, gói, billing).

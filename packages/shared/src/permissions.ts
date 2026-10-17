@@ -25,6 +25,7 @@ export const PERMISSIONS = {
   ROLE_MANAGE: 'role.manage',
   ORG_MANAGE: 'org.manage',
   SETTINGS_MANAGE: 'settings.manage',
+  WORKFLOW_MANAGE: 'workflow.manage',
   AUDIT_VIEW: 'audit.view',
 } as const;
 
@@ -51,5 +52,6 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'role.manage': 'Quản lý vai trò',
   'org.manage': 'Quản lý phòng ban, chi nhánh',
   'settings.manage': 'Quản lý cấu hình',
+  'workflow.manage': 'Cấu hình quy trình phê duyệt',
   'audit.view': 'Xem nhật ký hoạt động',
 };

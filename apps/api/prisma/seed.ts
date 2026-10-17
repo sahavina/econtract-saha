@@ -46,6 +46,49 @@ const ROLES: { code: string; name: string; permissions: Permission[] }[] = [
       P.TEMPLATE_VIEW,
     ],
   },
+  {
+    code: 'manager',
+    name: 'Trưởng phòng',
+    permissions: [
+      P.DASHBOARD_VIEW,
+      P.CONTRACT_VIEW_OWN,
+      P.CONTRACT_CREATE,
+      P.CONTRACT_UPDATE,
+      P.CONTRACT_DELETE,
+      P.PARTNER_VIEW,
+      P.PARTNER_MANAGE,
+      P.TEMPLATE_VIEW,
+    ],
+  },
+  {
+    code: 'accountant',
+    name: 'Kế toán',
+    permissions: [P.DASHBOARD_VIEW, P.CONTRACT_VIEW_ALL, P.CONTRACT_EXPORT, P.PARTNER_VIEW],
+  },
+  {
+    code: 'director',
+    name: 'Giám đốc',
+    permissions: [
+      P.DASHBOARD_VIEW,
+      P.CONTRACT_VIEW_ALL,
+      P.CONTRACT_EXPORT,
+      P.PARTNER_VIEW,
+      P.TEMPLATE_VIEW,
+      P.AUDIT_VIEW,
+    ],
+  },
+  {
+    code: 'ceo',
+    name: 'Tổng giám đốc',
+    permissions: [
+      P.DASHBOARD_VIEW,
+      P.CONTRACT_VIEW_ALL,
+      P.CONTRACT_EXPORT,
+      P.PARTNER_VIEW,
+      P.TEMPLATE_VIEW,
+      P.AUDIT_VIEW,
+    ],
+  },
 ];
 
 // Mật khẩu dev mặc định; đổi bằng biến SEED_PASSWORD.
@@ -133,6 +176,38 @@ async function main() {
       role: 'staff',
       platform: false,
     },
+    {
+      email: 'truongkd@saha.vn',
+      fullName: 'Lê Văn Trưởng Phòng',
+      jobTitle: 'Trưởng phòng Kinh doanh',
+      dept: 'KD',
+      role: 'manager',
+      platform: false,
+    },
+    {
+      email: 'ketoan@saha.vn',
+      fullName: 'Phạm Thị Kế Toán',
+      jobTitle: 'Kế toán trưởng',
+      dept: 'KT',
+      role: 'accountant',
+      platform: false,
+    },
+    {
+      email: 'giamdoc@saha.vn',
+      fullName: 'Hoàng Văn Giám Đốc',
+      jobTitle: 'Giám đốc',
+      dept: 'BGD',
+      role: 'director',
+      platform: false,
+    },
+    {
+      email: 'tonggiamdoc@saha.vn',
+      fullName: 'Vũ Thị Tổng Giám Đốc',
+      jobTitle: 'Tổng giám đốc',
+      dept: 'BGD',
+      role: 'ceo',
+      platform: false,
+    },
   ];
   for (const u of users) {
     const user = await prisma.user.upsert({
@@ -199,6 +274,55 @@ async function main() {
       position: 'Tổng giám đốc',
     },
   });
+
+  // ── Trưởng phòng ban (dùng cho bước duyệt "Trưởng phòng") ──
+  const userId = async (email: string) =>
+    (await prisma.user.findUniqueOrThrow({ where: { tenantId_email: { tenantId: t, email } } })).id;
+  for (const [dept, email] of [
+    ['KD', 'truongkd@saha.vn'],
+    ['KT', 'ketoan@saha.vn'],
+    ['PC', 'phapche@saha.vn'],
+    ['BGD', 'giamdoc@saha.vn'],
+  ]) {
+    await prisma.department.update({ where: { id: depts.get(dept)! }, data: { managerId: await userId(email) } });
+  }
+
+  // ── Quy trình phê duyệt theo giá trị hợp đồng (ví dụ trong đặc tả) ──
+  if ((await prisma.approvalWorkflow.count({ where: { tenantId: t } })) === 0) {
+    const manager = { name: 'Trưởng phòng', approverType: 'DEPARTMENT_MANAGER', mode: 'ANY', dueHours: 24 };
+    const byRole = (name: string, code: string) => ({
+      name,
+      approverType: 'ROLE',
+      roleId: roles.get(code)!,
+      mode: 'ANY',
+      dueHours: 48,
+    });
+    await prisma.approvalWorkflow.createMany({
+      data: [
+        { tenantId: t, name: 'Hợp đồng dưới 50 triệu', priority: 10, maxValue: 50_000_000, steps: [manager] },
+        {
+          tenantId: t,
+          name: 'Hợp đồng 50 – 500 triệu',
+          priority: 20,
+          minValue: 50_000_000,
+          maxValue: 500_000_000,
+          steps: [manager, byRole('Kế toán', 'accountant'), byRole('Giám đốc', 'director')],
+        },
+        {
+          tenantId: t,
+          name: 'Hợp đồng từ 500 triệu',
+          priority: 30,
+          minValue: 500_000_000,
+          steps: [
+            manager,
+            byRole('Pháp chế', 'legal'),
+            byRole('Kế toán', 'accountant'),
+            byRole('Tổng giám đốc', 'ceo'),
+          ],
+        },
+      ],
+    });
+  }
 
   // ── Mẫu hợp đồng & điều khoản mẫu ──
   const admin = await prisma.user.findUniqueOrThrow({

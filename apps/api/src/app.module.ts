@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { ApprovalsModule } from './approvals/approvals.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClausesModule } from './clauses/clauses.module.js';
@@ -16,6 +17,7 @@ import { PartnersModule } from './partners/partners.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { StorageModule } from './storage/storage.module.js';
 import { TemplatesModule } from './templates/templates.module.js';
+import { WorkflowsModule } from './workflows/workflows.module.js';
 
 @Module({
   imports: [
@@ -31,6 +33,8 @@ import { TemplatesModule } from './templates/templates.module.js';
     DocumentsModule,
     TemplatesModule,
     ClausesModule,
+    WorkflowsModule,
+    ApprovalsModule,
   ],
   controllers: [HealthController],
   providers: [
