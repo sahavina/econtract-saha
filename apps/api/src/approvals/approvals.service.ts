@@ -11,6 +11,7 @@ import type { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { ContractsService } from '../contracts/contracts.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { WorkflowsService } from '../workflows/workflows.service.js';
 
@@ -53,6 +54,7 @@ export class ApprovalsService {
     private readonly contracts: ContractsService,
     private readonly workflows: WorkflowsService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
   ) {}
 
   // ───────────────────────── Xem trước & kiểm tra trước khi gửi ─────────────────────────
@@ -217,6 +219,17 @@ export class ApprovalsService {
         },
         tx,
       );
+      await this.notifications.notify(
+        user.tenantId,
+        steps[0]?.approvers.map((a) => a.id) ?? [],
+        {
+          type: 'approval.pending',
+          title: `Hợp đồng ${contract.code} cần bạn phê duyệt`,
+          body: `${contract.title} – bước "${steps[0]?.name}", gửi bởi ${user.fullName}`,
+          link: `/contracts/${contractId}?tab=approval`,
+        },
+        tx,
+      );
       return request;
     });
   }
@@ -269,6 +282,38 @@ export class ApprovalsService {
         },
         tx,
       );
+      // Thông báo: đến lượt bước kế tiếp, hoặc kết quả cuối cho người gửi/người phụ trách.
+      if (outcome === 'NEXT_STEP') {
+        const next = await tx.approvalTask.findMany({
+          where: { requestId: request.id, stepOrder: request.currentStep + 1, status: 'PENDING' },
+        });
+        await this.notifications.notify(
+          user.tenantId,
+          next.map((t) => t.approverId),
+          {
+            type: 'approval.pending',
+            title: `Hợp đồng ${contract.code} cần bạn phê duyệt`,
+            body: `${contract.title} – bước "${next[0]?.stepName ?? ''}"`,
+            link: `/contracts/${contractId}?tab=approval`,
+          },
+          tx,
+        );
+      } else if (outcome !== 'STEP_WAITING') {
+        const label = { APPROVED: 'đã được phê duyệt', REJECTED: 'bị từ chối', CHANGES_REQUESTED: 'cần chỉnh sửa' }[
+          outcome
+        ];
+        await this.notifications.notify(
+          user.tenantId,
+          [request.submittedById, contract.ownerId],
+          {
+            type: 'approval.result',
+            title: `Hợp đồng ${contract.code} ${label}`,
+            body: input.comment ? `${user.fullName}: ${input.comment}` : `Bởi ${user.fullName}`,
+            link: `/contracts/${contractId}?tab=approval`,
+          },
+          tx,
+        );
+      }
       return { outcome };
     });
   }

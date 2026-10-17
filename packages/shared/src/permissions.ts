@@ -28,6 +28,7 @@ export const PERMISSIONS = {
   SETTINGS_MANAGE: 'settings.manage',
   WORKFLOW_MANAGE: 'workflow.manage',
   AUDIT_VIEW: 'audit.view',
+  REPORT_VIEW: 'report.view',
 } as const;
 
 export type Permission = (typeof PERMISSIONS)[keyof typeof PERMISSIONS];
@@ -56,4 +57,5 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'settings.manage': 'Quản lý cấu hình',
   'workflow.manage': 'Cấu hình quy trình phê duyệt',
   'audit.view': 'Xem nhật ký hoạt động',
+  'report.view': 'Xem báo cáo',
 };

@@ -474,3 +474,31 @@ export interface CalendarEvent {
   contractCode: string;
   done: boolean;
 }
+
+// ───────── Thông báo & báo cáo ─────────
+
+export interface AppNotification {
+  id: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: string | null;
+  createdAt: string;
+}
+
+interface ReportGroup {
+  name: string;
+  count: number;
+  value: string;
+}
+
+export interface ReportSummary {
+  totals: { count: number; value: string; avgApprovalHours: number | null; avgSigningHours: number | null; signSuccessRate: number | null };
+  byStatus: { status: ContractStatus; count: number; value: string }[];
+  byDepartment: (ReportGroup & { id: string | null; signedCount: number; signedValue: string; avgApprovalHours: number | null; avgSigningHours: number | null })[];
+  byType: (ReportGroup & { id: string | null })[];
+  byOwner: (ReportGroup & { id: string | null })[];
+  byPartner: ReportGroup[];
+  payments: { scheduled: string; collected: string; overdueCount: number; overdueAmount: string };
+}

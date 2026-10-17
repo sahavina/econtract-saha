@@ -113,6 +113,15 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
   đến hạn (3 ngày) / quá hạn. `ReminderLog` chống gửi trùng.
 - Trang **Vòng đời** (tổng hợp liên hợp đồng theo nhóm/bộ lọc) và **Lịch hợp đồng** (theo tháng).
 
+### Thông báo & báo cáo
+
+- **Thông báo trong ứng dụng** (`Notification`, `NotificationsService.notify` – ghi cùng transaction nghiệp vụ): đến lượt phê duyệt,
+  kết quả phê duyệt (người gửi + người phụ trách), đến lượt ký nội bộ, ký hoàn tất / bị từ chối ký, nhắc hạn của job hằng ngày.
+  Chuông ở header (số chưa đọc cập nhật mỗi phút), trang Thông báo; người dùng chỉ đọc/đánh dấu thông báo của chính mình.
+- **Báo cáo** (`report.view`, cấp cho Quản trị, Pháp chế, Kế toán, Giám đốc, Tổng giám đốc): theo phòng ban (số lượng, giá trị,
+  đã ký, thời gian phê duyệt/ký trung bình), loại hợp đồng, top nhân viên, top đối tác Bên B, trạng thái, thanh toán & công nợ quá hạn.
+  Lọc theo ngày tạo, phòng ban, loại; luôn áp phạm vi xem của người dùng; xuất CSV từng bảng.
+
 ### Quản trị
 
 - Người dùng (`user.view`/`user.manage`): tạo với mật khẩu ban đầu (≥ 8 ký tự, có chữ và số), gán nhiều vai trò, phòng ban,
@@ -151,6 +160,7 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
   bản đã ký + chứng thư, danh sách yêu cầu ký theo trạng thái.
 - Quản trị: người dùng, phòng ban & chi nhánh, vai trò & phân quyền, loại hợp đồng & mẫu mã, đổi mật khẩu.
 - Vòng đời: phụ lục/gia hạn, nghĩa vụ & tiến độ, nghiệm thu, lịch thanh toán, thanh lý, tự động hiệu lực/hết hạn, nhắc hạn, lịch hợp đồng.
+- Thông báo trong ứng dụng và báo cáo quản trị.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 

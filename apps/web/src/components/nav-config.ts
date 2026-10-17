@@ -51,7 +51,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Dashboard', icon: LayoutDashboard, href: '/', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
       { title: 'Công việc của tôi', icon: ClipboardList, href: '/tasks', permissions: VIEW_CONTRACT },
-      { title: 'Thông báo', icon: Bell },
+      { title: 'Thông báo', icon: Bell, href: '/notifications' },
       { title: 'Lịch hợp đồng', icon: CalendarDays, href: '/calendar', permissions: VIEW_CONTRACT },
     ],
   },
@@ -106,7 +106,7 @@ export const NAV: NavGroup[] = [
   {
     label: 'Quản trị',
     items: [
-      { title: 'Báo cáo', icon: BarChart3 },
+      { title: 'Báo cáo', icon: BarChart3, href: '/reports', permissions: [PERMISSIONS.REPORT_VIEW] },
       { title: 'Người dùng', icon: Users, href: '/admin/users', permissions: [PERMISSIONS.USER_VIEW] },
       { title: 'Phòng ban, chi nhánh', icon: Building, href: '/admin/org', permissions: [PERMISSIONS.ORG_MANAGE] },
       { title: 'Vai trò và phân quyền', icon: ShieldCheck, href: '/admin/roles', permissions: [PERMISSIONS.ROLE_MANAGE] },

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { type FormEvent, useState } from 'react';
 import { ChangePasswordDialog } from '@/components/change-password-dialog';
+import { NotificationBell } from '@/components/notification-bell';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -57,6 +58,7 @@ export function AppHeader() {
         </form>
       )}
       <div className="ml-auto flex items-center gap-2">
+        <NotificationBell />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="h-9 gap-2 px-2">

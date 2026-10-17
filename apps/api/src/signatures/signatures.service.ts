@@ -16,6 +16,7 @@ import type { AuthUser } from '../common/auth-user.js';
 import type { Env } from '../config/env.js';
 import { ContractsService } from '../contracts/contracts.service.js';
 import { MailService } from '../mail/mail.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
   CreateSignatureInput,
@@ -64,6 +65,7 @@ export class SignaturesService {
     private readonly audit: AuditService,
     private readonly mail: MailService,
     private readonly config: ConfigService<Env, true>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   private appUrl(path: string) {
@@ -152,6 +154,16 @@ export class SignaturesService {
       return r;
     });
 
+    await this.notifications.notify(
+      user.tenantId,
+      request.signers.filter((s) => s.status === 'PENDING' && s.userId).map((s) => s.userId),
+      {
+        type: 'signature.pending',
+        title: `Hợp đồng ${contract.code} chờ bạn ký`,
+        body: contract.title,
+        link: `/contracts/${contractId}?tab=signature`,
+      },
+    );
     // Gửi lời mời cho người ký đến lượt (ngoài transaction để lỗi email không làm hỏng dữ liệu).
     const tokens = new Map(signers.map((s) => [s.data.email, s.token]));
     for (const s of request.signers.filter((x) => x.status === 'PENDING')) {
@@ -530,6 +542,21 @@ export class SignaturesService {
           status: contract.effectiveDate && contract.effectiveDate > today ? 'SIGNED' : 'ACTIVE',
         },
       });
+      const info = await tx.signatureRequest.findUniqueOrThrow({
+        where: { id: request.id },
+        select: { tenantId: true, createdById: true, contract: { select: { code: true, title: true, ownerId: true } } },
+      });
+      await this.notifications.notify(
+        info.tenantId,
+        [info.createdById, info.contract.ownerId],
+        {
+          type: 'signature.result',
+          title: `Hợp đồng ${info.contract.code} đã ký hoàn tất`,
+          body: info.contract.title,
+          link: `/contracts/${request.contractId}?tab=signature`,
+        },
+        tx,
+      );
       return 'COMPLETED';
     }
 
@@ -552,6 +579,17 @@ export class SignaturesService {
             select: { id: true, code: true, title: true },
           });
           afterCommit.push(() => this.invite(contract, next, token, request.message));
+          await this.notifications.notify(
+            next.tenantId,
+            [next.userId],
+            {
+              type: 'signature.pending',
+              title: `Hợp đồng ${contract.code} chờ bạn ký`,
+              body: contract.title,
+              link: `/contracts/${contract.id}?tab=signature`,
+            },
+            tx,
+          );
         }
       }
     }
@@ -600,9 +638,15 @@ export class SignaturesService {
   ) {
     const creator = await this.prisma.user.findUnique({
       where: { id: createdById },
-      select: { email: true, fullName: true },
+      select: { email: true, fullName: true, tenantId: true },
     });
     if (!creator) return;
+    await this.notifications.notify(creator.tenantId, [createdById], {
+      type: 'signature.result',
+      title: `Hợp đồng ${contract.code} bị từ chối ký`,
+      body: text,
+      link: `/contracts/${contract.id}?tab=signature`,
+    });
     await this.mail.send({
       to: creator.email,
       subject: `[SAHA eContract] Hợp đồng ${contract.code} bị từ chối ký`,

@@ -167,6 +167,7 @@ model User {
   signatureRequests   SignatureRequest[]
   signerAssignments   Signer[]
   assignedObligations ContractObligation[]
+  notifications       Notification[]
   approvalRequests    ApprovalRequest[]
 
   @@unique([tenantId, email])
@@ -886,4 +887,23 @@ model ReminderLog {
   key      String   @id
   tenantId String   @db.Uuid
   sentAt   DateTime @default(now())
+}
+
+// ───────────────────────────── Thông báo trong ứng dụng ─────────────────────────────
+
+model Notification {
+  id        String    @id @default(uuid()) @db.Uuid
+  tenantId  String    @db.Uuid
+  userId    String    @db.Uuid
+  // Ví dụ: approval.pending, approval.result, signature.pending, signature.result, reminder.expiry…
+  type      String
+  title     String
+  body      String?
+  // Đường dẫn nội bộ trong ứng dụng (luôn bắt đầu bằng "/").
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt, createdAt])
 }

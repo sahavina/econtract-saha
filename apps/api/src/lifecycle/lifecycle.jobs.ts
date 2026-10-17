@@ -5,6 +5,7 @@ import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { Env } from '../config/env.js';
 import { MailService } from '../mail/mail.service.js';
+import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { today } from './lifecycle.service.js';
 
@@ -35,6 +36,7 @@ export class LifecycleJobs implements OnApplicationBootstrap {
     private readonly audit: AuditService,
     private readonly mail: MailService,
     private readonly config: ConfigService<Env, true>,
+    private readonly notifications: NotificationsService,
   ) {}
 
   onApplicationBootstrap() {
@@ -104,8 +106,16 @@ export class LifecycleJobs implements OnApplicationBootstrap {
   }
 
   /** Giữ khóa trước rồi gửi; gửi lỗi thì nhả khóa để lần sau thử lại. */
-  private async sendOnce(key: string, tenantId: string, to: string | null | undefined, subject: string, text: string) {
-    if (!to) return 0;
+  private async sendOnce(
+    key: string,
+    tenantId: string,
+    recipient: { id: string; email: string } | null | undefined,
+    subject: string,
+    text: string,
+    link: string,
+  ) {
+    if (!recipient) return 0;
+    const to = recipient.email;
     try {
       await this.prisma.reminderLog.create({ data: { key, tenantId } });
     } catch (err) {
@@ -114,6 +124,13 @@ export class LifecycleJobs implements OnApplicationBootstrap {
     }
     try {
       await this.mail.send({ to, subject, text });
+      // Kèm thông báo trong ứng dụng (tiêu đề bỏ tiền tố email).
+      await this.notifications.notify(tenantId, [recipient.id], {
+        type: `reminder.${key.split(':')[0]}`,
+        title: subject.replace('[SAHA eContract] ', ''),
+        body: text.split('\n')[0],
+        link,
+      });
       return 1;
     } catch (err) {
       await this.prisma.reminderLog.delete({ where: { key } }).catch(() => undefined);
@@ -125,7 +142,7 @@ export class LifecycleJobs implements OnApplicationBootstrap {
   private async remind() {
     const t = today();
     let sent = 0;
-    const owner = { select: { email: true, fullName: true } };
+    const owner = { select: { id: true, email: true, fullName: true } };
 
     // Hợp đồng sắp hết hạn.
     for (const days of EXPIRY_REMINDER_DAYS) {
@@ -135,13 +152,13 @@ export class LifecycleJobs implements OnApplicationBootstrap {
         select: { id: true, tenantId: true, code: true, title: true, owner, createdBy: owner },
       });
       for (const c of contracts) {
-        const to = c.owner?.email ?? c.createdBy.email;
         sent += await this.sendOnce(
           `exp:${c.id}:${days}:${target.toISOString().slice(0, 10)}`,
           c.tenantId,
-          to,
+          c.owner ?? c.createdBy,
           `[SAHA eContract] Hợp đồng ${c.code} còn ${days} ngày hết hạn`,
           `Hợp đồng "${c.title}" (${c.code}) sẽ hết hạn sau ${days} ngày. Vui lòng xem xét gia hạn hoặc thanh lý.\n${this.url(c.id, 'lifecycle')}`,
+          `/contracts/${c.id}?tab=lifecycle`,
         );
       }
     }
@@ -169,9 +186,10 @@ export class LifecycleJobs implements OnApplicationBootstrap {
       sent += await this.sendOnce(
         `pay:${p.id}:${overdue ? 'overdue' : 'due'}:${p.dueDate!.toISOString().slice(0, 10)}`,
         p.tenantId,
-        p.contract.owner?.email ?? p.contract.createdBy.email,
+        p.contract.owner ?? p.contract.createdBy,
         `[SAHA eContract] ${overdue ? 'Quá hạn' : 'Sắp đến hạn'} thanh toán – ${p.contract.code}`,
         `Đợt "${p.title}" của hợp đồng ${p.contract.code}: còn ${p.amount.minus(p.paidAmount).toString()} ${p.contract.currency}, hạn ${p.dueDate!.toISOString().slice(0, 10)}.\n${this.url(p.contract.id, 'lifecycle')}`,
+        `/contracts/${p.contract.id}?tab=lifecycle`,
       );
     }
 
@@ -196,9 +214,10 @@ export class LifecycleJobs implements OnApplicationBootstrap {
       sent += await this.sendOnce(
         `obl:${o.id}:${overdue ? 'overdue' : 'due'}:${o.dueDate!.toISOString().slice(0, 10)}`,
         o.tenantId,
-        o.assignee?.email ?? o.contract.owner?.email ?? o.contract.createdBy.email,
+        o.assignee ?? o.contract.owner ?? o.contract.createdBy,
         `[SAHA eContract] ${overdue ? 'Quá hạn' : 'Sắp đến hạn'} nghĩa vụ – ${o.contract.code}`,
         `Nghĩa vụ "${o.title}" của hợp đồng ${o.contract.code}, hạn ${o.dueDate!.toISOString().slice(0, 10)}.\n${this.url(o.contract.id, 'lifecycle')}`,
+        `/contracts/${o.contract.id}?tab=lifecycle`,
       );
     }
     return sent;

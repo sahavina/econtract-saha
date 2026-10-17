@@ -31,6 +31,7 @@ const ROLES: { code: string; name: string; permissions: Permission[] }[] = [
       P.TEMPLATE_MANAGE,
       P.CLAUSE_APPROVE,
       P.AUDIT_VIEW,
+      P.REPORT_VIEW,
     ],
   },
   {
@@ -64,7 +65,7 @@ const ROLES: { code: string; name: string; permissions: Permission[] }[] = [
   {
     code: 'accountant',
     name: 'Kế toán',
-    permissions: [P.DASHBOARD_VIEW, P.CONTRACT_VIEW_ALL, P.CONTRACT_EXPORT, P.PARTNER_VIEW],
+    permissions: [P.DASHBOARD_VIEW, P.CONTRACT_VIEW_ALL, P.CONTRACT_EXPORT, P.PARTNER_VIEW, P.REPORT_VIEW],
   },
   {
     code: 'director',
@@ -76,6 +77,7 @@ const ROLES: { code: string; name: string; permissions: Permission[] }[] = [
       P.PARTNER_VIEW,
       P.TEMPLATE_VIEW,
       P.AUDIT_VIEW,
+      P.REPORT_VIEW,
     ],
   },
   {
@@ -88,6 +90,7 @@ const ROLES: { code: string; name: string; permissions: Permission[] }[] = [
       P.PARTNER_VIEW,
       P.TEMPLATE_VIEW,
       P.AUDIT_VIEW,
+      P.REPORT_VIEW,
     ],
   },
 ];
