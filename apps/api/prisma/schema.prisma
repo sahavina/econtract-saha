@@ -1,0 +1,415 @@
+// SAHA eContract – schema nền tảng
+// Quy ước: mọi bảng nghiệp vụ có tenantId; backend luôn lấy tenantId từ JWT, không lấy từ payload.
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────────────────────── Tenant & Subscription ─────────────────────────────
+
+enum TenantStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+model Plan {
+  id               String         @id @default(uuid()) @db.Uuid
+  code             String         @unique
+  name             String
+  maxUsers         Int
+  maxContractsYear Int
+  storageQuotaMb   Int
+  priceMonthly     Decimal        @default(0) @db.Decimal(18, 2)
+  isActive         Boolean        @default(true)
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
+  subscriptions    Subscription[]
+}
+
+enum SubscriptionStatus {
+  TRIAL
+  ACTIVE
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Subscription {
+  id        String             @id @default(uuid()) @db.Uuid
+  tenantId  String             @db.Uuid
+  planId    String             @db.Uuid
+  status    SubscriptionStatus @default(TRIAL)
+  startsAt  DateTime
+  endsAt    DateTime?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  tenant    Tenant             @relation(fields: [tenantId], references: [id])
+  plan      Plan               @relation(fields: [planId], references: [id])
+
+  @@index([tenantId])
+}
+
+model Tenant {
+  id            String           @id @default(uuid()) @db.Uuid
+  code          String           @unique
+  name          String
+  taxCode       String?
+  address       String?
+  email         String?
+  phone         String?
+  status        TenantStatus     @default(ACTIVE)
+  settings      Json             @default("{}")
+  storageUsedMb Int              @default(0)
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  users         User[]
+  branches      Branch[]
+  departments   Department[]
+  roles         Role[]
+  partners      Partner[]
+  contracts     Contract[]
+  contractTypes ContractType[]
+  sequences     NumberSequence[]
+  auditLogs     AuditLog[]
+  subscriptions Subscription[]
+}
+
+// ───────────────────────────── Tổ chức & Người dùng ─────────────────────────────
+
+model Branch {
+  id          String       @id @default(uuid()) @db.Uuid
+  tenantId    String       @db.Uuid
+  code        String
+  name        String
+  address     String?
+  isActive    Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+  tenant      Tenant       @relation(fields: [tenantId], references: [id])
+  departments Department[]
+  users       User[]
+
+  @@unique([tenantId, code])
+}
+
+model Department {
+  id        String       @id @default(uuid()) @db.Uuid
+  tenantId  String       @db.Uuid
+  branchId  String?      @db.Uuid
+  parentId  String?      @db.Uuid
+  code      String
+  name      String
+  managerId String?      @db.Uuid
+  isActive  Boolean      @default(true)
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+  tenant    Tenant       @relation(fields: [tenantId], references: [id])
+  branch    Branch?      @relation(fields: [branchId], references: [id])
+  parent    Department?  @relation("DepartmentTree", fields: [parentId], references: [id])
+  children  Department[] @relation("DepartmentTree")
+  users     User[]       @relation("UserDepartment")
+  contracts Contract[]
+
+  @@unique([tenantId, code])
+}
+
+enum UserStatus {
+  ACTIVE
+  INVITED
+  LOCKED
+  DISABLED
+}
+
+model User {
+  id               String      @id @default(uuid()) @db.Uuid
+  tenantId         String      @db.Uuid
+  email            String
+  passwordHash     String
+  fullName         String
+  phone            String?
+  jobTitle         String?
+  departmentId     String?     @db.Uuid
+  branchId         String?     @db.Uuid
+  status           UserStatus  @default(ACTIVE)
+  isPlatformAdmin  Boolean     @default(false)
+  failedLogins     Int         @default(0)
+  lockedUntil      DateTime?
+  lastLoginAt      DateTime?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+  tenant           Tenant      @relation(fields: [tenantId], references: [id])
+  department       Department? @relation("UserDepartment", fields: [departmentId], references: [id])
+  branch           Branch?     @relation(fields: [branchId], references: [id])
+  roles            UserRole[]
+  sessions         Session[]
+  ownedContracts   Contract[]  @relation("ContractOwner")
+  createdContracts Contract[]  @relation("ContractCreator")
+
+  @@unique([tenantId, email])
+}
+
+model Role {
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
+  code        String
+  name        String
+  description String?
+  isSystem    Boolean          @default(false)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
+  permissions RolePermission[]
+  users       UserRole[]
+
+  @@unique([tenantId, code])
+}
+
+model RolePermission {
+  roleId     String @db.Uuid
+  permission String
+  role       Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permission])
+}
+
+model UserRole {
+  userId String @db.Uuid
+  roleId String @db.Uuid
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role   @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// Refresh token dạng rotation; chỉ lưu hash.
+model Session {
+  id         String    @id @default(uuid()) @db.Uuid
+  userId     String    @db.Uuid
+  tokenHash  String    @unique
+  userAgent  String?
+  ip         String?
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  replacedBy String?   @db.Uuid
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ───────────────────────────── Nhật ký hoạt động (append-only) ─────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @db.Uuid
+  actorId    String?  @db.Uuid
+  actorName  String?
+  action     String
+  entityType String
+  entityId   String?
+  data       Json?
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  tenant     Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, createdAt])
+}
+
+// ───────────────────────────── Đánh số tự động ─────────────────────────────
+
+// key ví dụ: "contract:HDMB:2026" – tăng nguyên tử bằng UPSERT ... RETURNING
+model NumberSequence {
+  tenantId  String   @db.Uuid
+  key       String
+  current   Int      @default(0)
+  updatedAt DateTime @updatedAt
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+
+  @@id([tenantId, key])
+}
+
+// ───────────────────────────── Đối tác ─────────────────────────────
+
+enum PartnerType {
+  CUSTOMER
+  SUPPLIER
+  OTHER
+}
+
+enum LegalEntityType {
+  ORGANIZATION
+  INDIVIDUAL
+}
+
+model Partner {
+  id              String           @id @default(uuid()) @db.Uuid
+  tenantId        String           @db.Uuid
+  code            String
+  type            PartnerType
+  entityType      LegalEntityType  @default(ORGANIZATION)
+  name            String
+  taxCode         String?
+  idNumber        String?
+  address         String?
+  email           String?
+  phone           String?
+  representative  String?
+  position        String?
+  externalRef     String?
+  note            String?
+  deletedAt       DateTime?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  contacts        PartnerContact[]
+  contractParties ContractParty[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, type])
+}
+
+model PartnerContact {
+  id        String   @id @default(uuid()) @db.Uuid
+  partnerId String   @db.Uuid
+  fullName  String
+  position  String?
+  email     String?
+  phone     String?
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  partner   Partner  @relation(fields: [partnerId], references: [id], onDelete: Cascade)
+}
+
+// ───────────────────────────── Hợp đồng ─────────────────────────────
+
+model ContractType {
+  id          String     @id @default(uuid()) @db.Uuid
+  tenantId    String     @db.Uuid
+  code        String
+  name        String
+  // Mẫu mã: hỗ trợ {TYPE} {DEPT} {BRANCH} {YYYY} {YY} {MM} {SEQUENCE} {SEQUENCE:5}
+  codePattern String     @default("HD-{YYYY}-{SEQUENCE:5}")
+  isActive    Boolean    @default(true)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  tenant      Tenant     @relation(fields: [tenantId], references: [id])
+  contracts   Contract[]
+
+  @@unique([tenantId, code])
+}
+
+enum ContractStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  PENDING_SIGNATURE
+  SIGNED
+  ACTIVE
+  EXPIRED
+  LIQUIDATED
+  CANCELLED
+  ARCHIVED
+}
+
+enum ApprovalStatus {
+  NOT_SUBMITTED
+  PENDING
+  APPROVED
+  REJECTED
+  CHANGES_REQUESTED
+}
+
+enum SignatureStatus {
+  NOT_STARTED
+  IN_PROGRESS
+  COMPLETED
+  REJECTED
+  EXPIRED
+}
+
+enum Confidentiality {
+  PUBLIC
+  INTERNAL
+  CONFIDENTIAL
+  SECRET
+}
+
+model Contract {
+  id               String          @id @default(uuid()) @db.Uuid
+  tenantId         String          @db.Uuid
+  code             String
+  title            String
+  contractTypeId   String?         @db.Uuid
+  group            String?
+  description      String?
+  value            Decimal         @default(0) @db.Decimal(20, 2)
+  currency         String          @default("VND")
+  vatRate          Decimal?        @db.Decimal(5, 2)
+  expectedSignDate DateTime?       @db.Date
+  signedDate       DateTime?       @db.Date
+  effectiveDate    DateTime?       @db.Date
+  expiryDate       DateTime?       @db.Date
+  departmentId     String?         @db.Uuid
+  ownerId          String?         @db.Uuid
+  confidentiality  Confidentiality @default(INTERNAL)
+  tags             String[]        @default([])
+  note             String?
+  status           ContractStatus  @default(DRAFT)
+  approvalStatus   ApprovalStatus  @default(NOT_SUBMITTED)
+  signatureStatus  SignatureStatus @default(NOT_STARTED)
+  contentHtml      String?
+  createdById      String          @db.Uuid
+  archivedAt       DateTime?
+  deletedAt        DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+  tenant           Tenant          @relation(fields: [tenantId], references: [id])
+  contractType     ContractType?   @relation(fields: [contractTypeId], references: [id])
+  department       Department?     @relation(fields: [departmentId], references: [id])
+  owner            User?           @relation("ContractOwner", fields: [ownerId], references: [id])
+  createdBy        User            @relation("ContractCreator", fields: [createdById], references: [id])
+  parties          ContractParty[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([tenantId, expiryDate])
+  @@index([tenantId, ownerId])
+}
+
+enum PartyRole {
+  PARTY_A
+  PARTY_B
+  PARTY_C
+  RELATED
+}
+
+model ContractParty {
+  id               String          @id @default(uuid()) @db.Uuid
+  contractId       String          @db.Uuid
+  partnerId        String?         @db.Uuid
+  role             PartyRole
+  sortOrder        Int             @default(0)
+  isInternal       Boolean         @default(false)
+  entityType       LegalEntityType @default(ORGANIZATION)
+  name             String
+  taxCode          String?
+  address          String?
+  email            String?
+  phone            String?
+  representative   String?
+  position         String?
+  authorizationRef String?
+  contract         Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  partner          Partner?        @relation(fields: [partnerId], references: [id])
+
+  @@index([contractId])
+}

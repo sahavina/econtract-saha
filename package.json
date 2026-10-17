@@ -1,0 +1,21 @@
+{
+  "name": "saha-econtract",
+  "private": true,
+  "version": "0.1.0",
+  "description": "SAHA eContract – Electronic Contract & Contract Lifecycle Management Platform",
+  "packageManager": "pnpm@11.20.0",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "dev": "pnpm -r --parallel --filter ./apps/* dev",
+    "dev:api": "pnpm --filter @saha/api dev",
+    "dev:web": "pnpm --filter @saha/web dev",
+    "build": "pnpm --filter @saha/shared build && pnpm -r --filter ./apps/* build",
+    "lint": "pnpm -r lint",
+    "typecheck": "pnpm -r --workspace-concurrency=1 typecheck",
+    "test": "pnpm -r test",
+    "infra:up": "docker compose up -d",
+    "infra:down": "docker compose down",
+    "db:migrate": "pnpm --filter @saha/api prisma:migrate",
+    "db:seed": "pnpm --filter @saha/api prisma:seed"
+  }
+}
