@@ -330,3 +330,67 @@ export interface PublicSignView {
   signer: { id: string; name: string; email: string; status: SignerStatus; otpSentAt: string | null };
   signers: { id: string; order: number; name: string; title: string | null; partyRole: PartyRole | null; status: SignerStatus; signedAt: string | null; signatureImage: string | null }[];
 }
+
+// ───────── Quản trị ─────────
+
+export type UserStatus = 'ACTIVE' | 'INVITED' | 'LOCKED' | 'DISABLED';
+
+export interface AdminUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string | null;
+  jobTitle: string | null;
+  status: UserStatus;
+  lastLoginAt: string | null;
+  createdAt: string;
+  departmentId: string | null;
+  branchId: string | null;
+  department: { id: string; name: string } | null;
+  branch: { id: string; name: string } | null;
+  roles: { id: string; code: string; name: string }[];
+}
+
+export interface AdminRole {
+  id: string;
+  code: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  locked: boolean;
+  permissions: string[];
+  _count: { users: number };
+}
+
+export interface AdminDepartment {
+  id: string;
+  code: string;
+  name: string;
+  isActive: boolean;
+  branchId: string | null;
+  parentId: string | null;
+  managerId: string | null;
+  branch: { id: string; name: string } | null;
+  parent: { id: string; name: string } | null;
+  manager: { id: string; fullName: string } | null;
+  _count: { users: number; contracts: number };
+}
+
+export interface AdminBranch {
+  id: string;
+  code: string;
+  name: string;
+  address: string | null;
+  isActive: boolean;
+  _count: { departments: number; users: number };
+}
+
+export interface AdminContractType {
+  id: string;
+  code: string;
+  name: string;
+  codePattern: string;
+  isActive: boolean;
+  example: string;
+  _count: { contracts: number };
+}

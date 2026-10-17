@@ -1,9 +1,10 @@
 'use client';
 
-import { LogOut, Monitor, Moon, Search, Sun } from 'lucide-react';
+import { KeyRound, LogOut, Monitor, Moon, Search, Sun } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useTheme } from 'next-themes';
 import { type FormEvent, useState } from 'react';
+import { ChangePasswordDialog } from '@/components/change-password-dialog';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
 import {
@@ -31,6 +32,7 @@ export function AppHeader() {
   const { theme, setTheme } = useTheme();
   const router = useRouter();
   const [q, setQ] = useState('');
+  const [changingPw, setChangingPw] = useState(false);
 
   const onSearch = (e: FormEvent) => {
     e.preventDefault();
@@ -86,6 +88,9 @@ export function AppHeader() {
               </DropdownMenuRadioItem>
             </DropdownMenuRadioGroup>
             <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => setChangingPw(true)}>
+              <KeyRound /> Đổi mật khẩu
+            </DropdownMenuItem>
             <DropdownMenuItem
               onSelect={async () => {
                 await logout();
@@ -97,6 +102,7 @@ export function AppHeader() {
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      <ChangePasswordDialog open={changingPw} onClose={() => setChangingPw(false)} />
     </header>
   );
 }

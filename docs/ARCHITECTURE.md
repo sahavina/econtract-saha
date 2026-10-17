@@ -98,6 +98,16 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - **Chưa có**: chữ ký số có chứng thư CA (VNPT-CA, Viettel-CA, FPT-CA…), dấu thời gian (TSA), xuất PDF/A có nhúng chữ ký phía server.
   Trường `SignatureRequest.provider` dành cho việc tích hợp các nhà cung cấp này.
 
+### Quản trị
+
+- Người dùng (`user.view`/`user.manage`): tạo với mật khẩu ban đầu (≥ 8 ký tự, có chữ và số), gán nhiều vai trò, phòng ban,
+  chi nhánh; khóa/vô hiệu ⇒ thu hồi mọi phiên; đặt lại mật khẩu ⇒ thu hồi phiên. Không được tự khóa hoặc tự đổi vai trò.
+- Người dùng tự đổi mật khẩu (menu tài khoản) ⇒ đăng xuất mọi thiết bị.
+- Vai trò (`role.manage`): ma trận quyền theo nhóm; vai trò `tenant_admin` luôn có toàn bộ quyền (tính lúc nạp phiên,
+  kể cả quyền thêm sau). Không xóa vai trò hệ thống, vai trò đang gán, hoặc đang dùng trong quy trình duyệt.
+- Phòng ban/chi nhánh (`org.manage`): trưởng phòng (dùng cho bước duyệt "Trưởng phòng"), cây phòng ban có chặn vòng lặp.
+- Cấu hình (`settings.manage`): loại hợp đồng và mẫu mã, xem trước mã theo thời gian thực (hàm sinh mã dùng chung ở `@saha/shared`).
+
 ## 6. Quy tắc nghiệp vụ hiện có
 
 - Chỉ sửa được hợp đồng **Nháp** (phê duyệt chưa gửi/bị từ chối/yêu cầu sửa), chưa lưu trữ/xóa.
@@ -124,6 +134,7 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
   rút lại, lịch sử phê duyệt, Công việc của tôi.
 - Ký điện tử: gửi ký (nội bộ + đối tác), ký lần lượt/đồng thời, OTP email, chữ ký vẽ/gõ, từ chối, hủy, cấp lại liên kết,
   bản đã ký + chứng thư, danh sách yêu cầu ký theo trạng thái.
+- Quản trị: người dùng, phòng ban & chi nhánh, vai trò & phân quyền, loại hợp đồng & mẫu mã, đổi mật khẩu.
 - Đối tác: danh sách theo loại, thêm/sửa/xóa mềm.
 - Nhật ký hoạt động.
 
@@ -137,7 +148,7 @@ Các mục menu chưa triển khai hiển thị mờ kèm nhãn "Sắp có" (kh�
 3. Phê duyệt nâng cao: trình thiết kế kéo thả, điều kiện tùy biến, thông báo (BullMQ + email/Zalo), nhắc hạn, ủy quyền duyệt.
 4. Tích hợp chữ ký số CA (VNPT/Viettel/FPT) + TSA, xuất PDF/A ký số phía server, thông báo nhắc ký.
 5. Vòng đời: phụ lục, gia hạn, nghĩa vụ, thanh toán, nghiệm thu, thanh lý; job tự chuyển ACTIVE/EXPIRED.
-6. Quản trị: người dùng, phòng ban, vai trò, cấu hình mẫu mã, tích hợp CRM/ERP; Super Admin (tenant, gói, billing).
+6. Quản trị nâng cao: mời người dùng qua email, SSO, tích hợp CRM/ERP; Super Admin (tenant, gói dịch vụ, billing, usage).
 
 > Ghi chú: file master prompt nguồn kết thúc giữa mục 12.2 (Workflow phê duyệt). Các phần sau đó cần bổ sung
 > trước khi thiết kế chi tiết giai đoạn 3 trở đi.

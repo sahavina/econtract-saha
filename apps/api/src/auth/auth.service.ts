@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import type { Permission } from '@saha/shared';
+import { ALL_PERMISSIONS, type Permission } from '@saha/shared';
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -127,6 +127,8 @@ export class AuthService {
     if (!user) return null;
     const permissions = new Set<Permission>();
     for (const ur of user.roles) for (const rp of ur.role.permissions) permissions.add(rp.permission as Permission);
+    // Quản trị doanh nghiệp luôn có toàn bộ quyền, kể cả quyền mới bổ sung sau này.
+    if (user.roles.some((ur) => ur.role.code === 'tenant_admin')) for (const p of ALL_PERMISSIONS) permissions.add(p);
     return {
       userId: user.id,
       tenantId: user.tenantId,

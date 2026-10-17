@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { AdminModule } from './admin/admin.module.js';
 import { ApprovalsModule } from './approvals/approvals.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
@@ -39,6 +40,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     WorkflowsModule,
     ApprovalsModule,
     SignaturesModule,
+    AdminModule,
   ],
   controllers: [HealthController],
   providers: [
