@@ -353,6 +353,13 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     if (!c.configured) toast.info('Đã điền thông tin lúc đăng ký doanh nghiệp. Bổ sung người đại diện, số tài khoản… ở Quản trị → Cấu hình → Thông tin doanh nghiệp.');
   };
 
+  /** Bỏ tích "Bên nội bộ" ⇒ xóa thông tin đã điền để nhập bên khác. */
+  const clearCompany = (index: number) => {
+    for (const field of ['name', 'taxCode', 'address', 'email', 'phone', 'representative', 'position', 'bankAccount', 'authorizationRef'] as const)
+      setValue(`parties.${index}.${field}`, '');
+    setValue(`parties.${index}.partnerId`, '');
+  };
+
   const contractTypeId = useWatch({ control, name: 'contractTypeId' });
   const templateId = useWatch({ control, name: 'templateId' });
   const templates = useQuery({
@@ -566,7 +573,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
                     <input
                       type="checkbox"
                       className="size-4"
-                      {...register(`parties.${i}.isInternal`, { onChange: (e) => e.target.checked && applyCompany(i) })}
+                      {...register(`parties.${i}.isInternal`, { onChange: (e) => (e.target.checked ? applyCompany(i) : clearCompany(i)) })}
                     />{' '}
                     Bên nội bộ (doanh nghiệp mình)
                   </label>
