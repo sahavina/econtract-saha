@@ -22,6 +22,8 @@ export interface OdooPartner {
   ref: string | null;
   isCustomer: boolean;
   isSupplier: boolean;
+  /** Loại gợi ý khi nhập: vừa mua vừa bán ⇒ theo chiều giao dịch nhiều hơn (rank cao hơn). */
+  suggestedType: 'CUSTOMER' | 'SUPPLIER' | 'OTHER';
 }
 
 export type OdooPartnerKind = 'CUSTOMER' | 'SUPPLIER';
@@ -93,6 +95,11 @@ export function firstEmail(v: string | false | undefined) {
   return found ?? null;
 }
 
+export function suggestType(customerRank: number, supplierRank: number) {
+  if (supplierRank > customerRank) return 'SUPPLIER' as const;
+  return customerRank > 0 ? ('CUSTOMER' as const) : ('OTHER' as const);
+}
+
 export function mapPartner(r: RawPartner): OdooPartner {
   return {
     odooId: r.id,
@@ -105,6 +112,7 @@ export function mapPartner(r: RawPartner): OdooPartner {
     ref: str(r.ref)?.slice(0, 50) ?? null,
     isCustomer: (r.customer_rank ?? 0) > 0,
     isSupplier: (r.supplier_rank ?? 0) > 0,
+    suggestedType: suggestType(r.customer_rank ?? 0, r.supplier_rank ?? 0),
   };
 }
 

@@ -2,7 +2,7 @@
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Building2, Download, Loader2, Search, User } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { FilterSelect } from '@/components/filter-select';
 import { Button } from '@/components/ui/button';
@@ -34,6 +34,7 @@ export function OdooPartnerDialog({
   const [input, setInput] = useState('');
   const [q, setQ] = useState('');
   const [kind, setKind] = useState<OdooKind | undefined>(defaultKind);
+  const searchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const t = setTimeout(() => setQ(input.trim()), 400);
@@ -65,7 +66,14 @@ export function OdooPartnerDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+      <DialogContent
+        className="flex max-h-[85vh] flex-col sm:max-w-3xl"
+        // Đặt con trỏ vào ô tìm kiếm thay vì nút đầu tiên của hộp thoại.
+        onOpenAutoFocus={(e) => {
+          e.preventDefault();
+          searchRef.current?.focus();
+        }}
+      >
         <DialogHeader>
           <DialogTitle>{mode === 'pick' ? 'Chọn đối tác từ Odoo' : 'Nhập đối tác từ Odoo'}</DialogTitle>
           <DialogDescription>
@@ -75,7 +83,7 @@ export function OdooPartnerDialog({
         <div className="flex flex-wrap gap-2">
           <div className="relative min-w-60 flex-1">
             <Search className="absolute top-2.5 left-2.5 size-4 text-muted-foreground" />
-            <Input autoFocus className="pl-8" placeholder="Nhập tên công ty, MST…" value={input} onChange={(e) => setInput(e.target.value)} aria-label="Tìm trên Odoo" />
+            <Input ref={searchRef} className="pl-8" placeholder="Nhập tên công ty, MST…" value={input} onChange={(e) => setInput(e.target.value)} aria-label="Tìm trên Odoo" />
           </div>
           <FilterSelect
             allLabel="Khách hàng & nhà cung cấp"

@@ -167,7 +167,7 @@ export class IntegrationsService {
     const existing = await this.prisma.partner.findUnique({
       where: { tenantId_externalRef: { tenantId: user.tenantId, externalRef } },
     });
-    const type = input.type ?? existing?.type ?? (p.isCustomer ? 'CUSTOMER' : p.isSupplier ? 'SUPPLIER' : 'OTHER');
+    const type = input.type ?? existing?.type ?? p.suggestedType;
     const data = {
       type,
       entityType: p.isCompany ? ('ORGANIZATION' as const) : ('INDIVIDUAL' as const),

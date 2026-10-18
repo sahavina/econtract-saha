@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { composeAddress, firstEmail, mapPartner, OdooClient, OdooError } from './odoo.client.js';
+import { composeAddress, firstEmail, mapPartner, OdooClient, OdooError, suggestType } from './odoo.client.js';
 import { SecretBox } from './secret-box.js';
 import { assertSafeIntegrationUrl, isPrivateAddress } from './url-guard.js';
 
@@ -74,7 +74,11 @@ describe('Odoo partner mapping', () => {
       ref: null,
       isCustomer: true,
       isSupplier: true,
+      suggestedType: 'CUSTOMER',
     });
+    expect(suggestType(3, 10)).toBe('SUPPLIER');
+    expect(suggestType(5, 5)).toBe('CUSTOMER');
+    expect(suggestType(0, 0)).toBe('OTHER');
   });
 
   it('composes address without repeating parts already in street', () => {
