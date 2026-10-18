@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useCompanyProfile } from '@/lib/company';
-import { readDocxBlocks } from '@/lib/docx';
+import { readDocx } from '@/lib/docx';
 import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
@@ -285,6 +285,8 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
   const parties = useFieldArray({ control, name: 'parties' });
 
   const [files, setFiles] = useState<File[]>([]);
+  /** Nội dung hợp đồng chuyển từ file Word (chỉ khi lập mới, không chọn mẫu). */
+  const [imported, setImported] = useState<{ name: string; html: string; use: boolean } | null>(null);
 
   const save = useMutation({
     meta: { silent: true },
@@ -293,7 +295,8 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
         const c = await api<ContractDetail>(`/contracts/${contract.id}`, { method: 'PATCH', body: toPayload(v, true) });
         return { c, uploaded: 0, failed: [] as string[] };
       }
-      const c = await api<ContractDetail>('/contracts', { method: 'POST', body: toPayload(v, false) });
+      const body = { ...toPayload(v, false), ...(imported?.use && !v.templateId && { contentHtml: imported.html }) };
+      const c = await api<ContractDetail>('/contracts', { method: 'POST', body });
       // Hợp đồng đã tạo thì giữ lại dù có tệp tải lên lỗi; người dùng tải lại ở tab Tài liệu.
       const failed: string[] = [];
       for (const f of files) {
@@ -379,10 +382,15 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
    * Bên có MST trùng doanh nghiệp mình ⇒ đánh dấu "Bên nội bộ"; trùng đối tác trong danh mục ⇒ liên kết đối tác.
    */
   const applyDocx = async (file: File) => {
-    const blocks = await readDocxBlocks(file);
-    if (!blocks) return toast.error(`Không đọc được nội dung ${file.name} – hãy nhập thông tin thủ công`);
-    const x = extractContractFields(blocks);
+    const doc = await readDocx(file);
+    if (!doc) return toast.error(`Không đọc được nội dung ${file.name} – hãy nhập thông tin thủ công`);
+    const x = extractContractFields(doc.blocks);
     const filled: string[] = [];
+    // Chép nội dung file Word làm nội dung hợp đồng (khi không dùng mẫu) để xem, in/xuất PDF, ký như hợp đồng soạn trong hệ thống.
+    if (doc.html && !form.getValues('templateId')) {
+      setImported({ name: file.name, html: doc.html, use: true });
+      filled.push('nội dung hợp đồng');
+    }
     const isBlank = (v: string) => !v.trim() || v.trim() === '0';
     const fileTitle = file.name.replace(/\.[^.]+$/, '').slice(0, 500);
     const title = form.getValues('title');
@@ -456,6 +464,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
       required={fromFile}
       onChange={(next, added) => {
         setFiles(next);
+        if (imported && !next.some((x) => x.name === imported.name)) setImported(null);
         // Gợi ý tên hợp đồng từ tên tệp đầu tiên nếu chưa nhập.
         if (added[0] && !form.getValues('title').trim()) {
           setValue('title', added[0].name.replace(/\.[^.]+$/, '').slice(0, 500), { shouldValidate: true });
@@ -465,6 +474,30 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
         if (docx && !isEdit) void applyDocx(docx);
       }}
     />
+  );
+
+  const importedCard = imported && (
+    <Card>
+      <CardHeader>
+        <CardTitle>Nội dung hợp đồng (từ {imported.name})</CardTitle>
+        <CardDescription>
+          Nội dung file Word được chép vào hợp đồng để xem, in/xuất PDF và ký; sau khi lưu có thể sửa tiếp ở tab “Nội dung hợp đồng”. Hình ảnh và đánh số tự động của
+          Word không được chép.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <label className="flex items-center gap-2 text-sm">
+          <input type="checkbox" className="size-4" checked={imported.use} onChange={(e) => setImported({ ...imported, use: e.target.checked })} /> Dùng nội dung này làm nội
+          dung hợp đồng
+        </label>
+        {imported.use && (
+          <div className="max-h-[480px] overflow-y-auto rounded-md border bg-white px-8 py-6 text-[#111]">
+            {/* HTML do readDocx tạo (văn bản đã escape); máy chủ làm sạch lại khi lưu. */}
+            <div className="contract-content" dangerouslySetInnerHTML={{ __html: imported.html }} />
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 
   return (
@@ -477,6 +510,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
       noValidate
     >
       {!isEdit && fromFile && filesPicker}
+      {!isEdit && fromFile && importedCard}
       {!isEdit && !fromFile && (
         <Card>
           <CardHeader>
@@ -699,6 +733,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
       </Card>
 
       {!isEdit && !fromFile && filesPicker}
+      {!isEdit && !fromFile && importedCard}
 
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.back()}>
