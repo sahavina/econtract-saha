@@ -58,6 +58,25 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
   const [saved, setSaved] = useState(contract.contentHtml ?? '');
   const dirty = draft !== saved;
 
+  const openPrint = async () => {
+    const url = `/print/contracts/${contract.id}`;
+    if (!dirty) {
+      window.open(url, '_blank', 'noopener');
+      return;
+    }
+    // Mở tab ngay trong thao tác bấm (tránh bị chặn popup), lưu xong mới điều hướng tới trang in.
+    const win = window.open('', '_blank');
+    try {
+      await save.mutateAsync(draft);
+      if (win) {
+        win.opener = null;
+        win.location.href = url;
+      }
+    } catch {
+      win?.close();
+    }
+  };
+
   const save = useMutation({
     meta: { silent: true },
     mutationFn: (html: string) =>
@@ -131,15 +150,8 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
             </Button>
           )}
           {html && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => {
-                setMode('preview');
-                // Đợi bản xem trước render rồi mở hộp thoại in (chọn "Lưu dưới dạng PDF").
-                setTimeout(() => window.print(), 100);
-              }}
-            >
+            // Mở trang in riêng ở tab mới; nội dung chưa lưu được lưu trước để bản in khớp bản đang soạn.
+            <Button size="sm" variant="outline" disabled={save.isPending} onClick={openPrint}>
               <Printer /> In / Lưu PDF
             </Button>
           )}

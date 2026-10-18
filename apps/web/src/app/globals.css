@@ -192,12 +192,17 @@
   .signature-script { font-family: var(--font-signature), cursive; }
 }
 
+/* In từ trang /print/contracts/[id]: lề trang do @page đảm nhận để mọi trang (không chỉ trang đầu) đều có lề 20mm. */
 @media print {
-  @page { size: A4; margin: 0; }
-  body * { visibility: hidden; }
-  .print-area,
-  .print-area * { visibility: visible; }
-  .print-area { position: absolute; inset: 0 auto auto 0; width: 100%; }
-  .print-area .a4-page { box-shadow: none; margin: 0; }
-  .print-area mark[data-missing] { background: none; color: inherit; }
+  @page { size: A4; margin: 20mm; }
+  html, body { background: #fff !important; }
+  .no-print { display: none !important; }
+  .print-area { padding: 0; background: none; border-radius: 0; overflow: visible; }
+  .a4-page { width: auto; max-width: none; min-height: 0; margin: 0; padding: 0; box-shadow: none; }
+  .contract-content tr,
+  .contract-content img { break-inside: avoid; }
+  .contract-content h1,
+  .contract-content h2,
+  .contract-content h3 { break-after: avoid; }
+  mark[data-missing] { background: none; color: inherit; }
 }

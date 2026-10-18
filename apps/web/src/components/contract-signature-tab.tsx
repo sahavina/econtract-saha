@@ -347,8 +347,10 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
           </div>
           <div className="flex gap-2">
             {request.status === 'COMPLETED' && (
-              <Button variant="outline" size="sm" onClick={() => window.print()}>
-                <Printer /> In / Lưu PDF
+              <Button variant="outline" size="sm" asChild>
+                <a href={`/print/contracts/${contract.id}?doc=signed`} target="_blank" rel="noopener">
+                  <Printer /> In / Lưu PDF
+                </a>
               </Button>
             )}
             {canManage && (
