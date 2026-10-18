@@ -104,7 +104,7 @@ docker compose -f docker-compose.prod.yml exec -T postgres pg_restore -U saha -d
 
 # File: đồng bộ bucket ra thư mục (hoặc sang một S3 khác)
 docker run --rm --network saha-econtract-prod_default -v "$PWD/backup/files:/backup" --entrypoint sh \
-  minio/mc:RELEASE.2025-04-16T18-13-26Z -c \
+  minio/minio:RELEASE.2025-04-22T22-12-26Z -c \
   'mc alias set src http://minio:9000 "$U" "$P" && mc mirror --overwrite src/econtract /backup' \
   -e U=<MINIO_ROOT_USER> -e P=<MINIO_ROOT_PASSWORD>
 ```
