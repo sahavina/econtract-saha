@@ -27,7 +27,7 @@ function textOf(node: unknown): string {
   return '';
 }
 
-/** Bảng chiếm hết bề ngang: cột có nội dung dài nhất co giãn ('*'), các cột khác vừa nội dung. */
+/** Bảng chiếm hết bề ngang: cột có nội dung dài nhất co giãn ('*'), các cột khác vừa nội dung; bảng ẩn viền thì không kẻ đường. */
 function fitTables(node: unknown) {
   if (Array.isArray(node)) return node.forEach(fitTables);
   if (!node || typeof node !== 'object') return;
@@ -40,11 +40,20 @@ function fitTables(node: unknown) {
     );
     const widest = len.indexOf(Math.max(...len));
     n.table.widths = len.map((_, c) => (c === widest ? '*' : 'auto'));
+    // Cột nhãn ngắn ("Tên cơ quan", "Mã số thuế", "ĐVT"…) không xuống dòng – pdfmake hay bóp cột 'auto' để nhường cột '*'.
+    body.forEach((row) =>
+      row.forEach((cell, c) => {
+        const x = cell as { colSpan?: number; noWrap?: boolean } | null;
+        if (c !== widest && len[c] <= 30 && x && typeof x === 'object' && !x.colSpan) x.noWrap = true;
+      }),
+    );
+    // Bảng đặt "Ẩn viền bảng" trong trình soạn thảo (class borderless) – html-to-pdfmake đưa class vào style.
+    const line = ([] as unknown[]).concat(n.style ?? []).includes('borderless') ? 0 : 0.5;
     n.layout = {
       hLineColor: () => BORDER,
       vLineColor: () => BORDER,
-      hLineWidth: () => 0.5,
-      vLineWidth: () => 0.5,
+      hLineWidth: () => line,
+      vLineWidth: () => line,
       paddingLeft: () => 4,
       paddingRight: () => 4,
       paddingTop: () => 2,

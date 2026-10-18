@@ -57,6 +57,8 @@ export function sanitizeContractHtml(html: string): string {
       h5: ['style'],
       h6: ['style'],
     },
+    // Bảng có thể ẩn viền (class "borderless") – chỉ cho đúng class này.
+    allowedClasses: { table: ['borderless'] },
     allowedStyles: {
       p: ALIGN,
       h1: ALIGN,

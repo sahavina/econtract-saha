@@ -156,6 +156,14 @@
   .contract-content th,
   .contract-content td { border: 1px solid var(--border); padding: 0.35em 0.5em; vertical-align: top; overflow-wrap: anywhere; }
   .contract-content th { background: var(--muted); font-weight: 600; text-align: left; }
+  /* Bảng ẩn viền (bảng thông tin các bên, khối chữ ký): không viền khi xem/in/xuất PDF;
+     trong trình soạn thảo vẫn hiện viền nét đứt mờ để dễ thao tác. */
+  .contract-content table.borderless th,
+  .contract-content table.borderless td,
+  .a4-page .contract-content table.borderless th,
+  .a4-page .contract-content table.borderless td { border-color: transparent; background: none; }
+  .contract-content.ProseMirror table.borderless th,
+  .contract-content.ProseMirror table.borderless td { border: 1px dashed color-mix(in oklch, var(--border) 80%, transparent); }
   .contract-content .selectedCell { background: color-mix(in oklch, var(--primary) 12%, transparent); }
   .contract-content mark[data-missing] {
     background: color-mix(in oklch, var(--destructive) 15%, transparent);

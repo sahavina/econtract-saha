@@ -39,6 +39,13 @@ describe('sanitizeContractHtml', () => {
       '<h2 style="text-align:center">Điều 1</h2><p><strong>A</strong> <a rel="noopener noreferrer" target="_blank">x</a> {{contract.code}}</p>',
     );
   });
+
+  it('keeps only the borderless class on tables', async () => {
+    const { sanitizeContractHtml } = await import('./sanitize-content.js');
+    expect(sanitizeContractHtml('<table class="borderless evil"><tbody><tr><td class="x">A</td></tr></tbody></table>')).toBe(
+      '<table class="borderless"><tbody><tr><td>A</td></tr></tbody></table>',
+    );
+  });
 });
 
 describe('extractVariables', () => {

@@ -3,7 +3,7 @@
 import { TEMPLATE_VARIABLES } from '@saha/shared';
 import TextAlign from '@tiptap/extension-text-align';
 import { Placeholder } from '@tiptap/extensions';
-import { TableKit } from '@tiptap/extension-table';
+import { Table, TableKit } from '@tiptap/extension-table';
 import { type Editor, EditorContent, useEditor, useEditorState } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import {
@@ -21,6 +21,7 @@ import {
   Minus,
   Redo2,
   Rows3,
+  SquareDashed,
   Strikethrough,
   Table as TableIcon,
   Trash2,
@@ -80,6 +81,20 @@ function ToolButton({
   );
 }
 
+/** Bảng có thể ẩn viền khi xem/in/xuất PDF (class "borderless"), ví dụ bảng thông tin các bên, khối chữ ký. */
+const ContractTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      borderless: {
+        default: false,
+        parseHTML: (el) => el.classList.contains('borderless'),
+        renderHTML: (attrs) => (attrs.borderless ? { class: 'borderless' } : {}),
+      },
+    };
+  },
+});
+
 function Toolbar({ editor, enableClauses }: { editor: Editor; enableClauses?: boolean }) {
   const [clauseOpen, setClauseOpen] = useState(false);
   const s = useEditorState({
@@ -96,6 +111,7 @@ function Toolbar({ editor, enableClauses }: { editor: Editor; enableClauses?: bo
       ordered: e.isActive('orderedList'),
       align: (['left', 'center', 'right', 'justify'] as const).find((a) => e.isActive({ textAlign: a })) ?? 'left',
       inTable: e.isActive('table'),
+      borderless: e.isActive('table', { borderless: true }),
       canUndo: e.can().undo(),
       canRedo: e.can().redo(),
     }),
@@ -183,6 +199,9 @@ function Toolbar({ editor, enableClauses }: { editor: Editor; enableClauses?: bo
           <DropdownMenuItem disabled={!s.inTable} onSelect={() => chain().addColumnAfter().run()}>
             <Columns3 /> Thêm cột
           </DropdownMenuItem>
+          <DropdownMenuItem disabled={!s.inTable} onSelect={() => chain().updateAttributes('table', { borderless: !s.borderless }).run()}>
+            <SquareDashed /> {s.borderless ? 'Hiện viền bảng' : 'Ẩn viền bảng'}
+          </DropdownMenuItem>
           <DropdownMenuItem disabled={!s.inTable} onSelect={() => chain().deleteRow().run()}>
             <Trash2 /> Xóa dòng
           </DropdownMenuItem>
@@ -249,7 +268,8 @@ export function ContractEditor({
     extensions: [
       StarterKit.configure({ link: { openOnClick: false } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
-      TableKit.configure({ table: { resizable: false } }),
+      TableKit.configure({ table: false }),
+      ContractTable.configure({ resizable: false }),
       Placeholder.configure({ placeholder: 'Soạn nội dung hợp đồng… Dùng "Chèn biến" để thêm dữ liệu tự động.' }),
     ],
     content: value,
