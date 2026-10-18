@@ -47,6 +47,30 @@ Khi `migrate` in "Đã tạo doanh nghiệp … và Super Admin …", mở `http
 Không chạy `prisma:seed` trên production: seed tạo dữ liệu demo với mật khẩu mặc định và sẽ tự từ chối khi
 `NODE_ENV=production`.
 
+### Máy chủ đã có reverse proxy (Caddy/nginx giữ cổng 80/443)
+
+Dùng thêm `docker-compose.external-proxy.yml`: bỏ service caddy, không mở cổng console MinIO, web chỉ nghe
+`127.0.0.1:${WEB_PORT:-3300}`.
+
+```bash
+docker compose -f docker-compose.prod.yml -f docker-compose.external-proxy.yml --env-file .env.production up -d --build
+```
+
+Ví dụ với Caddy hệ thống (file riêng, ví dụ `/etc/caddy/local.d/econtract.caddy` nếu Caddyfile có `import`):
+
+```
+hopdong.example.vn {
+	encode zstd gzip
+	request_body {
+		max_size 25MB
+	}
+	reverse_proxy 127.0.0.1:3300
+}
+```
+
+Kiểm tra bằng `caddy validate --config /etc/caddy/Caddyfile` rồi `systemctl reload caddy`. Nếu tên miền đi qua Cloudflare,
+để chế độ DNS only (hoặc cấu hình `trusted_proxies` cho dải IP Cloudflare) để nhật ký ghi đúng IP người dùng.
+
 ## 3. Kiểm tra sức khỏe
 
 | Endpoint | Ý nghĩa |

@@ -1,0 +1,16 @@
+# Bổ sung cho docker-compose.prod.yml khi máy chủ ĐÃ có reverse proxy riêng (Caddy/nginx của hệ thống giữ cổng 80/443):
+#   docker compose -f docker-compose.prod.yml -f docker-compose.external-proxy.yml --env-file .env.production up -d --build
+# - Không chạy service caddy của compose.
+# - Không mở cổng console MinIO ra host (tránh trùng cổng với dịch vụ khác).
+# - Web chỉ lắng nghe trên 127.0.0.1:${WEB_PORT}; proxy hệ thống chuyển tên miền vào cổng này và PHẢI ghi đè
+#   X-Forwarded-For bằng IP thật của client (Caddy mặc định làm vậy). Xem docs/DEPLOYMENT.md.
+services:
+  caddy:
+    profiles: ["disabled"]
+
+  minio:
+    ports: !reset []
+
+  web:
+    ports:
+      - "127.0.0.1:${WEB_PORT:-3300}:3000"
