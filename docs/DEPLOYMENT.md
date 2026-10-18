@@ -109,6 +109,24 @@ docker run --rm --network saha-econtract-prod_default -v "$PWD/backup/files:/bac
   -e U=<MINIO_ROOT_USER> -e P=<MINIO_ROOT_PASSWORD>
 ```
 
+### Sao lưu tự động (`infra/backup/econtract-backup.sh`)
+
+Script chạy bằng root, mặc định cho cài đặt ở `/srv/econtract` với `docker compose -p econtract` (đổi bằng biến
+`APP_DIR`, `ENV_FILE`, `DEST`, `KEEP_DAYS`, `PROJECT`):
+
+- `DEST/db/<thời điểm>.dump` – `pg_dump -Fc`, chỉ giữ khi `pg_restore --list` đọc lại được;
+- `DEST/files/` – đồng bộ dồn bucket MinIO (không xóa ở bản sao);
+- `DEST/config/env.production.<thời điểm>` – bản sao cấu hình (chứa bí mật, thư mục chỉ root đọc);
+- xóa dump/cấu hình cũ hơn `KEEP_DAYS` (mặc định 14); `DEST/LAST_SUCCESS` ghi lần chạy thành công gần nhất.
+
+```
+# /etc/cron.d/econtract-backup
+0 2 * * * root /srv/econtract/bin/econtract-backup.sh >> /var/log/econtract-backup.log 2>&1
+```
+
+Khôi phục DB từ một bản dump: `pg_restore -U saha -d saha_econtract --clean --if-exists --no-owner < <file>.dump`
+(chạy trong container postgres, nên dừng `api` trước); file: `mc mirror` ngược từ `DEST/files` vào bucket.
+
 Đưa bản sao lưu ra ngoài máy chủ (khác vùng/nhà cung cấp) và thử khôi phục định kỳ.
 
 ## 6. Lưu trữ file
