@@ -39,12 +39,14 @@ function fitTables(node: unknown) {
       Math.max(0, ...body.map((r) => (r[c] && !(r[c] as { colSpan?: number }).colSpan ? textOf(r[c]).length : 0))),
     );
     const widest = len.indexOf(Math.max(...len));
-    n.table.widths = len.map((_, c) => (c === widest ? '*' : 'auto'));
+    const preset = n.table.widths;
+    const keep = Array.isArray(preset) && preset.length === cols && preset.every((w) => typeof w === 'string' && w.endsWith('%'));
+    if (!keep) n.table.widths = len.map((_, c) => (c === widest ? '*' : 'auto'));
     // Cột nhãn ngắn ("Tên cơ quan", "Mã số thuế", "ĐVT"…) không xuống dòng – pdfmake hay bóp cột 'auto' để nhường cột '*'.
     body.forEach((row) =>
       row.forEach((cell, c) => {
         const x = cell as { colSpan?: number; noWrap?: boolean } | null;
-        if (c !== widest && len[c] <= 30 && x && typeof x === 'object' && !x.colSpan) x.noWrap = true;
+        if (!keep && c !== widest && len[c] <= 30 && x && typeof x === 'object' && !x.colSpan) x.noWrap = true;
       }),
     );
     // Bảng đặt "Ẩn viền bảng" trong trình soạn thảo (class borderless) – html-to-pdfmake đưa class vào style.
@@ -63,6 +65,19 @@ function fitTables(node: unknown) {
     return;
   }
   for (const v of Object.values(n)) if (v && typeof v === 'object') fitTables(v);
+}
+
+/** Bảng có độ rộng cột (px) trong <colgroup> ⇒ ghi tỉ lệ % vào data-pdfmake để PDF giữ đúng tỉ lệ như trên màn hình. */
+function withColumnPercents(html: string): string {
+  if (!html.includes('<colgroup')) return html;
+  const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+  for (const table of Array.from(doc.querySelectorAll('table'))) {
+    const cols = Array.from(table.querySelectorAll(':scope > colgroup > col')).map((c) => parseFloat((c as HTMLElement).style.width));
+    const total = cols.reduce((a, b) => a + b, 0);
+    if (!cols.length || cols.some((w) => !(w > 0))) continue;
+    table.setAttribute('data-pdfmake', JSON.stringify({ widths: cols.map((w) => `${((w / total) * 100).toFixed(2)}%`) }));
+  }
+  return doc.body.firstElementChild?.innerHTML ?? html;
 }
 
 function signatureBlock(s: DocSigner): Content {
@@ -150,7 +165,13 @@ export async function downloadContractPdf({ fileName, title, html, signed }: Con
   });
 
   // Ô highlight biến thiếu dữ liệu chỉ có ý nghĩa trên màn hình.
-  const clean = html.replace(/<mark\b[^>]*>/g, '').replace(/<\/mark>/g, '');
+  // Dấu câu toàn chiều rộng (vd "：" trong file Word gõ bằng bộ gõ Trung/Nhật) không có trong font Tinos ⇒ đổi về ký tự thường.
+  const clean = withColumnPercents(
+    html
+      .replace(/<mark\b[^>]*>/g, '')
+      .replace(/<\/mark>/g, '')
+      .replace(/[！-～]/g, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0)),
+  );
   const body = htmlToPdfmake(clean, {
     window,
     removeExtraBlanks: true,

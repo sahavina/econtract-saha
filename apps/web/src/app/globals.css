@@ -164,6 +164,20 @@
   .a4-page .contract-content table.borderless td { border-color: transparent; background: none; }
   .contract-content.ProseMirror table.borderless th,
   .contract-content.ProseMirror table.borderless td { border: 1px dashed color-mix(in oklch, var(--border) 80%, transparent); }
+  /* Kéo viền cột để đổi độ rộng (trình soạn thảo); độ rộng lưu trong <colgroup>. */
+  .contract-content .tableWrapper { overflow-x: auto; }
+  .contract-content th,
+  .contract-content td { position: relative; }
+  .contract-content .column-resize-handle {
+    position: absolute;
+    top: 0;
+    right: -2px;
+    bottom: -2px;
+    width: 4px;
+    background: var(--primary);
+    pointer-events: none;
+  }
+  .contract-content.resize-cursor { cursor: col-resize; }
   .contract-content .selectedCell { background: color-mix(in oklch, var(--primary) 12%, transparent); }
   .contract-content mark[data-missing] {
     background: color-mix(in oklch, var(--destructive) 15%, transparent);

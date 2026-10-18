@@ -213,21 +213,34 @@ function hasBorders(tbl: Element): boolean {
   );
 }
 
+/** Độ rộng các cột (px) từ <w:tblGrid>; null nếu file không khai báo đủ. */
+function gridWidths(tbl: Element): number[] | null {
+  const cols = children(child(tbl, 'tblGrid') ?? tbl, 'gridCol').map((c) => Math.round(Number(c.getAttributeNS(W, 'w') ?? c.getAttribute('w:w')) / 15));
+  return cols.length && cols.every((w) => w > 0) ? cols : null;
+}
+
 function blockHtml(el: Element): string {
   if (el.localName === 'p') return pHtml(el);
   if (el.localName !== 'tbl') return '';
+  const widths = gridWidths(el);
   const rows = children(el, 'tr').map((tr) => {
+    let col = 0;
     const cells = children(tr, 'tc').map((tc) => {
       const pr = child(tc, 'tcPr');
       const span = Number(val(child(pr, 'gridSpan')) ?? 1);
+      // colwidth: trình soạn thảo (Tiptap) đọc thuộc tính này để giữ độ rộng cột khi sửa và lưu lại.
+      const cw = widths?.slice(col, col + span);
+      col += span;
+      const colwidth = cw && cw.length === span ? ` colwidth="${cw.join(',')}"` : '';
       const vMerge = child(pr, 'vMerge');
       // Ô gộp dọc (phần tiếp theo) ⇒ để trống, giữ đúng số cột.
       const inner = vMerge && val(vMerge) !== 'restart' ? '<p></p>' : Array.from(tc.children).filter((c) => c.namespaceURI === W).map(blockHtml).join('') || '<p></p>';
-      return `<td${span > 1 ? ` colspan="${span}"` : ''}>${inner}</td>`;
+      return `<td${span > 1 ? ` colspan="${span}"` : ''}${colwidth}>${inner}</td>`;
     });
     return `<tr>${cells.join('')}</tr>`;
   });
-  return `<table${hasBorders(el) ? '' : ' class="borderless"'}><tbody>${rows.join('')}</tbody></table>`;
+  const colgroup = widths ? `<colgroup>${widths.map((w) => `<col style="width: ${w}px">`).join('')}</colgroup>` : '';
+  return `<table${hasBorders(el) ? '' : ' class="borderless"'}>${colgroup}<tbody>${rows.join('')}</tbody></table>`;
 }
 
 export interface DocxContent {

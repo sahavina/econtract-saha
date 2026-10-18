@@ -269,7 +269,8 @@ export function ContractEditor({
       StarterKit.configure({ link: { openOnClick: false } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TableKit.configure({ table: false }),
-      ContractTable.configure({ resizable: false }),
+      // Kéo viền phải của cột để đổi độ rộng; độ rộng lưu trong <colgroup> và áp dụng khi xem, in, xuất PDF.
+      ContractTable.configure({ resizable: true, cellMinWidth: 40, lastColumnResizable: false }),
       Placeholder.configure({ placeholder: 'Soạn nội dung hợp đồng… Dùng "Chèn biến" để thêm dữ liệu tự động.' }),
     ],
     content: value,
