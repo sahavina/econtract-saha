@@ -26,24 +26,18 @@ USER node
 # Gọi thẳng binary: không cần corepack/pnpm khi chạy bằng user node.
 CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node_modules/.bin/tsx prisma/bootstrap.ts"]
 
-# ── Chỉ dependency production ──
-FROM base AS prod-deps
+# ── Runtime ──
+# Cài dependency production ngay tại stage này thay vì COPY cây node_modules của pnpm giữa các stage
+# (snapshotter containerd, ví dụ Rancher Desktop, lỗi "failed to commit … snapshot does not exist" khi chép cây đó).
+FROM base AS runtime
+WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm install --frozen-lockfile --prod --ignore-scripts --filter @saha/api...
-
-# ── Runtime ──
-FROM node:${NODE_VERSION} AS runtime
 ENV NODE_ENV=production PORT=4000 STORAGE_DIR=/data/storage
-WORKDIR /app
-# Giữ nguyên cấu trúc monorepo để các symlink workspace của pnpm (tương đối) còn đúng.
-COPY --from=prod-deps /repo/node_modules ./node_modules
-COPY --from=prod-deps /repo/apps/api/node_modules ./apps/api/node_modules
-COPY --from=prod-deps /repo/packages/shared/node_modules ./packages/shared/node_modules
-COPY --from=build /repo/packages/shared/package.json ./packages/shared/
 COPY --from=build /repo/packages/shared/dist ./packages/shared/dist
 COPY --from=build /repo/apps/api/package.json ./apps/api/
 COPY --from=build /repo/apps/api/dist ./apps/api/dist
