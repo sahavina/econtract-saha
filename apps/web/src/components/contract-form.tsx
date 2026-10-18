@@ -318,6 +318,8 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
       if (err instanceof ApiError && err.errors.length) {
         for (const e of err.errors) setError(e.field as keyof FormValues, { message: e.message });
       }
+      // Trùng mã hợp đồng ⇒ báo ngay tại ô "Mã hợp đồng".
+      if (err instanceof ApiError && err.status === 409 && err.message.startsWith('Mã hợp đồng')) setError('code', { message: err.message });
       toast.error(err instanceof Error ? err.message : 'Lưu thất bại');
     },
   });
@@ -362,6 +364,16 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     setValue(`parties.${index}.partnerId`, '');
   };
 
+  /** Mã nhập tay/điền từ file đã được dùng (kể cả hợp đồng trong thùng rác) ⇒ báo ngay tại ô mã, không đợi đến lúc lưu. */
+  const checkCode = async (raw: string) => {
+    const code = raw.trim();
+    if (!code || isEdit) return;
+    const r = await api<{ available: boolean; message?: string }>('/contracts/code-check', { query: { code } }).catch(() => null);
+    if (!r || form.getValues('code').trim() !== code) return;
+    if (r.available) form.clearErrors('code');
+    else setError('code', { message: r.message ?? `Mã hợp đồng "${code}" đã tồn tại` });
+  };
+
   /**
    * Điền sẵn form từ file Word (.docx): chỉ điền ô còn trống, không ghi đè thông tin đã nhập.
    * Bên có MST trùng doanh nghiệp mình ⇒ đánh dấu "Bên nội bộ"; trùng đối tác trong danh mục ⇒ liên kết đối tác.
@@ -381,6 +393,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     if (x.code && isBlank(form.getValues('code'))) {
       setValue('code', x.code);
       filled.push('số hợp đồng');
+      void checkCode(x.code);
     }
     if (x.signDate && !form.getValues('expectedSignDate')) {
       setValue('expectedSignDate', x.signDate);
@@ -505,7 +518,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
             <Input
               disabled={isEdit}
               placeholder={selectedType ? `Tự sinh theo mẫu ${selectedType.codePattern}` : 'Để trống để tự sinh (HD-{YYYY}-{SEQUENCE:5})'}
-              {...register('code')}
+              {...register('code', { onBlur: (e) => void checkCode(e.target.value) })}
             />
           </Field>
           <Field label="Tên hợp đồng *" error={errors.title?.message} className="md:col-span-2">

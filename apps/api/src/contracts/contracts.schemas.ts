@@ -111,5 +111,8 @@ export const contractQuerySchema = paginationSchema.extend({
 });
 export type ContractQuery = z.infer<typeof contractQuerySchema>;
 
+export const contractCodeCheckSchema = z.object({ code: z.string().trim().min(1).max(60) });
+export type ContractCodeCheck = z.infer<typeof contractCodeCheckSchema>;
+
 export const contractExportSchema = contractQuerySchema.omit({ page: true, pageSize: true });
 export type ContractExportQuery = z.infer<typeof contractExportSchema>;

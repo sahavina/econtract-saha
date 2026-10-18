@@ -221,10 +221,26 @@ export class ContractsService {
       } catch (err) {
         const isCodeConflict = err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002';
         if (!isCodeConflict) throw err;
-        if (input.code) throw new ConflictException(`Mã hợp đồng "${input.code}" đã tồn tại`);
+        if (input.code) throw new ConflictException((await this.codeCheck(user, input.code)).message ?? `Mã hợp đồng "${input.code}" đã tồn tại`);
       }
     }
     throw new ConflictException('Không thể sinh mã hợp đồng duy nhất, vui lòng thử lại');
+  }
+
+  /** Mã đã dùng ⇒ kèm thông báo (mã của hợp đồng trong thùng rác vẫn bị giữ để khôi phục được). Không trả thông tin hợp đồng kia. */
+  async codeCheck(user: AuthUser, code: string) {
+    const existing = await this.prisma.contract.findUnique({
+      where: { tenantId_code: { tenantId: user.tenantId, code } },
+      select: { deletedAt: true },
+    });
+    if (!existing) return { available: true as const };
+    return {
+      available: false as const,
+      inTrash: !!existing.deletedAt,
+      message: existing.deletedAt
+        ? `Mã hợp đồng "${code}" đang thuộc một hợp đồng trong thùng rác. Khôi phục hợp đồng đó hoặc dùng mã khác.`
+        : `Mã hợp đồng "${code}" đã được dùng cho hợp đồng khác. Hãy dùng mã khác hoặc để trống để hệ thống tự sinh.`,
+    };
   }
 
   async update(user: AuthUser, id: string, input: ContractUpdate) {

@@ -6,6 +6,8 @@ import type { AuthUser } from '../common/auth-user.js';
 import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../common/decorators.js';
 import { ZodPipe } from '../common/zod.pipe.js';
 import {
+  type ContractCodeCheck,
+  contractCodeCheckSchema,
   type ContractCreate,
   contractCreateSchema,
   type ContractExportQuery,
@@ -42,6 +44,13 @@ export class ContractsController {
   @RequireAnyPermission(...VIEW)
   lookups(@CurrentUser() user: AuthUser) {
     return this.contracts.lookups(user);
+  }
+
+  /** Kiểm tra mã hợp đồng nhập tay/điền từ file đã được dùng chưa (kể cả hợp đồng trong thùng rác). */
+  @Get('code-check')
+  @RequireAnyPermission(PERMISSIONS.CONTRACT_CREATE, PERMISSIONS.CONTRACT_UPDATE)
+  codeCheck(@CurrentUser() user: AuthUser, @Query(new ZodPipe(contractCodeCheckSchema)) query: ContractCodeCheck) {
+    return this.contracts.codeCheck(user, query.code);
   }
 
   @Get('export')
