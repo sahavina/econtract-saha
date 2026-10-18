@@ -1,5 +1,6 @@
 'use client';
 
+import { extractContractFields } from '@saha/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CloudDownload, FileText, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react';
@@ -18,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useCompanyProfile } from '@/lib/company';
+import { readDocxBlocks } from '@/lib/docx';
 import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
@@ -360,6 +362,69 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     setValue(`parties.${index}.partnerId`, '');
   };
 
+  /**
+   * Điền sẵn form từ file Word (.docx): chỉ điền ô còn trống, không ghi đè thông tin đã nhập.
+   * Bên có MST trùng doanh nghiệp mình ⇒ đánh dấu "Bên nội bộ"; trùng đối tác trong danh mục ⇒ liên kết đối tác.
+   */
+  const applyDocx = async (file: File) => {
+    const blocks = await readDocxBlocks(file);
+    if (!blocks) return toast.error(`Không đọc được nội dung ${file.name} – hãy nhập thông tin thủ công`);
+    const x = extractContractFields(blocks);
+    const filled: string[] = [];
+    const isBlank = (v: string) => !v.trim() || v.trim() === '0';
+    const fileTitle = file.name.replace(/\.[^.]+$/, '').slice(0, 500);
+    const title = form.getValues('title');
+    if (x.title && (isBlank(title) || title === fileTitle)) {
+      setValue('title', x.title.slice(0, 500), { shouldValidate: true });
+      filled.push('tên hợp đồng');
+    }
+    if (x.code && isBlank(form.getValues('code'))) {
+      setValue('code', x.code);
+      filled.push('số hợp đồng');
+    }
+    if (x.signDate && !form.getValues('expectedSignDate')) {
+      setValue('expectedSignDate', x.signDate);
+      filled.push('ngày ký');
+    }
+    if (x.value && isBlank(form.getValues('value'))) {
+      setValue('value', x.value, { shouldValidate: true });
+      if (x.currency) setValue('currency', x.currency);
+      filled.push('giá trị');
+    }
+    if (x.vatRate !== undefined && !form.getValues('vatRate')) {
+      setValue('vatRate', String(x.vatRate));
+      filled.push('VAT');
+    }
+    let partiesFilled = 0;
+    for (const p of x.parties) {
+      let index = form.getValues('parties').findIndex((q) => q.role === p.role);
+      if (index < 0) {
+        parties.append(emptyParty(p.role));
+        index = form.getValues('parties').length - 1;
+      }
+      if (form.getValues(`parties.${index}.name`).trim()) continue;
+      for (const field of ['name', 'taxCode', 'address', 'email', 'phone', 'representative', 'position', 'bankAccount'] as const) {
+        const v = p[field];
+        if (v && !form.getValues(`parties.${index}.${field}`).trim()) {
+          setValue(`parties.${index}.${field}`, v, { shouldValidate: field === 'name' || field === 'email' });
+        }
+      }
+      partiesFilled++;
+      const tax = p.taxCode?.replace(/\s/g, '');
+      if (!tax) continue;
+      if (company.data?.taxCode && company.data.taxCode.replace(/\s/g, '') === tax) {
+        setValue(`parties.${index}.isInternal`, true);
+      } else {
+        const found = await api<Paginated<Partner>>('/partners', { query: { q: tax, pageSize: 5 } }).catch(() => null);
+        const partner = found?.items.find((q) => q.taxCode?.replace(/\s/g, '') === tax);
+        if (partner) setValue(`parties.${index}.partnerId`, partner.id);
+      }
+    }
+    if (partiesFilled) filled.push(`${partiesFilled} bên tham gia`);
+    if (filled.length) toast.success(`Đã điền từ ${file.name}: ${filled.join(', ')}`, { description: 'Kiểm tra lại thông tin trước khi lưu.', duration: 8000 });
+    else toast.info(`Không tìm thấy thông tin để điền từ ${file.name}`);
+  };
+
   const contractTypeId = useWatch({ control, name: 'contractTypeId' });
   const templateId = useWatch({ control, name: 'templateId' });
   const templates = useQuery({
@@ -382,6 +447,9 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
         if (added[0] && !form.getValues('title').trim()) {
           setValue('title', added[0].name.replace(/\.[^.]+$/, '').slice(0, 500), { shouldValidate: true });
         }
+        // File Word: đọc nội dung để điền sẵn thông tin chung và các bên.
+        const docx = added.find((x) => /\.docx$/i.test(x.name));
+        if (docx && !isEdit) void applyDocx(docx);
       }}
     />
   );
