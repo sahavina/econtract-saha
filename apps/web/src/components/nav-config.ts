@@ -13,6 +13,7 @@ import {
   CalendarX2,
   FileCheck2,
   FilePlus2,
+  FileUp,
   FileX2,
   ListChecks,
   Wallet,
@@ -76,6 +77,7 @@ export const NAV: NavGroup[] = [
     label: 'Soạn thảo',
     items: [
       { title: 'Tạo hợp đồng', icon: FilePen, href: '/contracts/new', permissions: [PERMISSIONS.CONTRACT_CREATE] },
+      { title: 'Tạo hợp đồng từ file', icon: FileUp, href: '/contracts/new?from=file', permissions: [PERMISSIONS.CONTRACT_CREATE] },
       { title: 'Mẫu hợp đồng', icon: ScrollText, href: '/templates', permissions: [PERMISSIONS.TEMPLATE_VIEW] },
       { title: 'Thư viện điều khoản', icon: ClipboardCheck, href: '/clauses', permissions: [PERMISSIONS.TEMPLATE_VIEW] },
     ],

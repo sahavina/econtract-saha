@@ -6,6 +6,7 @@ import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { type SignatureMark, SignaturePad } from '@/components/signature-pad';
 import { SignedDocument } from '@/components/signed-document';
+import { SigningDocuments } from '@/components/signing-documents';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -49,6 +50,7 @@ export function PublicSign() {
   const [rejecting, setRejecting] = useState(false);
   const [reason, setReason] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [opened, setOpened] = useState<Set<string>>(new Set());
 
   const onError = (err: unknown) => setError(err instanceof Error ? err.message : 'Có lỗi xảy ra');
   const sendOtp = useMutation({
@@ -108,6 +110,7 @@ export function PublicSign() {
   const v = view.data;
   const canAct = v.request.status === 'IN_PROGRESS' && v.signer.status === 'PENDING';
   const done = v.signer.status === 'SIGNED';
+  const unopened = v.documents.filter((d) => !opened.has(d.id)).length;
 
   return (
     <Shell org={v.organization}>
@@ -137,8 +140,11 @@ export function PublicSign() {
         <p className="rounded-md bg-muted px-4 py-3 text-sm">Yêu cầu ký đã kết thúc ({v.request.status === 'EXPIRED' ? 'hết hạn' : 'đã đóng'}).</p>
       )}
 
+      <SigningDocuments token={token} documents={v.documents} onOpened={(id) => setOpened((x) => new Set(x).add(id))} />
+
       <SignedDocument snapshot={v.request.contentSnapshot} documentHash={v.request.documentHash} signers={v.signers} showCertificate={false} />
       <p className="text-xs break-all text-muted-foreground">Mã băm SHA-256 của văn bản: {v.request.documentHash}</p>
+
 
       {canAct && !rejecting && (
         <Card>
@@ -158,6 +164,11 @@ export function PublicSign() {
             </div>
             {otpInfo && <p className="text-sm text-muted-foreground">{otpInfo}</p>}
             <SignaturePad defaultName={v.signer.name} onChange={setMark} />
+            {unopened > 0 && (
+              <p className="rounded-md bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+                Bạn chưa mở {unopened}/{v.documents.length} tài liệu hợp đồng ở trên. Nên đọc toàn bộ tài liệu trước khi ký.
+              </p>
+            )}
             <label className="flex items-start gap-2 text-sm">
               <Checkbox className="mt-0.5" checked={consent} onCheckedChange={(c) => setConsent(!!c)} />
               Tôi đã đọc, đồng ý với nội dung hợp đồng và đồng ý ký bằng phương thức điện tử; chữ ký này có giá trị như chữ ký tay.

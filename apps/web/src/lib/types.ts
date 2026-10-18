@@ -329,6 +329,17 @@ export interface PublicSignView {
   request: { status: SignatureRequestStatus; expiresAt: string; documentHash: string; message: string | null; contentSnapshot: string };
   signer: { id: string; name: string; email: string; status: SignerStatus; otpSentAt: string | null };
   signers: { id: string; order: number; name: string; title: string | null; partyRole: PartyRole | null; status: SignerStatus; signedAt: string | null; signatureImage: string | null }[];
+  /** Tài liệu đính kèm đã đóng băng khi gửi ký. */
+  documents: PublicSignDocument[];
+}
+
+export interface PublicSignDocument {
+  id: string;
+  fileName: string;
+  version: number;
+  size: number;
+  mimeType: string;
+  sha256: string;
 }
 
 // ───────── Quản trị ─────────

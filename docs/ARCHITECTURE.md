@@ -95,6 +95,12 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Bằng chứng: mỗi người ký lưu thời điểm, IP, user-agent, phương thức, mã băm đã ký; chứng thư hiển thị trên bản đã ký;
   nhật ký ghi cả hành động của người ký bên ngoài (`AuditService.logExternal`). Không được xóa tài liệu sau khi ký xong;
   khóa thay đổi tài liệu khi đang chờ ký.
+- Hợp đồng chỉ gồm tệp tải lên (không soạn nội dung) ký được như thường: snapshot là bảng tài liệu đính kèm. Trang ký công khai
+  liệt kê đúng các tệp đã đóng băng (khớp cả tên, phiên bản, SHA-256 – `frozenAttachments`) qua
+  `GET /public/sign/:token/documents/:id`; đối tác xem PDF/ảnh ngay trên trang, tải bản gốc, trình duyệt tự đối chiếu SHA-256
+  với mã đã đóng băng; mỗi lần mở ghi nhật ký `contract.signature_document_view`. Trang nhắc (không chặn) nếu chưa mở hết tệp.
+- Tạo hợp đồng từ tệp: `/contracts/new?from=file` (menu "Tạo hợp đồng từ file") – chọn/kéo thả tệp ngay trên form, tạo hợp đồng
+  rồi tải từng tệp lên (tệp lỗi được báo riêng, hợp đồng vẫn giữ), mở tab Tài liệu. Form tạo thường cũng có ô đính kèm tùy chọn.
 - Email: `MailService` gửi qua SMTP (`SMTP_HOST`, Mailpit trong docker-compose); dev không có SMTP thì ghi email ra log API.
   Production bắt buộc cấu hình SMTP.
 - **Chưa có**: chữ ký số có chứng thư CA (VNPT-CA, Viettel-CA, FPT-CA…), dấu thời gian (TSA), xuất PDF/A có nhúng chữ ký phía server.

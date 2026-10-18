@@ -1,12 +1,25 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Query, Req } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  Param,
+  ParseUUIDPipe,
+  Post,
+  Query,
+  Req,
+  Res,
+  StreamableFile,
+} from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { PERMISSIONS } from '@saha/shared';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { z } from 'zod';
 import type { AuthUser } from '../common/auth-user.js';
 import { CurrentUser, Public, RequireAnyPermission, RequirePermissions } from '../common/decorators.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { setFileHeaders } from '../documents/send-file.js';
 import {
   type CreateSignatureInput,
   createSignatureSchema,
@@ -112,6 +125,21 @@ export class SignaturesController {
   @Throttle({ default: { limit: 60, ttl: 60_000 } })
   view(@Param('token', tokenPipe) token: string) {
     return this.signatures.publicView(token);
+  }
+
+  /** Tài liệu đính kèm đã đóng băng khi gửi ký – đối tác xem/tải để đọc trước khi ký. */
+  @Public()
+  @Get('public/sign/:token/documents/:documentId')
+  @Throttle({ default: { limit: 30, ttl: 60_000 } })
+  async document(
+    @Param('token', tokenPipe) token: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { doc, stream } = await this.signatures.publicDocument(token, documentId, meta(req));
+    setFileHeaders(res, doc);
+    return new StreamableFile(stream);
   }
 
   @Public()

@@ -11,23 +11,16 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, downloadFile } from '@/lib/api';
+import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { formatDateTime } from '@/lib/format';
 import type { ContractDocument } from '@/lib/types';
 
-const ACCEPT = '.pdf,.docx,.xlsx,.png,.jpg,.jpeg';
-const MAX_BYTES = 20 * 1024 * 1024;
 
 const SCAN_LABELS: Record<ContractDocument['scanStatus'], { label: string; variant: 'secondary' | 'outline' | 'destructive' }> = {
   NOT_SCANNED: { label: 'Chưa quét', variant: 'outline' },
   CLEAN: { label: 'An toàn', variant: 'secondary' },
   INFECTED: { label: 'Nhiễm mã độc', variant: 'destructive' },
 };
-
-function formatSize(bytes: number) {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
-}
 
 export function ContractDocumentsTab({
   contractId,
@@ -51,11 +44,7 @@ export function ContractDocumentsTab({
   };
 
   const upload = useMutation({
-    mutationFn: (file: File) => {
-      const fd = new FormData();
-      fd.append('file', file);
-      return api<ContractDocument>(`/contracts/${contractId}/documents`, { method: 'POST', formData: fd });
-    },
+    mutationFn: (file: File) => uploadContractDocument(contractId, file),
     onSuccess: (d) => {
       invalidate();
       toast.success(`Đã tải lên ${d.fileName} (phiên bản ${d.version})`);
@@ -72,7 +61,7 @@ export function ContractDocumentsTab({
 
   const onFiles = async (files: FileList | null) => {
     for (const file of Array.from(files ?? [])) {
-      if (file.size > MAX_BYTES) {
+      if (file.size > DOCUMENT_MAX_BYTES) {
         toast.error(`${file.name}: vượt quá 20 MB`);
         continue;
       }
@@ -85,7 +74,7 @@ export function ContractDocumentsTab({
     <div className="space-y-3">
       {canManage && (
         <div className="flex flex-wrap items-center gap-3">
-          <input ref={input} type="file" accept={ACCEPT} multiple className="hidden" onChange={(e) => onFiles(e.target.files)} aria-label="Chọn tài liệu" />
+          <input ref={input} type="file" accept={DOCUMENT_ACCEPT} multiple className="hidden" onChange={(e) => onFiles(e.target.files)} aria-label="Chọn tài liệu" />
           <Button onClick={() => input.current?.click()} disabled={upload.isPending}>
             {upload.isPending ? <Loader2 className="animate-spin" /> : <Upload />} Tải lên tài liệu
           </Button>
@@ -123,7 +112,7 @@ export function ContractDocumentsTab({
                     </span>
                   </TableCell>
                   <TableCell>v{d.version}</TableCell>
-                  <TableCell className="whitespace-nowrap tabular-nums">{formatSize(d.size)}</TableCell>
+                  <TableCell className="whitespace-nowrap tabular-nums">{formatFileSize(d.size)}</TableCell>
                   <TableCell>
                     <code className="text-xs" title={d.sha256}>
                       {d.sha256.slice(0, 12)}…

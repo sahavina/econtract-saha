@@ -154,7 +154,7 @@
   .contract-content a { color: var(--primary); text-decoration: underline; }
   .contract-content table { width: 100%; border-collapse: collapse; table-layout: fixed; }
   .contract-content th,
-  .contract-content td { border: 1px solid var(--border); padding: 0.35em 0.5em; vertical-align: top; }
+  .contract-content td { border: 1px solid var(--border); padding: 0.35em 0.5em; vertical-align: top; overflow-wrap: anywhere; }
   .contract-content th { background: var(--muted); font-weight: 600; text-align: left; }
   .contract-content .selectedCell { background: color-mix(in oklch, var(--primary) 12%, transparent); }
   .contract-content mark[data-missing] {

@@ -19,6 +19,7 @@ import { memoryStorage } from 'multer';
 import type { AuthUser } from '../common/auth-user.js';
 import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../common/decorators.js';
 import { DocumentsService } from './documents.service.js';
+import { setFileHeaders } from './send-file.js';
 import { MAX_UPLOAD_BYTES } from './file-types.js';
 
 @ApiTags('Contract documents')
@@ -57,14 +58,7 @@ export class DocumentsController {
     @Res({ passthrough: true }) res: Response,
   ) {
     const { doc, stream } = await this.documents.getForDownload(user, contractId, documentId);
-    const ascii = doc.fileName.replace(/[^\x20-\x7e]/g, '_').replace(/"/g, '');
-    res.setHeader('Content-Type', doc.mimeType);
-    res.setHeader(
-      'Content-Disposition',
-      `attachment; filename="${ascii}"; filename*=UTF-8''${encodeURIComponent(doc.fileName)}`,
-    );
-    res.setHeader('Content-Length', String(doc.size));
-    res.setHeader('X-Content-SHA256', doc.sha256);
+    setFileHeaders(res, doc);
     return new StreamableFile(stream);
   }
 

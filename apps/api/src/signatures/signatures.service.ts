@@ -18,6 +18,7 @@ import { ContractsService } from '../contracts/contracts.service.js';
 import { MailService } from '../mail/mail.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { StorageNotFoundError, StorageService } from '../storage/storage.service.js';
 import type {
   CreateSignatureInput,
   ExternalSignInput,
@@ -66,6 +67,7 @@ export class SignaturesService {
     private readonly mail: MailService,
     private readonly config: ConfigService<Env, true>,
     private readonly notifications: NotificationsService,
+    private readonly storage: StorageService,
   ) {}
 
   private appUrl(path: string) {
@@ -396,7 +398,58 @@ export class SignaturesService {
       },
       signer: { id: s.id, name: s.name, email: maskEmail(s.email), status: s.status, otpSentAt: s.otpSentAt },
       signers,
+      documents: await this.frozenDocuments(s.request),
     };
+  }
+
+  /**
+   * Tài liệu đính kèm đúng như lúc gửi ký: chỉ những file khớp cả tên, phiên bản và SHA-256 trong bảng
+   * "Tài liệu đính kèm" của snapshot. Gồm cả file đã xóa mềm sau đó (file vẫn được giữ trong kho).
+   */
+  private async frozenDocuments(request: { contractId: string; tenantId: string; contentSnapshot: string }) {
+    const frozen = frozenAttachments(request.contentSnapshot);
+    if (!frozen.length) return [];
+    const docs = await this.prisma.contractDocument.findMany({
+      where: {
+        contractId: request.contractId,
+        tenantId: request.tenantId,
+        sha256: { in: frozen.map((d) => d.sha256) },
+      },
+      orderBy: [{ fileName: 'asc' }, { version: 'asc' }],
+      select: { id: true, fileName: true, version: true, size: true, mimeType: true, sha256: true, storageKey: true },
+    });
+    return docs
+      .filter((d) =>
+        frozen.some((x) => x.sha256 === d.sha256 && x.version === d.version && x.fileName === escapeHtml(d.fileName)),
+      )
+      .map(({ storageKey: _key, ...d }) => d);
+  }
+
+  /** Đối tác mở/tải một tài liệu đã đóng băng qua liên kết ký; ghi nhật ký mỗi lần mở. */
+  async publicDocument(token: string, documentId: string, meta: { ip?: string; userAgent?: string }) {
+    const s = await this.signerByToken(token);
+    const allowed = await this.frozenDocuments(s.request);
+    if (!allowed.some((d) => d.id === documentId))
+      throw new NotFoundException('Không tìm thấy tài liệu trong yêu cầu ký này');
+    const doc = await this.prisma.contractDocument.findUniqueOrThrow({ where: { id: documentId } });
+    let stream;
+    try {
+      stream = await this.storage.read(doc.storageKey);
+    } catch (err) {
+      if (err instanceof StorageNotFoundError) throw new NotFoundException('File tài liệu không còn trong kho lưu trữ');
+      throw err;
+    }
+    await this.audit.logExternal(
+      s.tenantId,
+      { name: `${s.name} (${s.email})`, ...meta },
+      {
+        action: 'contract.signature_document_view',
+        entityType: 'contract',
+        entityId: s.request.contractId,
+        data: { code: s.request.contract.code, fileName: doc.fileName, version: doc.version, sha256: doc.sha256 },
+      },
+    );
+    return { doc, stream };
   }
 
   async sendOtp(token: string) {
@@ -746,6 +799,12 @@ export class SignaturesService {
       },
     });
   }
+}
+
+/** Đọc lại bảng "Tài liệu đính kèm" mà buildSnapshot ghi vào nội dung đóng băng (tên file đã escape HTML). */
+export function frozenAttachments(snapshot: string) {
+  const rows = snapshot.matchAll(/<tr><td>([^<]*)<\/td><td>v(\d+)<\/td><td>([0-9a-f]{64})<\/td><\/tr>/g);
+  return [...rows].map((m) => ({ fileName: m[1], version: Number(m[2]), sha256: m[3] }));
 }
 
 function maskEmail(email: string) {

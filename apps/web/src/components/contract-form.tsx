@@ -2,9 +2,9 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus, Trash2 } from 'lucide-react';
+import { FileText, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { cloneElement, isValidElement, useId, useState } from 'react';
+import { cloneElement, isValidElement, useId, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -16,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
+import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
 import { useLookups } from '@/lib/queries';
 import type { ContractDetail, Partner, TemplateListItem } from '@/lib/types';
@@ -183,7 +184,79 @@ function Field({ label, error, children, className }: { label: string; error?: s
   );
 }
 
-export function ContractForm({ contract }: { contract?: ContractDetail }) {
+/** Chọn tệp hợp đồng (PDF/DOCX/…) để tải lên ngay sau khi tạo hợp đồng. */
+function ContractFilesPicker({
+  files,
+  onChange,
+  required,
+}: {
+  files: File[];
+  onChange: (files: File[], added: File[]) => void;
+  required?: boolean;
+}) {
+  const input = useRef<HTMLInputElement>(null);
+  const add = (list: FileList | null) => {
+    const picked = Array.from(list ?? []);
+    const tooBig = picked.filter((f) => f.size > DOCUMENT_MAX_BYTES);
+    if (tooBig.length) toast.error(`Vượt quá 20 MB: ${tooBig.map((f) => f.name).join(', ')}`);
+    const added = picked.filter((f) => f.size <= DOCUMENT_MAX_BYTES && !files.some((x) => x.name === f.name && x.size === f.size));
+    if (added.length) onChange([...files, ...added], added);
+    if (input.current) input.current.value = '';
+  };
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Tệp hợp đồng{required && ' *'}</CardTitle>
+        <CardDescription>
+          {required
+            ? 'Tải lên bản hợp đồng đã soạn sẵn (PDF khuyến nghị để đối tác xem trực tiếp khi ký). Không cần soạn nội dung trong hệ thống.'
+            : 'Tùy chọn: đính kèm luôn bản hợp đồng hoặc phụ lục có sẵn. Có thể bổ sung sau ở tab Tài liệu.'}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <input ref={input} type="file" accept={DOCUMENT_ACCEPT} multiple className="hidden" onChange={(e) => add(e.target.files)} aria-label="Chọn tệp hợp đồng" />
+        <button
+          type="button"
+          onClick={() => input.current?.click()}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            add(e.dataTransfer.files);
+          }}
+          className="flex w-full flex-col items-center gap-1 rounded-lg border-2 border-dashed px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+        >
+          <FileUp className="size-6" />
+          <span className="font-medium text-foreground">Chọn hoặc kéo thả tệp vào đây</span>
+          <span>PDF, DOCX, XLSX, PNG, JPG · tối đa 20 MB mỗi tệp</span>
+        </button>
+        {files.length > 0 && (
+          <ul className="divide-y rounded-md border">
+            {files.map((f) => (
+              <li key={`${f.name}-${f.size}`} className="flex items-center gap-2 px-3 py-2 text-sm">
+                <FileText className="size-4 shrink-0 text-muted-foreground" />
+                <span className="min-w-0 flex-1 truncate" title={f.name}>
+                  {f.name}
+                </span>
+                <span className="text-xs text-muted-foreground tabular-nums">{formatFileSize(f.size)}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  aria-label={`Bỏ ${f.name}`}
+                  onClick={() => onChange(files.filter((x) => x !== f), [])}
+                >
+                  <X />
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+export function ContractForm({ contract, fromFile = false }: { contract?: ContractDetail; fromFile?: boolean }) {
   const isEdit = !!contract;
   const router = useRouter();
   const qc = useQueryClient();
@@ -199,18 +272,35 @@ export function ContractForm({ contract }: { contract?: ContractDetail }) {
   const errors = formState.errors;
   const parties = useFieldArray({ control, name: 'parties' });
 
+  const [files, setFiles] = useState<File[]>([]);
+
   const save = useMutation({
     meta: { silent: true },
-    mutationFn: (v: FormValues) =>
-      isEdit
-        ? api<ContractDetail>(`/contracts/${contract.id}`, { method: 'PATCH', body: toPayload(v, true) })
-        : api<ContractDetail>('/contracts', { method: 'POST', body: toPayload(v, false) }),
-    onSuccess: (c) => {
+    mutationFn: async (v: FormValues) => {
+      if (isEdit) {
+        const c = await api<ContractDetail>(`/contracts/${contract.id}`, { method: 'PATCH', body: toPayload(v, true) });
+        return { c, uploaded: 0, failed: [] as string[] };
+      }
+      const c = await api<ContractDetail>('/contracts', { method: 'POST', body: toPayload(v, false) });
+      // Hợp đồng đã tạo thì giữ lại dù có tệp tải lên lỗi; người dùng tải lại ở tab Tài liệu.
+      const failed: string[] = [];
+      for (const f of files) {
+        try {
+          await uploadContractDocument(c.id, f);
+        } catch (err) {
+          failed.push(`${f.name}: ${err instanceof Error ? err.message : 'tải lên thất bại'}`);
+        }
+      }
+      return { c, uploaded: files.length - failed.length, failed };
+    },
+    onSuccess: ({ c, uploaded, failed }) => {
       qc.invalidateQueries({ queryKey: ['contracts'] });
       qc.invalidateQueries({ queryKey: ['contract', c.id] });
       qc.invalidateQueries({ queryKey: ['dashboard'] });
-      toast.success(isEdit ? 'Đã lưu thay đổi' : `Đã tạo hợp đồng nháp ${c.code}`);
-      router.push(`/contracts/${c.id}`);
+      if (isEdit) toast.success('Đã lưu thay đổi');
+      else toast.success(`Đã tạo hợp đồng nháp ${c.code}${uploaded ? ` kèm ${uploaded} tệp` : ''}`);
+      if (failed.length) toast.error(`Chưa tải lên được ${failed.length} tệp – thử lại ở tab Tài liệu`, { description: failed.join('\n'), duration: 15_000 });
+      router.push(files.length ? `/contracts/${c.id}?tab=documents` : `/contracts/${c.id}`);
     },
     onError: (err) => {
       if (err instanceof ApiError && err.errors.length) {
@@ -246,9 +336,31 @@ export function ContractForm({ contract }: { contract?: ContractDetail }) {
     lookups.data?.contractTypes.find((t) => t.id === contractTypeId) ??
     (selectedTemplate?.contractType ? lookups.data?.contractTypes.find((t) => t.id === selectedTemplate.contractType?.id) : undefined);
 
+  const filesPicker = (
+    <ContractFilesPicker
+      files={files}
+      required={fromFile}
+      onChange={(next, added) => {
+        setFiles(next);
+        // Gợi ý tên hợp đồng từ tên tệp đầu tiên nếu chưa nhập.
+        if (added[0] && !form.getValues('title').trim()) {
+          setValue('title', added[0].name.replace(/\.[^.]+$/, '').slice(0, 500), { shouldValidate: true });
+        }
+      }}
+    />
+  );
+
   return (
-    <form onSubmit={form.handleSubmit((v) => save.mutate(v))} className="space-y-4" noValidate>
-      {!isEdit && (
+    <form
+      onSubmit={form.handleSubmit((v) => {
+        if (fromFile && !files.length) return toast.error('Chọn ít nhất một tệp hợp đồng');
+        save.mutate(v);
+      })}
+      className="space-y-4"
+      noValidate
+    >
+      {!isEdit && fromFile && filesPicker}
+      {!isEdit && !fromFile && (
         <Card>
           <CardHeader>
             <CardTitle>Mẫu hợp đồng</CardTitle>
@@ -456,13 +568,15 @@ export function ContractForm({ contract }: { contract?: ContractDetail }) {
         </CardContent>
       </Card>
 
+      {!isEdit && !fromFile && filesPicker}
+
       <div className="flex justify-end gap-2">
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Hủy
         </Button>
         <Button type="submit" disabled={save.isPending}>
           {save.isPending && <Loader2 className="animate-spin" />}
-          {isEdit ? 'Lưu thay đổi' : 'Lưu nháp'}
+          {isEdit ? 'Lưu thay đổi' : files.length ? `Lưu nháp và tải lên ${files.length} tệp` : 'Lưu nháp'}
         </Button>
       </div>
     </form>
