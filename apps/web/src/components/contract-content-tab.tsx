@@ -152,7 +152,7 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
           {html && (
             // Mở trang in riêng ở tab mới; nội dung chưa lưu được lưu trước để bản in khớp bản đang soạn.
             <Button size="sm" variant="outline" disabled={save.isPending} onClick={openPrint}>
-              <Printer /> In / Lưu PDF
+              <Printer /> In / Tải PDF
             </Button>
           )}
         </div>

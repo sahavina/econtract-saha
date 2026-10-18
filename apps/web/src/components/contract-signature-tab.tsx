@@ -349,7 +349,7 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
             {request.status === 'COMPLETED' && (
               <Button variant="outline" size="sm" asChild>
                 <a href={`/print/contracts/${contract.id}?doc=signed`} target="_blank" rel="noopener">
-                  <Printer /> In / Lưu PDF
+                  <Printer /> In / Tải PDF
                 </a>
               </Button>
             )}

@@ -2,9 +2,9 @@ import { SignatureMarkView } from '@/components/signature-pad';
 import { formatDateTime } from '@/lib/format';
 import type { PartyRole, SignerStatus } from '@/lib/types';
 
-const ROLE_LABELS: Record<PartyRole, string> = { PARTY_A: 'BÊN A', PARTY_B: 'BÊN B', PARTY_C: 'BÊN C', RELATED: 'BÊN LIÊN QUAN' };
+export const ROLE_LABELS: Record<PartyRole, string> = { PARTY_A: 'BÊN A', PARTY_B: 'BÊN B', PARTY_C: 'BÊN C', RELATED: 'BÊN LIÊN QUAN' };
 
-interface DocSigner {
+export interface DocSigner {
   id: string;
   name: string;
   title: string | null;

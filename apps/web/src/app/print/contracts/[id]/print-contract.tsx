@@ -2,15 +2,17 @@
 
 import { buildTemplateValues, renderTemplate } from '@saha/shared';
 import { useQuery } from '@tanstack/react-query';
-import { ArrowLeft, Printer } from 'lucide-react';
+import { ArrowLeft, Download, Loader2, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { toast } from 'sonner';
 import { SignedDocument } from '@/components/signed-document';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { downloadContractPdf } from '@/lib/contract-pdf';
 import type { ContractDetail, SignatureRequestInfo } from '@/lib/types';
 
 /**
@@ -50,6 +52,28 @@ export function PrintContract() {
     if (contract.data) document.title = `${contract.data.code} – ${contract.data.title}`;
   }, [contract.data]);
 
+  const [exporting, setExporting] = useState(false);
+  const downloadPdf = async () => {
+    const c = contract.data;
+    if (!c) return;
+    setExporting(true);
+    try {
+      await downloadContractPdf(
+        signedMode && completed
+          ? {
+              fileName: `${c.code} - ban da ky`,
+              title: `${c.code} – ${c.title} (bản đã ký)`,
+              html: completed.contentSnapshot,
+              signed: { documentHash: completed.documentHash, signers: completed.signers },
+            }
+          : { fileName: c.code, title: `${c.code} – ${c.title}`, html },
+      );
+    } catch (e) {
+      toast.error(`Không tạo được PDF: ${e instanceof Error ? e.message : 'lỗi không xác định'}`);
+    } finally {
+      setExporting(false);
+    }
+  };
   const error = contract.error ?? requests.error;
   const loading = status !== 'authenticated' || !contract.data || (signedMode && !requests.data);
   const empty = !loading && (signedMode ? !completed : !html);
@@ -66,12 +90,15 @@ export function PrintContract() {
           <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
             {contract.data ? `${contract.data.code} · ${signedMode ? 'Bản đã ký' : 'Nội dung hợp đồng'}` : ''}
           </p>
-          <Button size="sm" disabled={loading || empty} onClick={() => window.print()}>
-            <Printer /> In / Lưu PDF
+          <Button size="sm" variant="outline" disabled={loading || empty} onClick={() => window.print()}>
+            <Printer /> In
+          </Button>
+          <Button size="sm" disabled={loading || empty || exporting} onClick={downloadPdf}>
+            {exporting ? <Loader2 className="animate-spin" /> : <Download />} Tải PDF
           </Button>
         </div>
         <p className="mx-auto max-w-[210mm] px-4 pb-2 text-xs text-muted-foreground">
-          Để lưu PDF: bấm In / Lưu PDF rồi chọn máy in “Lưu dưới dạng PDF” (Save as PDF), khổ A4, tắt “Đầu trang và chân trang”.
+          Tải PDF: tạo file PDF khổ A4 và tải thẳng về máy. In: mở hộp thoại in của trình duyệt (chỉ dùng được trên Chrome/Edge/Firefox, không dùng được trong trình duyệt nhúng).
         </p>
       </div>
 
