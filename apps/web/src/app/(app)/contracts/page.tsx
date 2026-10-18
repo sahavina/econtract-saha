@@ -192,6 +192,32 @@ export default function ContractsPage() {
             <RotateCcw /> Khôi phục
           </DropdownMenuItem>,
         );
+      if (can('contract.purge') && (c.status === 'DRAFT' || c.status === 'CANCELLED'))
+        items.push(
+          <DropdownMenuItem
+            key="purge"
+            variant="destructive"
+            onSelect={() =>
+              setConfirm({
+                title: `Xóa vĩnh viễn hợp đồng ${c.code}?`,
+                description:
+                  'Hợp đồng cùng các bên, tài liệu đính kèm, lịch sử phê duyệt và ký sẽ bị xóa hẳn, KHÔNG khôi phục được. Mã hợp đồng được giải phóng để dùng lại. Nhật ký hoạt động vẫn ghi lại thao tác này.',
+                confirmLabel: 'Xóa vĩnh viễn',
+                destructive: true,
+                typeToConfirm: c.code,
+                onConfirm: () =>
+                  api<undefined>(`/contracts/${c.id}/permanent`, { method: 'DELETE' })
+                    .then(() => {
+                      invalidate();
+                      toast.success(`Đã xóa vĩnh viễn hợp đồng ${c.code}`);
+                    })
+                    .catch((e: unknown) => void toast.error(e instanceof Error ? e.message : 'Xóa vĩnh viễn thất bại')),
+              })
+            }
+          >
+            <Trash2 /> Xóa vĩnh viễn
+          </DropdownMenuItem>,
+        );
       return items;
     }
     if (can('contract.create'))
@@ -297,7 +323,7 @@ export default function ContractsPage() {
                   <MoreHorizontal />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">{rowActions(row.original)}</DropdownMenuContent>
+              <DropdownMenuContent align="end" className="min-w-40">{rowActions(row.original)}</DropdownMenuContent>
             </DropdownMenu>
           </div>
         ),

@@ -3,6 +3,7 @@ import {
   ConflictException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { EXPIRING_SOON_DAYS, PERMISSIONS } from '@saha/shared';
@@ -12,6 +13,7 @@ import type { AuthUser } from '../common/auth-user.js';
 import { paginated } from '../common/pagination.js';
 import { PlanLimitsService } from '../platform/plan-limits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { StorageService } from '../storage/storage.service.js';
 import { TemplatesService } from '../templates/templates.service.js';
 import { sanitizeContractHtml } from './sanitize-content.js';
 import { DEFAULT_CONTRACT_CODE_PATTERN, renderCode, sequenceKey } from './contract-code.js';
@@ -65,7 +67,10 @@ export class ContractsService {
     private readonly audit: AuditService,
     private readonly templates: TemplatesService,
     private readonly limits: PlanLimitsService,
+    private readonly storage: StorageService,
   ) {}
+
+  private readonly logger = new Logger(ContractsService.name);
 
   /** Phạm vi dữ liệu theo quyền: xem tất cả trong tenant, hoặc chỉ hợp đồng mình phụ trách/tạo/được giao duyệt. */
   scopeWhere(user: AuthUser): Prisma.ContractWhereInput {
@@ -328,6 +333,40 @@ export class ContractsService {
       await tx.contract.update({ where: { id }, data: { deletedAt: new Date() } });
       await this.audit.log(user, { action: 'contract.delete', entityType: 'contract', entityId: id }, tx);
     });
+  }
+
+  /**
+   * Xóa vĩnh viễn: chỉ hợp đồng đã ở thùng rác và ở trạng thái Nháp/Đã hủy (hợp đồng đã ký luôn được giữ làm chứng cứ).
+   * Dữ liệu con (các bên, tài liệu, phê duyệt, ký…) xóa theo cascade; tệp trong kho xóa sau khi commit.
+   * Nhật ký giữ lại mã/tên để tra cứu sau này.
+   */
+  async purge(user: AuthUser, id: string) {
+    const current = await this.prisma.contract.findFirst({
+      where: { id, tenantId: user.tenantId },
+      select: { id: true, code: true, title: true, status: true, deletedAt: true, documents: { select: { storageKey: true } } },
+    });
+    if (!current) throw new NotFoundException('Không tìm thấy hợp đồng');
+    if (!current.deletedAt) throw new BadRequestException('Chỉ xóa vĩnh viễn được hợp đồng đang ở thùng rác');
+    if (!DELETABLE_STATUS.has(current.status)) {
+      throw new BadRequestException('Chỉ xóa vĩnh viễn được hợp đồng ở trạng thái Nháp hoặc Đã hủy');
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contract.delete({ where: { id } });
+      await this.audit.log(
+        user,
+        {
+          action: 'contract.purge',
+          entityType: 'contract',
+          entityId: id,
+          data: { code: current.code, title: current.title, files: current.documents.length },
+        },
+        tx,
+      );
+    });
+    for (const d of current.documents) {
+      // Tệp mồ côi không ảnh hưởng dữ liệu; ghi log để dọn sau nếu kho lỗi.
+      await this.storage.remove(d.storageKey).catch((e: unknown) => this.logger.warn(`Không xóa được tệp ${d.storageKey}: ${String(e)}`));
+    }
   }
 
   async restore(user: AuthUser, id: string) {

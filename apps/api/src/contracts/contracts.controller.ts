@@ -150,6 +150,14 @@ export class ContractsController {
     return this.contracts.setArchived(user, id, false);
   }
 
+  /** Xóa vĩnh viễn hợp đồng đang ở thùng rác (kèm tệp đính kèm) – không khôi phục được. */
+  @Delete(':id/permanent')
+  @HttpCode(204)
+  @RequirePermissions(PERMISSIONS.CONTRACT_PURGE)
+  purge(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.contracts.purge(user, id);
+  }
+
   @Delete(':id')
   @HttpCode(204)
   @RequirePermissions(PERMISSIONS.CONTRACT_DELETE)
