@@ -230,6 +230,7 @@ export default function ContractDetailPage() {
                     <Info label="Người đại diện">{p.representative}</Info>
                     <Info label="Chức vụ">{p.position}</Info>
                     <div className="sm:col-span-2"><Info label="Căn cứ đại diện">{p.authorizationRef}</Info></div>
+                    <div className="sm:col-span-2"><Info label="Số tài khoản">{p.bankAccount}</Info></div>
                   </dl>
                 </CardContent>
               </Card>

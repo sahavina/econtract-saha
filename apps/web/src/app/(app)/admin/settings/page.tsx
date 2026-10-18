@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { CompanyProfileCard } from '@/components/company-profile-card';
 import { OdooSettingsCard } from '@/components/odoo-settings-card';
 import { ErrorState, PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -117,6 +118,9 @@ export default function AdminSettingsPage() {
   return (
     <>
       <PageHeader title="Cấu hình" crumbs={[{ label: 'Quản trị' }, { label: 'Cấu hình' }]} />
+      <div className="mb-4">
+        <CompanyProfileCard />
+      </div>
       <Card>
         <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
           <div>

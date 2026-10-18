@@ -17,6 +17,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
+import { useCompanyProfile } from '@/lib/company';
 import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
@@ -52,6 +53,7 @@ const partySchema = z.object({
   representative: z.string(),
   position: z.string(),
   authorizationRef: z.string(),
+  bankAccount: z.string(),
 });
 
 const schema = z
@@ -94,6 +96,7 @@ const emptyParty = (role: FormValues['parties'][number]['role']): FormValues['pa
   representative: '',
   position: '',
   authorizationRef: '',
+  bankAccount: '',
 });
 
 function toForm(c?: ContractDetail): FormValues {
@@ -135,6 +138,7 @@ function toForm(c?: ContractDetail): FormValues {
       representative: p.representative ?? '',
       position: p.position ?? '',
       authorizationRef: p.authorizationRef ?? '',
+      bankAccount: p.bankAccount ?? '',
     })),
   };
 }
@@ -168,6 +172,7 @@ function toPayload(v: FormValues, isEdit: boolean) {
       representative: nul(p.representative),
       position: nul(p.position),
       authorizationRef: nul(p.authorizationRef),
+      bankAccount: nul(p.bankAccount),
     })),
   };
   return isEdit ? payload : { ...payload, code: nul(v.code), templateId: nul(v.templateId) };
@@ -265,6 +270,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
   const lookups = useLookups();
   const [partnerSearch, setPartnerSearch] = useState('');
   const odoo = useOdooConfig();
+  const company = useCompanyProfile();
   const [odooPick, setOdooPick] = useState<number | null>(null);
   const partners = useQuery({
     queryKey: ['partners', 'picker', partnerSearch],
@@ -326,6 +332,25 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     setValue(`parties.${index}.phone`, p.phone ?? '');
     setValue(`parties.${index}.representative`, p.representative ?? '');
     setValue(`parties.${index}.position`, p.position ?? '');
+  };
+
+  /** Tích "Bên nội bộ" ⇒ điền thông tin pháp nhân doanh nghiệp mình (Cài đặt → Thông tin doanh nghiệp). */
+  const applyCompany = (index: number) => {
+    const c = company.data;
+    if (!c) return toast.error('Chưa tải được thông tin doanh nghiệp – thử lại sau giây lát');
+    const set = (field: 'name' | 'taxCode' | 'address' | 'email' | 'phone' | 'representative' | 'position' | 'bankAccount', v: string | null) =>
+      setValue(`parties.${index}.${field}`, v ?? '', { shouldValidate: field === 'name' || field === 'email' });
+    setValue(`parties.${index}.partnerId`, '');
+    setValue(`parties.${index}.entityType`, 'ORGANIZATION');
+    set('name', c.name);
+    set('taxCode', c.taxCode);
+    set('address', c.address);
+    set('email', c.email);
+    set('phone', c.phone);
+    set('representative', c.representative);
+    set('position', c.position);
+    set('bankAccount', c.bankAccount);
+    if (!c.configured) toast.info('Đã điền thông tin lúc đăng ký doanh nghiệp. Bổ sung người đại diện, số tài khoản… ở Quản trị → Cấu hình → Thông tin doanh nghiệp.');
   };
 
   const contractTypeId = useWatch({ control, name: 'contractTypeId' });
@@ -538,7 +563,12 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
                     </Button>
                   )}
                   <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="size-4" {...register(`parties.${i}.isInternal`)} /> Bên nội bộ (doanh nghiệp mình)
+                    <input
+                      type="checkbox"
+                      className="size-4"
+                      {...register(`parties.${i}.isInternal`, { onChange: (e) => e.target.checked && applyCompany(i) })}
+                    />{' '}
+                    Bên nội bộ (doanh nghiệp mình)
                   </label>
                   <Button type="button" variant="ghost" size="icon-sm" className="ml-auto" aria-label="Xóa bên" onClick={() => parties.remove(i)}>
                     <Trash2 />
@@ -568,6 +598,9 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
                   </Field>
                   <Field label="Căn cứ đại diện / ủy quyền" className="md:col-span-2">
                     <Input {...register(`parties.${i}.authorizationRef`)} />
+                  </Field>
+                  <Field label="Số tài khoản (kèm ngân hàng)" className="md:col-span-3">
+                    <Input {...register(`parties.${i}.bankAccount`)} />
                   </Field>
                 </div>
               </div>

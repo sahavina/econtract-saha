@@ -106,6 +106,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'partner.delete': 'Xóa đối tác',
   'partner.odoo_import': 'Nhập đối tác từ Odoo',
   'partner.odoo_sync': 'Cập nhật đối tác từ Odoo',
+  'company.update': 'Cập nhật thông tin doanh nghiệp',
   'integration.odoo_config': 'Cấu hình kết nối Odoo',
   'integration.odoo_remove': 'Xóa kết nối Odoo',
   'platform.tenant_create': 'Super Admin tạo doanh nghiệp',

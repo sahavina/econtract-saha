@@ -25,6 +25,7 @@ export const partySchema = z.object({
   representative: nullableText(255),
   position: nullableText(255),
   authorizationRef: nullableText(500),
+  bankAccount: nullableText(255),
 });
 export type PartyInput = z.infer<typeof partySchema>;
 

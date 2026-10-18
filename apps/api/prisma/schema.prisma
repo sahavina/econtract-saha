@@ -476,6 +476,8 @@ model ContractParty {
   representative   String?
   position         String?
   authorizationRef String?
+  /// Số tài khoản ngân hàng (kèm tên ngân hàng/chi nhánh)
+  bankAccount      String?
   contract         Contract        @relation(fields: [contractId], references: [id], onDelete: Cascade)
   partner          Partner?        @relation(fields: [partnerId], references: [id])
 

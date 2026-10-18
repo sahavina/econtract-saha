@@ -7,7 +7,7 @@ describe('renderTemplate', () => {
     value: '125000000.50',
     currency: 'VND',
     effectiveDate: '2026-10-20T00:00:00.000Z',
-    parties: [{ role: 'PARTY_A', name: 'Công ty SAHA', taxCode: '0101' }],
+    parties: [{ role: 'PARTY_A', name: 'Công ty SAHA', taxCode: '0101', bankAccount: '921019999 – MB Bank' }],
   });
 
   it('substitutes and escapes values', () => {
@@ -25,6 +25,13 @@ describe('renderTemplate', () => {
     expect(r.unknown).toEqual(['foo.bar']);
     expect(r.html).toContain('Công ty SAHA');
     expect(r.html).toContain('<mark data-missing="empty">{{party_b.name}}</mark>');
+  });
+
+  it('fills party bank account', () => {
+    const r = renderTemplate('{{party_a.bank_account}} / {{party_b.bank_account}}', values);
+    expect(r.html).toContain('921019999 – MB Bank');
+    expect(r.missing).toEqual(['party_b.bank_account']);
+    expect(r.unknown).toEqual([]);
   });
 });
 

@@ -56,6 +56,7 @@ export interface ContractParty {
   representative: string | null;
   position: string | null;
   authorizationRef: string | null;
+  bankAccount: string | null;
 }
 
 export interface ContractDetail extends Omit<ContractListItem, 'parties'> {

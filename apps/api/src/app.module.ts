@@ -8,6 +8,7 @@ import { ApprovalsModule } from './approvals/approvals.module.js';
 import { AuditModule } from './audit/audit.module.js';
 import { AuthModule } from './auth/auth.module.js';
 import { ClausesModule } from './clauses/clauses.module.js';
+import { CompanyModule } from './company/company.module.js';
 import { AllExceptionsFilter } from './common/all-exceptions.filter.js';
 import { JwtAuthGuard, PermissionsGuard } from './common/guards.js';
 import { validateEnv } from './config/env.js';
@@ -46,6 +47,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     DocumentsModule,
     TemplatesModule,
     ClausesModule,
+    CompanyModule,
     WorkflowsModule,
     ApprovalsModule,
     SignaturesModule,

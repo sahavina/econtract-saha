@@ -32,6 +32,7 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
       { key: `${p}.position`, label: 'Chức vụ' },
       { key: `${p}.phone`, label: 'Điện thoại' },
       { key: `${p}.email`, label: 'Email' },
+      { key: `${p}.bank_account`, label: 'Số tài khoản' },
     ],
   })),
 ];
@@ -49,6 +50,7 @@ export interface TemplateParty {
   position?: string | null;
   phone?: string | null;
   email?: string | null;
+  bankAccount?: string | null;
 }
 
 export interface TemplateContract {
@@ -105,6 +107,7 @@ export function buildTemplateValues(c: TemplateContract): Record<string, string 
     values[`${prefix}.position`] = p?.position || null;
     values[`${prefix}.phone`] = p?.phone || null;
     values[`${prefix}.email`] = p?.email || null;
+    values[`${prefix}.bank_account`] = p?.bankAccount || null;
   }
   return values;
 }
