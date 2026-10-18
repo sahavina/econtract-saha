@@ -97,6 +97,8 @@ export interface Partner {
   phone: string | null;
   representative: string | null;
   position: string | null;
+  /** Liên kết hệ thống ngoài, ví dụ "odoo:1831". */
+  externalRef: string | null;
   note: string | null;
   createdAt: string;
   _count?: { contractParties: number };

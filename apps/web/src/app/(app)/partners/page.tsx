@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PARTNER_TYPE_LABELS, PARTNER_TYPES, type PartnerType } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudDownload, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
+import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,6 +24,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
+import { isOdooPartner, odooReady, useOdooConfig } from '@/lib/odoo';
 import type { Partner } from '@/lib/types';
 
 const schema = z.object({
@@ -157,6 +159,8 @@ export default function PartnersPage() {
   const setPage = (p: number) => setPaging({ type, page: p });
   const [dialog, setDialog] = useState<{ partner?: Partner } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [odooOpen, setOdooOpen] = useState(false);
+  const odoo = useOdooConfig();
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -170,6 +174,14 @@ export default function PartnersPage() {
     queryKey: ['partners', { type, q: debounced, page }],
     queryFn: () => api<Paginated<Partner>>('/partners', { query: { type, q: debounced, page, pageSize: 20 } }),
     placeholderData: keepPreviousData,
+  });
+
+  const syncOdoo = useMutation({
+    mutationFn: (id: string) => api<Partner>(`/integrations/odoo/partners/${id}/sync`, { method: 'POST' }),
+    onSuccess: (p) => {
+      qc.invalidateQueries({ queryKey: ['partners'] });
+      toast.success(`Đã cập nhật ${p.code} từ Odoo`);
+    },
   });
 
   const remove = useMutation({
@@ -188,7 +200,18 @@ export default function PartnersPage() {
       <PageHeader
         title={title}
         crumbs={[{ label: 'Đối tác', href: '/partners' }, { label: title }]}
-        actions={can('partner.manage') && <Button onClick={() => setDialog({})}><Plus /> Thêm đối tác</Button>}
+        actions={
+          can('partner.manage') && (
+            <div className="flex gap-2">
+              {odooReady(odoo.data) && (
+                <Button variant="outline" onClick={() => setOdooOpen(true)}>
+                  <CloudDownload /> Nhập từ Odoo
+                </Button>
+              )}
+              <Button onClick={() => setDialog({})}><Plus /> Thêm đối tác</Button>
+            </div>
+          )
+        }
       />
       <div className="mb-3 flex flex-wrap gap-2">
         <Input className="w-72" placeholder="Tìm theo tên, mã, MST, email…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm đối tác" />
@@ -225,7 +248,10 @@ export default function PartnersPage() {
                 data.items.map((p) => (
                   <TableRow key={p.id}>
                     <TableCell className="font-medium">{p.code}</TableCell>
-                    <TableCell>{p.name}</TableCell>
+                    <TableCell>
+                      {p.name}
+                      {isOdooPartner(p) && <Badge variant="outline" className="ml-1.5 text-[10px]">Odoo</Badge>}
+                    </TableCell>
                     <TableCell><Badge variant="secondary">{PARTNER_TYPE_LABELS[p.type]}</Badge></TableCell>
                     <TableCell>{p.taxCode ?? '—'}</TableCell>
                     <TableCell>{p.representative ? `${p.representative}${p.position ? ` (${p.position})` : ''}` : '—'}</TableCell>
@@ -235,6 +261,11 @@ export default function PartnersPage() {
                       {can('partner.manage') && (
                         <>
                           <Button variant="ghost" size="icon-sm" aria-label="Sửa" onClick={() => setDialog({ partner: p })}><Pencil /></Button>
+                          {isOdooPartner(p) && odooReady(odoo.data) && (
+                            <Button variant="ghost" size="icon-sm" aria-label={`Cập nhật ${p.code} từ Odoo`} disabled={syncOdoo.isPending} onClick={() => syncOdoo.mutate(p.id)}>
+                              <RefreshCw className={syncOdoo.isPending && syncOdoo.variables === p.id ? 'animate-spin' : undefined} />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon-sm"
@@ -263,6 +294,7 @@ export default function PartnersPage() {
       )}
 
       <PartnerDialog open={!!dialog} partner={dialog?.partner} defaultType={type} onClose={() => setDialog(null)} />
+      <OdooPartnerDialog open={odooOpen} onOpenChange={setOdooOpen} mode="import" defaultKind={type === 'CUSTOMER' || type === 'SUPPLIER' ? type : undefined} />
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </>
   );

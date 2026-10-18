@@ -117,6 +117,7 @@ model Tenant {
   templates     ContractTemplate[]
   clauses       Clause[]
   workflows     ApprovalWorkflow[]
+  integrations  TenantIntegration[]
 }
 
 // ───────────────────────────── Tổ chức & Người dùng ─────────────────────────────
@@ -326,6 +327,8 @@ model Partner {
   contractParties ContractParty[]
 
   @@unique([tenantId, code])
+  /// Liên kết hệ thống ngoài, ví dụ "odoo:1831" – mỗi bản ghi ngoài chỉ nhập một lần.
+  @@unique([tenantId, externalRef])
   @@index([tenantId, type])
 }
 
@@ -940,4 +943,23 @@ model Notification {
   user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, readAt, createdAt])
+}
+
+// ───────────────────────────── Tích hợp hệ thống ngoài ─────────────────────────────
+
+/// Kết nối tới hệ thống ngoài (hiện có Odoo). Bí mật (API key) mã hóa AES-256-GCM, không trả về client.
+model TenantIntegration {
+  id           String    @id @default(uuid()) @db.Uuid
+  tenantId     String    @db.Uuid
+  provider     String
+  enabled      Boolean   @default(true)
+  config       Json      @default("{}")
+  secretEnc    String?
+  lastTestedAt DateTime?
+  lastTestOk   Boolean?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+
+  @@unique([tenantId, provider])
 }

@@ -156,6 +156,17 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - Tổng quan nền tảng: số doanh nghiệp, MRR theo đơn giá gói, công nợ, thuê bao sắp hết hạn; nhật ký hệ thống liên tenant.
 - Phía doanh nghiệp: trang **Gói dịch vụ** (`settings.manage`) xem gói, mức sử dụng, hóa đơn.
 
+### Tích hợp Odoo (chỉ đọc)
+
+- Cấu hình theo doanh nghiệp ở Cấu hình → Tích hợp Odoo (`settings.manage`): URL, database, tài khoản, API key. API key mã hóa
+  AES-256-GCM bằng `INTEGRATION_SECRET` (`TenantIntegration.secretEnc`), không bao giờ trả về client.
+- URL chỉ HTTPS và không trỏ vào địa chỉ nội bộ (chống SSRF), kiểm tra lại mỗi lần gọi; `INTEGRATION_ALLOW_PRIVATE_HOSTS` chỉ dùng khi dev.
+- Gọi Odoo qua JSON-RPC `/jsonrpc` (`common.authenticate`, `object.execute_kw` trên `res.partner`): tìm đối tác cấp cao nhất theo
+  tên/MST/email/mã, lọc khách hàng (`customer_rank > 0`) hoặc nhà cung cấp (`supplier_rank > 0`).
+- Chọn một đối tác ⇒ nhập vào danh mục với `externalRef = "odoo:<id>"` (duy nhất trong doanh nghiệp); nhập lại hoặc "Cập nhật từ Odoo"
+  ghi đè thông tin, khôi phục bản đã xóa mềm. Mã đối tác = Reference của Odoo nếu chưa trùng, ngược lại `ODOO-<id>`.
+- Không ghi ngược về Odoo. Odoo 20 dự kiến bỏ JSON-RPC cũ – khi đó chuyển sang API `/json/2`.
+
 ### Lưu trữ & triển khai
 
 - `StorageService` chọn driver theo `STORAGE_DRIVER`: `local` (thư mục, chặn path traversal) hoặc `s3` (S3/MinIO,

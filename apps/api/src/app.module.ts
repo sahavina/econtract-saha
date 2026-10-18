@@ -15,6 +15,7 @@ import { ContractsModule } from './contracts/contracts.module.js';
 import { DashboardModule } from './dashboard/dashboard.module.js';
 import { DocumentsModule } from './documents/documents.module.js';
 import { HealthController } from './health/health.controller.js';
+import { IntegrationsModule } from './integrations/integrations.module.js';
 import { LifecycleModule } from './lifecycle/lifecycle.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
@@ -51,6 +52,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     AdminModule,
     LifecycleModule,
     ReportsModule,
+    IntegrationsModule,
   ],
   controllers: [HealthController],
   providers: [

@@ -39,6 +39,13 @@ const envSchema = z
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
     MAIL_FROM: z.string().default('SAHA eContract <no-reply@saha.vn>'),
+    // Khóa mã hóa bí mật tích hợp (API key Odoo…) lưu trong DB; tối thiểu 32 ký tự. Đổi khóa ⇒ phải nhập lại API key.
+    INTEGRATION_SECRET: z.preprocess(
+      emptyToUndefined,
+      z.string().min(32, 'INTEGRATION_SECRET tối thiểu 32 ký tự').optional(),
+    ),
+    // Cho phép kết nối tích hợp tới địa chỉ nội bộ/HTTP (chỉ nên bật khi phát triển).
+    INTEGRATION_ALLOW_PRIVATE_HOSTS: envBool(false),
   })
   .refine((e) => e.NODE_ENV !== 'production' || !!e.SMTP_HOST, {
     message: 'Production bắt buộc cấu hình SMTP_HOST để gửi email/OTP',

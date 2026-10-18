@@ -2,13 +2,14 @@
 
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { FileText, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react';
+import { CloudDownload, FileText, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cloneElement, isValidElement, useId, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
 import { FilterSelect } from '@/components/filter-select';
+import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -18,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
+import { odooReady, useOdooConfig } from '@/lib/odoo';
 import { useLookups } from '@/lib/queries';
 import type { ContractDetail, Partner, TemplateListItem } from '@/lib/types';
 
@@ -262,6 +264,8 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
   const qc = useQueryClient();
   const lookups = useLookups();
   const [partnerSearch, setPartnerSearch] = useState('');
+  const odoo = useOdooConfig();
+  const [odooPick, setOdooPick] = useState<number | null>(null);
   const partners = useQuery({
     queryKey: ['partners', 'picker', partnerSearch],
     queryFn: () => api<Paginated<Partner>>('/partners', { query: { q: partnerSearch, pageSize: 50 } }),
@@ -310,8 +314,8 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     },
   });
 
-  const applyPartner = (index: number, partnerId: string | undefined) => {
-    const p = partners.data?.items.find((x) => x.id === partnerId);
+  const applyPartner = (index: number, partnerId: string | undefined, picked?: Partner) => {
+    const p = picked ?? partners.data?.items.find((x) => x.id === partnerId);
     setValue(`parties.${index}.partnerId`, partnerId ?? '');
     if (!p) return;
     setValue(`parties.${index}.name`, p.name);
@@ -528,6 +532,11 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
                       <FilterSelect className="w-72" allLabel="— Nhập thủ công —" value={field.value} onChange={(v) => applyPartner(i, v)} options={(partners.data?.items ?? []).map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }))} ariaLabel="Chọn đối tác" />
                     )}
                   />
+                  {odooReady(odoo.data) && (
+                    <Button type="button" variant="outline" size="sm" onClick={() => setOdooPick(i)}>
+                      <CloudDownload /> Chọn từ Odoo
+                    </Button>
+                  )}
                   <label className="flex items-center gap-2 text-sm">
                     <input type="checkbox" className="size-4" {...register(`parties.${i}.isInternal`)} /> Bên nội bộ (doanh nghiệp mình)
                   </label>
@@ -579,6 +588,12 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
           {isEdit ? 'Lưu thay đổi' : files.length ? `Lưu nháp và tải lên ${files.length} tệp` : 'Lưu nháp'}
         </Button>
       </div>
+      <OdooPartnerDialog
+        open={odooPick !== null}
+        onOpenChange={(o) => !o && setOdooPick(null)}
+        mode="pick"
+        onPicked={(p) => odooPick !== null && applyPartner(odooPick, p.id, p)}
+      />
     </form>
   );
 }

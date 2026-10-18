@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { OdooSettingsCard } from '@/components/odoo-settings-card';
 import { ErrorState, PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -171,6 +172,9 @@ export default function AdminSettingsPage() {
           )}
         </CardContent>
       </Card>
+      <div className="mt-4">
+        <OdooSettingsCard />
+      </div>
       {editing && <TypeDialog draft={editing} onClose={() => setEditing(null)} />}
     </>
   );
