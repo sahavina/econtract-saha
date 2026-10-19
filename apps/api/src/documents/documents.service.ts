@@ -60,26 +60,40 @@ export class DocumentsService {
       );
     }
 
-    await this.limits.assertStorage(user.tenantId, file.size);
-    const sha256 = createHash('sha256').update(file.buffer).digest('hex');
-    const storageKey = `${user.tenantId}/contracts/${contractId}/${randomUUID()}`;
-    await this.storage.put(storageKey, file.buffer, mimeType);
+    return this.storeVersion(user, contract, { fileName, mimeType, buffer: file.buffer }, 'contract.document_upload');
+  }
+
+  /**
+   * Lưu tệp vào kho và tạo bản ghi tài liệu; cùng tên tệp trong một hợp đồng ⇒ phiên bản mới.
+   * Dùng cho tải lên và cho bản PDF đã ký số (ký số tạo phiên bản kế tiếp của chính tệp đó).
+   */
+  async storeVersion(
+    user: AuthUser,
+    contract: { id: string; code: string },
+    file: { fileName: string; mimeType: string; buffer: Buffer },
+    action: string,
+    extra: Record<string, unknown> = {},
+  ) {
+    const { fileName, mimeType, buffer } = file;
+    await this.limits.assertStorage(user.tenantId, buffer.length);
+    const sha256 = createHash('sha256').update(buffer).digest('hex');
+    const storageKey = `${user.tenantId}/contracts/${contract.id}/${randomUUID()}`;
+    await this.storage.put(storageKey, buffer, mimeType);
 
     try {
       return await this.prisma.$transaction(async (tx) => {
-        // Cùng tên file trong một hợp đồng ⇒ tăng phiên bản.
         const latest = await tx.contractDocument.findFirst({
-          where: { contractId, fileName, deletedAt: null },
+          where: { contractId: contract.id, fileName, deletedAt: null },
           orderBy: { version: 'desc' },
           select: { version: true },
         });
         const doc = await tx.contractDocument.create({
           data: {
             tenantId: user.tenantId,
-            contractId,
+            contractId: contract.id,
             fileName,
             mimeType,
-            size: file.size,
+            size: buffer.length,
             sha256,
             version: (latest?.version ?? 0) + 1,
             storageKey,
@@ -90,10 +104,10 @@ export class DocumentsService {
         await this.audit.log(
           user,
           {
-            action: 'contract.document_upload',
+            action,
             entityType: 'contract',
-            entityId: contractId,
-            data: { code: contract.code, documentId: doc.id, fileName, version: doc.version, sha256 },
+            entityId: contract.id,
+            data: { code: contract.code, documentId: doc.id, fileName, version: doc.version, sha256, ...extra },
           },
           tx,
         );
@@ -104,6 +118,14 @@ export class DocumentsService {
       await this.storage.remove(storageKey);
       throw err;
     }
+  }
+
+  /** Đọc toàn bộ nội dung một tài liệu (đã kiểm tra quyền xem hợp đồng). */
+  async readBuffer(user: AuthUser, contractId: string, documentId: string) {
+    const { doc, stream } = await this.getForDownload(user, contractId, documentId);
+    const chunks: Buffer[] = [];
+    for await (const c of stream) chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c as Uint8Array));
+    return { doc, buffer: Buffer.concat(chunks) };
   }
 
   async getForDownload(user: AuthUser, contractId: string, documentId: string) {

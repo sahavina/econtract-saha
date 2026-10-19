@@ -8,5 +8,6 @@ import { DocumentsService } from './documents.service.js';
   imports: [ContractsModule],
   controllers: [DocumentsController, DocConvertController],
   providers: [DocumentsService, DocConvertService],
+  exports: [DocumentsService],
 })
 export class DocumentsModule {}

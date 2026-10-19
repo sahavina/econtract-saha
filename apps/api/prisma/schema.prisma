@@ -90,18 +90,18 @@ model Invoice {
 }
 
 model Tenant {
-  id            String             @id @default(uuid()) @db.Uuid
-  code          String             @unique
+  id            String              @id @default(uuid()) @db.Uuid
+  code          String              @unique
   name          String
   taxCode       String?
   address       String?
   email         String?
   phone         String?
-  status        TenantStatus       @default(ACTIVE)
-  settings      Json               @default("{}")
-  storageUsedMb Int                @default(0)
-  createdAt     DateTime           @default(now())
-  updatedAt     DateTime           @updatedAt
+  status        TenantStatus        @default(ACTIVE)
+  settings      Json                @default("{}")
+  storageUsedMb Int                 @default(0)
+  createdAt     DateTime            @default(now())
+  updatedAt     DateTime            @updatedAt
   users         User[]
   branches      Branch[]
   departments   Department[]
@@ -992,4 +992,51 @@ model TenantIntegration {
   tenant       Tenant    @relation(fields: [tenantId], references: [id])
 
   @@unique([tenantId, provider])
+}
+
+// ───────────────────────────── Chữ ký số (CA) ─────────────────────────────
+
+/// Tài khoản chữ ký số từ xa của người dùng (MISA eSign…): chỉ lưu token đã mã hóa, không lưu mật khẩu.
+model EsignAccount {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @db.Uuid
+  userId         String    @db.Uuid
+  provider       String
+  username       String
+  /// ID người dùng phía nhà cung cấp (MISA: user.id) – dùng khi gửi yêu cầu ký.
+  externalUserId String?
+  displayName    String?
+  /// JSON {accessToken, refreshToken} mã hóa bằng INTEGRATION_SECRET; null khi đang chờ OTP.
+  tokenEnc       String?
+  expiresAt      DateTime?
+  /// Chứng thư số đã chọn (MISA: keyAlias) + tên chủ thể để hiển thị.
+  certAlias      String?
+  certSubject    String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@unique([userId, provider])
+  @@index([tenantId])
+}
+
+/// Một lượt ký số tài liệu: lưu dữ liệu băm để gắn chữ ký khi người ký xác nhận trên ứng dụng.
+model EsignSession {
+  id               String   @id @default(uuid()) @db.Uuid
+  tenantId         String   @db.Uuid
+  contractId       String   @db.Uuid
+  documentId       String   @db.Uuid
+  userId           String   @db.Uuid
+  provider         String
+  transactionId    String?
+  /// PENDING | ATTACHING | SUCCESS | FAILED | EXPIRED
+  status           String   @default("PENDING")
+  /// Dữ liệu từ bước băm + chứng thư (cần cho bước gắn chữ ký).
+  hashData         Json
+  resultDocumentId String?  @db.Uuid
+  error            String?
+  expiresAt        DateTime
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([tenantId, contractId])
 }

@@ -205,6 +205,8 @@ export default function ContractDetailPage() {
         <TabsContent value="documents" className="mt-4">
           <ContractDocumentsTab
             contractId={c.id}
+            contract={c}
+            canSign={!c.deletedAt && !c.archivedAt}
             canManage={!c.deletedAt && !c.archivedAt && !['PENDING_APPROVAL', 'PENDING_SIGNATURE'].includes(c.status) && can('contract.update')}
             canDelete={!c.deletedAt && !c.archivedAt && !['PENDING_APPROVAL', 'PENDING_SIGNATURE'].includes(c.status) && c.signatureStatus !== 'COMPLETED' && can('contract.update')}
           />

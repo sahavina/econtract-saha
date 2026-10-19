@@ -148,7 +148,7 @@ export interface ContractPdfInput {
   signed?: { documentHash: string; signers: DocSigner[] };
 }
 
-export async function downloadContractPdf({ fileName, title, html, signed }: ContractPdfInput) {
+async function createContractPdf({ title, html, signed }: Omit<ContractPdfInput, 'fileName'>) {
   const [{ default: pdfMake }, { default: htmlToPdfmake }] = await Promise.all([
     import('pdfmake/build/pdfmake'),
     import('html-to-pdfmake'),
@@ -196,5 +196,17 @@ export async function downloadContractPdf({ fileName, title, html, signed }: Con
     footer: (current, total) => ({ text: `${current}/${total}`, alignment: 'center', fontSize: 8, color: '#888888', margin: [0, 20, 0, 0] }),
     content: [...body, ...(signed ? signedSection(signed.documentHash, signed.signers) : [])],
   };
-  await pdfMake.createPdf(doc).download(`${fileName.replace(/[\\/:*?"<>|]+/g, '_')}.pdf`);
+  return pdfMake.createPdf(doc);
+}
+
+const safeName = (name: string) => name.replace(/[\\/:*?"<>|]+/g, '_');
+
+export async function downloadContractPdf({ fileName, ...input }: ContractPdfInput) {
+  await (await createContractPdf(input)).download(`${safeName(fileName)}.pdf`);
+}
+
+/** Tạo PDF dưới dạng File (để lưu vào tab Tài liệu, ví dụ trước khi ký số). */
+export async function contractPdfFile({ fileName, ...input }: ContractPdfInput) {
+  const blob = await (await createContractPdf(input)).getBlob();
+  return new File([blob], `${safeName(fileName)}.pdf`, { type: 'application/pdf' });
 }

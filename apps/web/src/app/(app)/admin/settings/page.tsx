@@ -6,6 +6,7 @@ import { Loader2, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CompanyProfileCard } from '@/components/company-profile-card';
+import { MisaEsignSettingsCard } from '@/components/misa-esign-settings-card';
 import { OdooSettingsCard } from '@/components/odoo-settings-card';
 import { ErrorState, PageHeader } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -180,6 +181,9 @@ export default function AdminSettingsPage() {
       </Card>
       <div className="mt-4">
         <OdooSettingsCard />
+      </div>
+      <div className="mt-4">
+        <MisaEsignSettingsCard />
       </div>
       {editing && <TypeDialog draft={editing} onClose={() => setEditing(null)} />}
     </>
