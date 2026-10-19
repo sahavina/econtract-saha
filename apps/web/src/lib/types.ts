@@ -519,3 +519,92 @@ export interface ReportSummary {
   byPartner: ReportGroup[];
   payments: { scheduled: string; collected: string; overdueCount: number; overdueAmount: string };
 }
+
+// ───────── Khách hàng xem trước & góp ý ─────────
+
+export type ShareLinkState = 'ACTIVE' | 'EXPIRED' | 'REVOKED';
+export type FeedbackKind = 'CHANGE_REQUEST' | 'AGREE';
+export type FeedbackStatus = 'NEW' | 'RESOLVED';
+
+export interface ShareLink {
+  id: string;
+  recipientName: string | null;
+  recipientEmail: string | null;
+  expiresAt: string;
+  revokedAt: string | null;
+  revokedByName: string | null;
+  createdByName: string;
+  viewCount: number;
+  lastViewedAt: string | null;
+  createdAt: string;
+  state: ShareLinkState;
+  feedbackCount: number;
+}
+
+export interface ContractFeedbackItem {
+  id: string;
+  kind: FeedbackKind;
+  status: FeedbackStatus;
+  name: string;
+  contact: string;
+  clauseRef: string | null;
+  message: string | null;
+  revisionSeq: number | null;
+  response: string | null;
+  resolvedByName: string | null;
+  resolvedAt: string | null;
+  createdAt: string;
+  /** Nội dung hợp đồng đã thay đổi so với bản khách xem. */
+  outdated: boolean;
+  link: { id: string; recipientName: string | null; recipientEmail: string | null };
+}
+
+export interface PreviewVersion {
+  seq: number | null;
+  hash: string;
+}
+
+export interface PublicPreviewView {
+  organization: string;
+  link: { recipientName: string | null; expiresAt: string };
+  acceptsFeedback: boolean;
+  contract: {
+    code: string;
+    title: string;
+    contractType: string | null;
+    value: string;
+    currency: string;
+    vatRate: string | null;
+    expectedSignDate: string | null;
+    effectiveDate: string | null;
+    expiryDate: string | null;
+  };
+  parties: {
+    role: PartyRole;
+    isInternal: boolean;
+    entityType: string;
+    name: string;
+    taxCode: string | null;
+    address: string | null;
+    representative: string | null;
+    position: string | null;
+    authorizationRef: string | null;
+    phone: string | null;
+    email: string | null;
+    bankAccount: string | null;
+  }[];
+  contentHtml: string;
+  version: PreviewVersion;
+  feedback: {
+    id: string;
+    kind: FeedbackKind;
+    status: FeedbackStatus;
+    name: string;
+    clauseRef: string | null;
+    message: string | null;
+    response: string | null;
+    revisionSeq: number | null;
+    createdAt: string;
+    resolvedAt: string | null;
+  }[];
+}

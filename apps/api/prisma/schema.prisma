@@ -451,6 +451,8 @@ model Contract {
   liquidationNote   String?
   parties           ContractParty[]
   revisions         ContractRevision[]
+  shareLinks        ContractShareLink[]
+  feedback          ContractFeedback[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -1039,4 +1041,71 @@ model EsignSession {
   updatedAt        DateTime @updatedAt
 
   @@index([tenantId, contractId])
+}
+
+// ───────────────────────────── Khách hàng xem trước & góp ý ─────────────────────────────
+
+/// Liên kết công khai để bên đối tác (không có tài khoản) xem trước hợp đồng. Chỉ lưu hash SHA-256 của token.
+model ContractShareLink {
+  id             String             @id @default(uuid()) @db.Uuid
+  tenantId       String             @db.Uuid
+  contractId     String             @db.Uuid
+  tokenHash      String             @unique
+  recipientName  String?
+  recipientEmail String?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  revokedByName  String?
+  createdById    String             @db.Uuid
+  createdByName  String
+  viewCount      Int                @default(0)
+  lastViewedAt   DateTime?
+  createdAt      DateTime           @default(now())
+  contract       Contract           @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  feedback       ContractFeedback[]
+
+  @@index([tenantId, contractId])
+}
+
+enum ContractFeedbackKind {
+  /// Yêu cầu bổ sung/thay đổi nội dung
+  CHANGE_REQUEST
+  /// Đồng ý với nội dung
+  AGREE
+}
+
+enum ContractFeedbackStatus {
+  NEW
+  RESOLVED
+}
+
+/// Ý kiến của khách hàng gửi qua liên kết xem trước.
+model ContractFeedback {
+  id             String                 @id @default(uuid()) @db.Uuid
+  tenantId       String                 @db.Uuid
+  contractId     String                 @db.Uuid
+  linkId         String                 @db.Uuid
+  kind           ContractFeedbackKind
+  status         ContractFeedbackStatus @default(NEW)
+  name           String
+  contact        String
+  /// Điều khoản/đoạn liên quan (khách tự ghi)
+  clauseRef      String?
+  message        String?
+  /// Phiên bản (ContractRevision.seq) khách đã xem; null nếu hợp đồng chưa có lịch sử chỉnh sửa
+  revisionSeq    Int?
+  /// SHA-256 nội dung khách đã xem ⇒ phát hiện hợp đồng bị sửa sau khi khách xem
+  contentHash    String
+  response       String?
+  resolvedById   String?                @db.Uuid
+  resolvedByName String?
+  resolvedAt     DateTime?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime               @default(now())
+  contract       Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  link           ContractShareLink      @relation(fields: [linkId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, contractId, status])
+  @@index([linkId, createdAt])
 }

@@ -10,6 +10,7 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { ContractApprovalTab } from '@/components/contract-approval-tab';
 import { ContractContentTab } from '@/components/contract-content-tab';
 import { ContractDocumentsTab } from '@/components/contract-documents-tab';
+import { ContractFeedbackTab, useContractFeedback } from '@/components/contract-feedback-tab';
 import { ContractLifecycleTab } from '@/components/contract-lifecycle-tab';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
@@ -49,6 +50,7 @@ export default function ContractDetailPage() {
 
   const q = useQuery({ queryKey: ['contract', id], queryFn: () => api<ContractDetail>(`/contracts/${id}`) });
   const timeline = useQuery({ queryKey: ['contract', id, 'timeline'], queryFn: () => api<TimelineEntry[]>(`/contracts/${id}/timeline`) });
+  const feedbackNew = useContractFeedback(id).data?.newCount ?? 0;
 
   const op = useMutation({
     mutationFn: (action: 'archive' | 'unarchive' | 'restore' | 'delete' | 'duplicate') =>
@@ -144,6 +146,10 @@ export default function ContractDetailPage() {
           <TabsTrigger value="signature">Ký điện tử</TabsTrigger>
           <TabsTrigger value="lifecycle">Vòng đời</TabsTrigger>
           <TabsTrigger value="documents">Tài liệu</TabsTrigger>
+          <TabsTrigger value="feedback">
+            Khách hàng góp ý
+            {feedbackNew > 0 && <Badge className="ml-1 h-5 min-w-5 px-1.5" aria-label={`${feedbackNew} yêu cầu mới`}>{feedbackNew}</Badge>}
+          </TabsTrigger>
           <TabsTrigger value="revisions">Lịch sử chỉnh sửa</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
@@ -210,6 +216,10 @@ export default function ContractDetailPage() {
             canManage={!c.deletedAt && !c.archivedAt && !['PENDING_APPROVAL', 'PENDING_SIGNATURE'].includes(c.status) && can('contract.update')}
             canDelete={!c.deletedAt && !c.archivedAt && !['PENDING_APPROVAL', 'PENDING_SIGNATURE'].includes(c.status) && c.signatureStatus !== 'COMPLETED' && can('contract.update')}
           />
+        </TabsContent>
+
+        <TabsContent value="feedback" className="mt-4">
+          <ContractFeedbackTab contract={c} />
         </TabsContent>
 
         <TabsContent value="parties" className="mt-4 grid gap-4 md:grid-cols-2">

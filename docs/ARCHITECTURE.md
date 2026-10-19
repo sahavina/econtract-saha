@@ -106,6 +106,20 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
 - **Chưa có**: chữ ký số có chứng thư CA (VNPT-CA, Viettel-CA, FPT-CA…), dấu thời gian (TSA), xuất PDF/A có nhúng chữ ký phía server.
   Trường `SignatureRequest.provider` dành cho việc tích hợp các nhà cung cấp này.
 
+### Khách hàng xem trước & góp ý
+
+- Tab "Khách hàng góp ý" ở chi tiết hợp đồng: tạo **link xem trước** công khai (`contract.share`) cho bên đối tác không có tài khoản.
+  Token ngẫu nhiên 32 byte, DB chỉ lưu hash SHA-256 (`ContractShareLink`), hạn 1–90 ngày, thu hồi được; link chỉ hiển thị một lần
+  (sao chép ngay), gửi email kèm link nếu SMTP đã cấu hình. Không tạo/mở được cho hợp đồng đã hủy, thanh lý, lưu trữ hoặc trong thùng rác.
+- Trang `/preview/{token}` (API `GET /public/preview/:token`, tenant suy ra từ token): thông tin chung, các bên, nội dung **bản hiện tại**
+  đã thay biến (biến trống hiển thị "……"), chỉ đọc. Mỗi lần xem tăng `viewCount`; nhật ký `contract.preview_view` tối đa 1 lần/giờ/link.
+- Khách gửi **yêu cầu bổ sung/thay đổi** (họ tên, email/điện thoại, điều khoản/đoạn liên quan, nội dung ≤ 4000 ký tự) hoặc **đồng ý nội dung**
+  (`ContractFeedback`) khi hợp đồng còn Nháp / Chờ duyệt / Đã phê duyệt. Mỗi ý kiến lưu phiên bản (`ContractRevision.seq`) và SHA-256 phần khách
+  đã xem ⇒ nội bộ thấy cảnh báo khi hợp đồng đã sửa sau đó; "đồng ý" chỉ nhận cho đúng bản hiện tại (409 nếu đã đổi).
+  Chống spam: 5 lần/phút/IP, 20 giây giữa hai lần gửi và tối đa 20 ý kiến/24 giờ trên một link, chặn trùng lặp, ô bẫy bot.
+- Ý kiến mới ⇒ thông báo trong ứng dụng cho người phụ trách, người tạo hợp đồng và người tạo link; badge số yêu cầu mới trên tab.
+  Nội bộ đánh dấu đã xử lý kèm phản hồi (khách thấy phản hồi trên trang xem trước) hoặc mở lại.
+
 ### Vòng đời hợp đồng
 
 - **Phụ lục** (`ContractAppendix`, số `{mã HĐ}-PL01`): sửa đổi/bổ sung, gia hạn (bắt buộc ngày hết hạn mới, phải sau ngày hiện tại),

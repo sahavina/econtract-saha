@@ -37,6 +37,11 @@ export class MailService {
       this.logger.warn('Chưa cấu hình SMTP_HOST – email sẽ chỉ được ghi ra log (môi trường phát triển).');
   }
 
+  /** Đã cấu hình SMTP (email gửi thật), false = chỉ ghi ra log. */
+  get enabled(): boolean {
+    return this.transporter !== null;
+  }
+
   async send(message: MailMessage): Promise<void> {
     if (!this.transporter) {
       this.logger.log(`[DEV EMAIL] To: ${message.to} | ${message.subject}\n${message.text}`);
