@@ -5,6 +5,7 @@ import {
   HttpException,
   HttpStatus,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -145,6 +146,8 @@ const contractInclude = {
 
 @Injectable()
 export class ContractShareService {
+  private readonly logger = new Logger('ContractShare');
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly contracts: ContractsService,
@@ -186,7 +189,9 @@ export class ContractShareService {
   async createLink(user: AuthUser, contractId: string, input: CreateShareLinkInput) {
     const contract = await this.contracts.get(user, contractId);
     if (contract.deletedAt || contract.archivedAt || CLOSED_STATUSES.includes(contract.status))
-      throw new BadRequestException('Hợp đồng đã đóng (hủy, thanh lý, lưu trữ hoặc trong thùng rác), không thể gửi khách xem');
+      throw new BadRequestException(
+        'Hợp đồng đã đóng (hủy, thanh lý, lưu trữ hoặc trong thùng rác), không thể gửi khách xem',
+      );
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + input.expiresInDays * DAY);
     const link = await this.prisma.$transaction(async (tx) => {
@@ -209,7 +214,11 @@ export class ContractShareService {
           action: 'contract.preview_link_create',
           entityType: 'contract',
           entityId: contractId,
-          data: { code: contract.code, recipient: input.recipientName ?? input.recipientEmail ?? null, expiresAt: expiresAt.toISOString() },
+          data: {
+            code: contract.code,
+            recipient: input.recipientName ?? input.recipientEmail ?? null,
+            expiresAt: expiresAt.toISOString(),
+          },
         },
         tx,
       );
@@ -217,33 +226,47 @@ export class ContractShareService {
     });
     const url = this.appUrl(`/preview/${token}`);
     let emailed = false;
+    let emailFailed = false;
     if (input.sendEmail && input.recipientEmail && this.mail.enabled) {
       const org = await this.prisma.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { name: true } });
-      await this.mail.send({
-        to: input.recipientEmail,
-        subject: `[SAHA eContract] Mời xem trước hợp đồng ${contract.code}`,
-        text: [
-          `Kính gửi ${input.recipientName ?? 'Quý khách'},`,
-          `${org.name} gửi Quý khách bản dự thảo hợp đồng "${contract.title}" (${contract.code}) để xem trước.`,
-          input.message ? `Lời nhắn: ${input.message}` : '',
-          `Mở liên kết để xem nội dung và gửi yêu cầu bổ sung/thay đổi (nếu có): ${url}`,
-          `Liên kết có hiệu lực đến ${expiresAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`,
-        ]
-          .filter(Boolean)
-          .join('\n'),
-      });
-      emailed = true;
+      // Link đã tạo: lỗi gửi email không được làm mất link (người dùng vẫn sao chép được).
+      try {
+        await this.mail.send({
+          to: input.recipientEmail,
+          subject: `[SAHA eContract] Mời xem trước hợp đồng ${contract.code}`,
+          text: [
+            `Kính gửi ${input.recipientName ?? 'Quý khách'},`,
+            `${org.name} gửi Quý khách bản dự thảo hợp đồng "${contract.title}" (${contract.code}) để xem trước.`,
+            input.message ? `Lời nhắn: ${input.message}` : '',
+            `Mở liên kết để xem nội dung và gửi yêu cầu bổ sung/thay đổi (nếu có): ${url}`,
+            `Liên kết có hiệu lực đến ${expiresAt.toLocaleString('vi-VN', { timeZone: 'Asia/Ho_Chi_Minh' })}.`,
+          ]
+            .filter(Boolean)
+            .join('\n'),
+        });
+        emailed = true;
+      } catch (err) {
+        emailFailed = true;
+        this.logger.warn(
+          `Không gửi được email link xem trước ${contract.code}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
     }
-    return { link: { ...link, state: linkState(link), feedbackCount: 0 }, url, emailed };
+    return { link: { ...link, state: linkState(link), feedbackCount: 0 }, url, emailed, emailFailed };
   }
 
   async revokeLink(user: AuthUser, contractId: string, linkId: string) {
     const contract = await this.contracts.get(user, contractId);
-    const link = await this.prisma.contractShareLink.findFirst({ where: { id: linkId, contractId, tenantId: user.tenantId } });
+    const link = await this.prisma.contractShareLink.findFirst({
+      where: { id: linkId, contractId, tenantId: user.tenantId },
+    });
     if (!link) throw new NotFoundException('Không tìm thấy liên kết');
     if (link.revokedAt) return;
     await this.prisma.$transaction(async (tx) => {
-      await tx.contractShareLink.update({ where: { id: link.id }, data: { revokedAt: new Date(), revokedByName: user.fullName } });
+      await tx.contractShareLink.update({
+        where: { id: link.id },
+        data: { revokedAt: new Date(), revokedByName: user.fullName },
+      });
       await this.audit.log(
         user,
         {
@@ -279,7 +302,9 @@ export class ContractShareService {
   /** Đánh dấu đã xử lý (kèm phản hồi cho khách) hoặc mở lại. */
   async updateFeedback(user: AuthUser, contractId: string, feedbackId: string, input: UpdateFeedbackInput) {
     const contract = await this.contracts.get(user, contractId);
-    const fb = await this.prisma.contractFeedback.findFirst({ where: { id: feedbackId, contractId, tenantId: user.tenantId } });
+    const fb = await this.prisma.contractFeedback.findFirst({
+      where: { id: feedbackId, contractId, tenantId: user.tenantId },
+    });
     if (!fb) throw new NotFoundException('Không tìm thấy yêu cầu của khách');
     const resolved = input.status === 'RESOLVED';
     await this.prisma.$transaction(async (tx) => {
@@ -317,7 +342,9 @@ export class ContractShareService {
     if (!link) throw new NotFoundException('Liên kết xem trước không hợp lệ');
     const c = link.contract;
     if (linkState(link) !== 'ACTIVE' || c.deletedAt || c.archivedAt || CLOSED_STATUSES.includes(c.status))
-      throw new GoneException('Liên kết xem trước đã hết hạn hoặc đã bị thu hồi. Vui lòng liên hệ bên gửi để nhận liên kết mới.');
+      throw new GoneException(
+        'Liên kết xem trước đã hết hạn hoặc đã bị thu hồi. Vui lòng liên hệ bên gửi để nhận liên kết mới.',
+      );
     return { link, contract: c };
   }
 
@@ -326,12 +353,20 @@ export class ContractShareService {
     const now = new Date();
     const logView = !link.lastViewedAt || now.getTime() - link.lastViewedAt.getTime() > VIEW_LOG_INTERVAL_MS;
     await this.prisma.$transaction(async (tx) => {
-      await tx.contractShareLink.update({ where: { id: link.id }, data: { viewCount: { increment: 1 }, lastViewedAt: now } });
+      await tx.contractShareLink.update({
+        where: { id: link.id },
+        data: { viewCount: { increment: 1 }, lastViewedAt: now },
+      });
       if (logView)
         await this.audit.logExternal(
           link.tenantId,
           { name: `${link.recipientName ?? 'Khách hàng'} (xem trước)`, ...meta },
-          { action: 'contract.preview_view', entityType: 'contract', entityId: contract.id, data: { code: contract.code } },
+          {
+            action: 'contract.preview_view',
+            entityType: 'contract',
+            entityId: contract.id,
+            data: { code: contract.code },
+          },
           tx,
         );
     });
@@ -342,7 +377,18 @@ export class ContractShareService {
         where: { linkId: link.id },
         orderBy: { createdAt: 'desc' },
         take: 50,
-        select: { id: true, kind: true, status: true, name: true, clauseRef: true, message: true, response: true, revisionSeq: true, createdAt: true, resolvedAt: true },
+        select: {
+          id: true,
+          kind: true,
+          status: true,
+          name: true,
+          clauseRef: true,
+          message: true,
+          response: true,
+          revisionSeq: true,
+          createdAt: true,
+          resolvedAt: true,
+        },
       }),
     ]);
     return {
@@ -359,7 +405,9 @@ export class ContractShareService {
     // Bot điền ô ẩn: trả về như thành công nhưng không lưu.
     if (input.website) return { ok: true };
     if (!FEEDBACK_STATUSES.includes(contract.status))
-      throw new BadRequestException('Hợp đồng đã chuyển sang bước ký, không nhận thêm yêu cầu qua liên kết này. Vui lòng liên hệ trực tiếp bên gửi.');
+      throw new BadRequestException(
+        'Hợp đồng đã chuyển sang bước ký, không nhận thêm yêu cầu qua liên kết này. Vui lòng liên hệ trực tiếp bên gửi.',
+      );
 
     const since = new Date(Date.now() - DAY);
     const recent = await this.prisma.contractFeedback.findMany({
@@ -368,9 +416,15 @@ export class ContractShareService {
       select: { createdAt: true, kind: true, message: true },
     });
     if (recent.length >= FEEDBACK_PER_LINK_PER_DAY)
-      throw new HttpException('Liên kết này đã nhận quá nhiều yêu cầu trong 24 giờ. Vui lòng thử lại sau.', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'Liên kết này đã nhận quá nhiều yêu cầu trong 24 giờ. Vui lòng thử lại sau.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     if (recent[0] && Date.now() - recent[0].createdAt.getTime() < FEEDBACK_MIN_INTERVAL_MS)
-      throw new HttpException('Bạn vừa gửi yêu cầu. Vui lòng đợi ít phút trước khi gửi tiếp.', HttpStatus.TOO_MANY_REQUESTS);
+      throw new HttpException(
+        'Bạn vừa gửi yêu cầu. Vui lòng đợi ít phút trước khi gửi tiếp.',
+        HttpStatus.TOO_MANY_REQUESTS,
+      );
     if (recent.some((r) => r.kind === input.kind && (r.message ?? null) === (input.message ?? null)))
       throw new ConflictException('Yêu cầu này đã được gửi trước đó.');
 
@@ -378,9 +432,12 @@ export class ContractShareService {
     const current = buildPreview(contract, seq).version;
     // Đồng ý chỉ có giá trị với đúng bản hiện tại.
     if (input.kind === 'AGREE' && input.contentHash !== current.hash)
-      throw new ConflictException('Nội dung hợp đồng vừa được cập nhật. Vui lòng tải lại trang để xem bản mới trước khi đồng ý.');
+      throw new ConflictException(
+        'Nội dung hợp đồng vừa được cập nhật. Vui lòng tải lại trang để xem bản mới trước khi đồng ý.',
+      );
     // Phiên bản khách đã xem: không thể lớn hơn phiên bản hiện tại.
-    const revisionSeq = input.revisionSeq !== null && seq !== null && input.revisionSeq <= seq ? input.revisionSeq : seq;
+    const revisionSeq =
+      input.revisionSeq !== null && seq !== null && input.revisionSeq <= seq ? input.revisionSeq : seq;
 
     const created = await this.prisma.$transaction(async (tx) => {
       const row = await tx.contractFeedback.create({

@@ -64,11 +64,11 @@ function CreateLinkDialog({ contract, mailEnabled, open, onClose }: { contract: 
   const [days, setDays] = useState('14');
   const [sendEmail, setSendEmail] = useState(mailEnabled && !!partner?.email);
   const [message, setMessage] = useState('');
-  const [result, setResult] = useState<{ url: string; emailed: boolean } | null>(null);
+  const [result, setResult] = useState<{ url: string; emailed: boolean; emailFailed?: boolean } | null>(null);
 
   const create = useMutation({
     mutationFn: () =>
-      api<{ url: string; emailed: boolean }>(`/contracts/${contract.id}/share-links`, {
+      api<{ url: string; emailed: boolean; emailFailed?: boolean }>(`/contracts/${contract.id}/share-links`, {
         method: 'POST',
         body: { recipientName, recipientEmail, expiresInDays: Number(days), sendEmail: mailEnabled && sendEmail, message },
       }),
@@ -97,7 +97,8 @@ function CreateLinkDialog({ contract, mailEnabled, open, onClose }: { contract: 
               </Button>
             </div>
             <p className="text-sm text-muted-foreground">
-              {result.emailed ? `Đã gửi email tới ${recipientEmail}. ` : ''}Link chỉ hiển thị một lần – hãy sao chép ngay. Cần link khác thì tạo link mới.
+              {result.emailed ? `Đã gửi email tới ${recipientEmail}. ` : ''}
+              {result.emailFailed ? 'Không gửi được email (kiểm tra cấu hình SMTP) – hãy gửi link cho khách qua kênh khác. ' : ''}Link chỉ hiển thị một lần – hãy sao chép ngay. Cần link khác thì tạo link mới.
             </p>
             <DialogFooter>
               <Button onClick={onClose}>Xong</Button>

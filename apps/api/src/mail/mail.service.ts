@@ -23,7 +23,8 @@ export class MailService {
   constructor(config: ConfigService<Env, true>) {
     const host = config.get('SMTP_HOST', { infer: true });
     this.from = config.get('MAIL_FROM', { infer: true });
-    this.transporter = host
+    // Tên miền .invalid (RFC 2606) là chỗ giữ chỗ "chưa cấu hình" ⇒ coi như chưa có SMTP.
+    this.transporter = host && !/\.invalid$/i.test(host)
       ? nodemailer.createTransport({
           host,
           port: config.get('SMTP_PORT', { infer: true }),

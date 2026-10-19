@@ -159,6 +159,14 @@ describe('ContractShareService', () => {
     expect(mail.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'b@kh.vn', text: expect.stringContaining(r.url) }));
   });
 
+  it('still returns the link when sending the email fails', async () => {
+    const { svc, mail } = setup({ mail: true });
+    mail.send.mockRejectedValueOnce(new Error('getaddrinfo ENOTFOUND'));
+    const r = await svc.createLink(user, 'c1', { expiresInDays: 7, sendEmail: true, recipientEmail: 'b@kh.vn' } as never);
+    expect(r).toMatchObject({ emailed: false, emailFailed: true });
+    expect(r.url).toContain('/preview/');
+  });
+
   it('refuses expired, revoked links and closed contracts', async () => {
     for (const s of [
       setup({ link: { expiresAt: new Date(Date.now() - 1) } }),
