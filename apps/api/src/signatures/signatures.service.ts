@@ -169,7 +169,7 @@ export class SignaturesService {
     // Gửi lời mời cho người ký đến lượt (ngoài transaction để lỗi email không làm hỏng dữ liệu).
     const tokens = new Map(signers.map((s) => [s.data.email, s.token]));
     for (const s of request.signers.filter((x) => x.status === 'PENDING')) {
-      await this.invite(contract, s, tokens.get(s.email) ?? null, input.message ?? null);
+      await this.invite(user.tenantId, contract, s, tokens.get(s.email) ?? null, input.message ?? null);
     }
     return this.getForContract(user, contractId);
   }
@@ -201,13 +201,14 @@ export class SignaturesService {
   }
 
   private async invite(
+    tenantId: string,
     contract: { id: string; code: string; title: string },
     signer: { email: string; name: string; userId: string | null },
     token: string | null,
     message: string | null,
   ) {
     const url = token ? this.appUrl(`/sign/${token}`) : this.appUrl(`/contracts/${contract.id}?tab=signature`);
-    await this.mail.send({
+    await this.mail.send(tenantId, {
       to: signer.email,
       subject: `[SAHA eContract] Mời ký hợp đồng ${contract.code}`,
       text: [
@@ -248,7 +249,7 @@ export class SignaturesService {
         tx,
       );
     });
-    if (signer.status === 'PENDING') await this.invite(contract, signer, token, request.message);
+    if (signer.status === 'PENDING') await this.invite(user.tenantId, contract, signer, token, request.message);
     return { url: this.appUrl(`/sign/${token}`) };
   }
 
@@ -468,7 +469,7 @@ export class SignaturesService {
         otpAttempts: 0,
       },
     });
-    await this.mail.send({
+    await this.mail.send(s.tenantId, {
       to: s.email,
       subject: `[SAHA eContract] Mã OTP ký hợp đồng ${s.request.contract.code}`,
       text: `Mã xác thực ký hợp đồng "${s.request.contract.title}" của bạn là: ${otp}\nMã có hiệu lực 10 phút. Không chia sẻ mã này cho người khác.`,
@@ -629,9 +630,9 @@ export class SignaturesService {
           });
           const contract = await tx.contract.findUniqueOrThrow({
             where: { id: request.contractId },
-            select: { id: true, code: true, title: true },
+            select: { id: true, code: true, title: true, tenantId: true },
           });
-          afterCommit.push(() => this.invite(contract, next, token, request.message));
+          afterCommit.push(() => this.invite(contract.tenantId, contract, next, token, request.message));
           await this.notifications.notify(
             next.tenantId,
             [next.userId],
@@ -700,7 +701,7 @@ export class SignaturesService {
       body: text,
       link: `/contracts/${contract.id}?tab=signature`,
     });
-    await this.mail.send({
+    await this.mail.send(creator.tenantId, {
       to: creator.email,
       subject: `[SAHA eContract] Hợp đồng ${contract.code} bị từ chối ký`,
       text: `${text}\nXem hợp đồng: ${this.appUrl(`/contracts/${contract.id}?tab=signature`)}`,

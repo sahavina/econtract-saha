@@ -129,7 +129,7 @@ describe('ContractShareService', () => {
     };
     const contracts = { get: vi.fn(async () => contract) };
     const audit = { log: vi.fn(), logExternal: vi.fn() };
-    const mail = { enabled: opts.mail ?? false, send: vi.fn() };
+    const mail = { isEnabled: vi.fn().mockResolvedValue(opts.mail ?? false), send: vi.fn() };
     const notifications = { notify: vi.fn() };
     const config = { get: () => 'https://hopdong.example.vn/' };
     const svc = new ContractShareService(prisma as never, contracts as never, audit as never, mail as never, notifications as never, config as never);
@@ -156,7 +156,7 @@ describe('ContractShareService', () => {
     const { svc, mail } = setup({ mail: true });
     const r = await svc.createLink(user, 'c1', { expiresInDays: 7, sendEmail: true, recipientEmail: 'b@kh.vn' } as never);
     expect(r.emailed).toBe(true);
-    expect(mail.send).toHaveBeenCalledWith(expect.objectContaining({ to: 'b@kh.vn', text: expect.stringContaining(r.url) }));
+    expect(mail.send).toHaveBeenCalledWith(user.tenantId, expect.objectContaining({ to: 'b@kh.vn', text: expect.stringContaining(r.url) }));
   });
 
   it('still returns the link when sending the email fails', async () => {

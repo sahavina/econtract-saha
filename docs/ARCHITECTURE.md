@@ -101,8 +101,10 @@ Ràng buộc `@@unique([tenantId, code])` đảm bảo không trùng; xung độ
   với mã đã đóng băng; mỗi lần mở ghi nhật ký `contract.signature_document_view`. Trang nhắc (không chặn) nếu chưa mở hết tệp.
 - Tạo hợp đồng từ tệp: `/contracts/new?from=file` (menu "Tạo hợp đồng từ file") – chọn/kéo thả tệp ngay trên form, tạo hợp đồng
   rồi tải từng tệp lên (tệp lỗi được báo riêng, hợp đồng vẫn giữ), mở tab Tài liệu. Form tạo thường cũng có ô đính kèm tùy chọn.
-- Email: `MailService` gửi qua SMTP (`SMTP_HOST`, Mailpit trong docker-compose); dev không có SMTP thì ghi email ra log API.
-  Production bắt buộc cấu hình SMTP.
+- Email: `MailService.send(tenantId, …)` dùng SMTP riêng của doanh nghiệp (Cấu hình → Email, `TenantIntegration` provider
+  `smtp`, mật khẩu mã hóa bằng `INTEGRATION_SECRET`, có nút gửi thử), không có thì dùng `SMTP_*` của máy chủ (Mailpit trong
+  docker-compose). `SMTP_HOST` kết thúc bằng `.invalid` coi như chưa cấu hình. Chưa có SMTP nào: dev ghi email ra log API,
+  production báo lỗi "Chưa cấu hình máy chủ gửi email" (không ghi OTP ra log).
 - **Chưa có**: chữ ký số có chứng thư CA (VNPT-CA, Viettel-CA, FPT-CA…), dấu thời gian (TSA), xuất PDF/A có nhúng chữ ký phía server.
   Trường `SignatureRequest.provider` dành cho việc tích hợp các nhà cung cấp này.
 

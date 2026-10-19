@@ -15,7 +15,8 @@ migrate: chạy một lần mỗi lần khởi động (prisma migrate deploy + 
 
 - Linux x86_64/arm64, Docker Engine 24+ với Compose v2; tối thiểu 2 vCPU, 4 GB RAM (build image Next.js cần ~2 GB).
 - Tên miền trỏ bản ghi A/AAAA về máy chủ; mở cổng 80 và 443.
-- Tài khoản SMTP (bắt buộc: email mời ký, OTP, thông báo).
+- Tài khoản SMTP (email mời ký, OTP, thông báo): đặt `SMTP_*` cho cả máy chủ, hoặc để `SMTP_HOST=smtp.chua-cau-hinh.invalid`
+  và mỗi doanh nghiệp tự nhập trong Cấu hình → Email.
 
 ## 2. Cài đặt lần đầu
 

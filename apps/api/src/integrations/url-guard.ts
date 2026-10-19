@@ -36,13 +36,17 @@ export async function assertSafeIntegrationUrl(raw: string, allowPrivate: boolea
     throw new Error('Chỉ hỗ trợ kết nối HTTPS');
   }
   if (url.username || url.password) throw new Error('URL không được chứa tài khoản/mật khẩu');
-  if (!allowPrivate) {
-    const host = url.hostname.replace(/^\[|\]$/g, '');
-    const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => []);
-    if (!addrs.length) throw new Error(`Không phân giải được tên miền ${url.hostname}`);
-    if (addrs.some((a) => isPrivateAddress(a.address))) {
-      throw new Error('Không cho phép kết nối tới địa chỉ mạng nội bộ');
-    }
-  }
+  await assertPublicHost(url.hostname, allowPrivate);
   return url;
+}
+
+/** Tên máy/IP phải phân giải ra địa chỉ công cộng (dùng cho cả máy chủ SMTP do doanh nghiệp nhập). */
+export async function assertPublicHost(hostname: string, allowPrivate: boolean): Promise<void> {
+  if (allowPrivate) return;
+  const host = hostname.replace(/^\[|\]$/g, '');
+  const addrs = isIP(host) ? [{ address: host }] : await lookup(host, { all: true }).catch(() => []);
+  if (!addrs.length) throw new Error(`Không phân giải được tên miền ${hostname}`);
+  if (addrs.some((a) => isPrivateAddress(a.address))) {
+    throw new Error('Không cho phép kết nối tới địa chỉ mạng nội bộ');
+  }
 }

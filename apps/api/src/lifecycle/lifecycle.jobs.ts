@@ -123,7 +123,7 @@ export class LifecycleJobs implements OnApplicationBootstrap {
       throw err;
     }
     try {
-      await this.mail.send({ to, subject, text });
+      await this.mail.send(tenantId, { to, subject, text });
       // Kèm thông báo trong ứng dụng (tiêu đề bỏ tiền tố email).
       await this.notifications.notify(tenantId, [recipient.id], {
         type: `reminder.${key.split(':')[0]}`,

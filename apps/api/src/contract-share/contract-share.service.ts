@@ -180,7 +180,7 @@ export class ContractShareService {
       select: { ...linkSelect, _count: { select: { feedback: true } } },
     });
     return {
-      mailEnabled: this.mail.enabled,
+      mailEnabled: await this.mail.isEnabled(user.tenantId),
       items: links.map(({ _count, ...l }) => ({ ...l, state: linkState(l), feedbackCount: _count.feedback })),
     };
   }
@@ -227,11 +227,11 @@ export class ContractShareService {
     const url = this.appUrl(`/preview/${token}`);
     let emailed = false;
     let emailFailed = false;
-    if (input.sendEmail && input.recipientEmail && this.mail.enabled) {
+    if (input.sendEmail && input.recipientEmail && (await this.mail.isEnabled(user.tenantId))) {
       const org = await this.prisma.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { name: true } });
       // Link đã tạo: lỗi gửi email không được làm mất link (người dùng vẫn sao chép được).
       try {
-        await this.mail.send({
+        await this.mail.send(user.tenantId, {
           to: input.recipientEmail,
           subject: `[SAHA eContract] Mời xem trước hợp đồng ${contract.code}`,
           text: [

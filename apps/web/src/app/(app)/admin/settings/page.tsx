@@ -6,6 +6,7 @@ import { Loader2, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CompanyProfileCard } from '@/components/company-profile-card';
+import { EmailSettingsCard } from '@/components/email-settings-card';
 import { MisaEsignSettingsCard } from '@/components/misa-esign-settings-card';
 import { OdooSettingsCard } from '@/components/odoo-settings-card';
 import { ErrorState, PageHeader } from '@/components/page-header';
@@ -179,6 +180,9 @@ export default function AdminSettingsPage() {
           )}
         </CardContent>
       </Card>
+      <div className="mt-4">
+        <EmailSettingsCard />
+      </div>
       <div className="mt-4">
         <OdooSettingsCard />
       </div>
