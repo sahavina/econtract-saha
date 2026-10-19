@@ -16,6 +16,8 @@ export interface ExtractedParty {
   representative?: string;
   position?: string;
   bankAccount?: string;
+  /** "(Bên Mua)" / "(Bên Bán)" ghi cạnh tên bên – dùng gợi ý khách hàng/nhà cung cấp. */
+  side?: 'BUY' | 'SELL';
 }
 
 export interface ExtractedContract {
@@ -30,7 +32,7 @@ export interface ExtractedContract {
   parties: ExtractedParty[];
 }
 
-type PartyField = Exclude<keyof ExtractedParty, 'role'>;
+type PartyField = Exclude<keyof ExtractedParty, 'role' | 'side'>;
 
 /** Bỏ dấu, chữ thường, gộp khoảng trắng: "Mã số thuế" → "ma so thue". */
 export function foldVi(s: string): string {
@@ -85,7 +87,7 @@ function normalizeValue(field: PartyField, raw: string): string | undefined {
 }
 
 /** "BÊN A", "1/ ĐẠI DIỆN BÊN A", "BÊN MUA (BÊN A): CÔNG TY …" ⇒ vai trò + tên nếu có sau dấu ":". */
-function partyMarker(text: string): { role: ExtractedParty['role']; name?: string } | null {
+function partyMarker(text: string): { role: ExtractedParty['role']; name?: string; side?: 'BUY' | 'SELL' } | null {
   const f = foldVi(text);
   if (f.length > 160 || /^dieu\b/.test(f)) return null;
   const m = f.match(/^(?:\d+[/.)]\s*)?(?:dai dien\s+)?ben\s+([abc])\b|\(\s*(?:goi tat la\s+)?ben\s+([abc])\s*\)/);
@@ -93,7 +95,9 @@ function partyMarker(text: string): { role: ExtractedParty['role']; name?: strin
   const role = `PARTY_${(m[1] ?? m[2]).toUpperCase()}` as ExtractedParty['role'];
   const colon = text.search(/[:：]/);
   const name = colon >= 0 ? clean(text.slice(colon + 1)) : '';
-  return { role, name: name && !/^[.…_\s]+$/.test(name) ? name : undefined };
+  const head = foldVi(colon >= 0 ? text.slice(0, colon) : text);
+  const side = /\bben mua\b/.test(head) ? 'BUY' : /\bben ban\b/.test(head) ? 'SELL' : undefined;
+  return { role, name: name && !/^[.…_\s]+$/.test(name) ? name : undefined, side };
 }
 
 /** "28.512.000" | "28,512,000" | "28.512.000,50" ⇒ "28512000" / "28512000.50" */
@@ -172,6 +176,7 @@ export function extractContractFields(blocks: DocBlock[]): ExtractedContract {
           out.parties.push(current);
         }
         if (marker.name) put('name', marker.name);
+        if (marker.side && !current.side) current.side = marker.side;
         continue;
       }
       if (current) {

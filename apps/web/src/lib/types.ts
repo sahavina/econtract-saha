@@ -46,6 +46,8 @@ export interface ContractParty {
   id?: string;
   role: PartyRole;
   partnerId: string | null;
+  /** Loại của đối tác trong danh mục (nếu bên đã liên kết). */
+  partner?: { type: PartnerType } | null;
   isInternal: boolean;
   entityType: LegalEntityType;
   name: string;

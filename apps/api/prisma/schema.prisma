@@ -295,6 +295,8 @@ model NumberSequence {
 enum PartnerType {
   CUSTOMER
   SUPPLIER
+  /// Vừa là khách hàng vừa là nhà cung cấp
+  BOTH
   OTHER
 }
 

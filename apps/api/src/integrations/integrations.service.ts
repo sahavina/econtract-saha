@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { z } from 'zod';
+import { mergePartnerType, PARTNER_TYPES } from '@saha/shared';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import type { Env } from '../config/env.js';
@@ -34,7 +35,7 @@ export type OdooSearchInput = z.infer<typeof odooSearchSchema>;
 
 export const odooImportSchema = z.object({
   odooId: z.coerce.number().int().positive(),
-  type: z.enum(['CUSTOMER', 'SUPPLIER', 'OTHER']).optional(),
+  type: z.enum(PARTNER_TYPES).optional(),
 });
 export type OdooImportInput = z.infer<typeof odooImportSchema>;
 
@@ -167,7 +168,11 @@ export class IntegrationsService {
     const existing = await this.prisma.partner.findUnique({
       where: { tenantId_externalRef: { tenantId: user.tenantId, externalRef } },
     });
-    const type = input.type ?? existing?.type ?? p.suggestedType;
+    // Đối tác đã có mà nhập lại với loại khác (khách hàng ↔ nhà cung cấp) ⇒ "Khách hàng & Nhà cung cấp".
+    const type =
+      existing && (input.type === 'CUSTOMER' || input.type === 'SUPPLIER')
+        ? mergePartnerType(existing.type, input.type)
+        : (input.type ?? existing?.type ?? p.suggestedType);
     const data = {
       type,
       entityType: p.isCompany ? ('ORGANIZATION' as const) : ('INDIVIDUAL' as const),

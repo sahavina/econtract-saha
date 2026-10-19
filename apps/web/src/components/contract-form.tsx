@@ -1,6 +1,6 @@
 'use client';
 
-import { extractContractFields } from '@saha/shared';
+import { extractContractFields, foldVi } from '@saha/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CloudDownload, FileText, FileUp, Loader2, Plus, Trash2, X } from 'lucide-react';
@@ -56,7 +56,16 @@ const partySchema = z.object({
   position: z.string(),
   authorizationRef: z.string(),
   bankAccount: z.string(),
+  /** Phân loại bên đối tác ⇒ lưu vào danh mục Đối tác khi lưu hợp đồng. */
+  partnerType: z.enum(['', 'CUSTOMER', 'SUPPLIER']),
+}).superRefine((p, ctx) => {
+  if (!p.isInternal && p.name.trim() && !p.partnerType) {
+    ctx.addIssue({ code: 'custom', path: ['partnerType'], message: 'Chọn Khách hàng hoặc Nhà cung cấp' });
+  }
 });
+
+/** Loại đối tác của bên ⇒ giá trị cho ô "Phân loại" (vừa KH vừa NCC thì để người dùng chọn theo hợp đồng này). */
+const partyTypeOf = (t?: string | null): '' | 'CUSTOMER' | 'SUPPLIER' => (t === 'CUSTOMER' || t === 'SUPPLIER' ? t : '');
 
 const schema = z
   .object({
@@ -99,6 +108,7 @@ const emptyParty = (role: FormValues['parties'][number]['role']): FormValues['pa
   position: '',
   authorizationRef: '',
   bankAccount: '',
+  partnerType: '',
 });
 
 function toForm(c?: ContractDetail): FormValues {
@@ -141,6 +151,7 @@ function toForm(c?: ContractDetail): FormValues {
       position: p.position ?? '',
       authorizationRef: p.authorizationRef ?? '',
       bankAccount: p.bankAccount ?? '',
+      partnerType: partyTypeOf(p.partner?.type),
     })),
   };
 }
@@ -175,6 +186,7 @@ function toPayload(v: FormValues, isEdit: boolean) {
       position: nul(p.position),
       authorizationRef: nul(p.authorizationRef),
       bankAccount: nul(p.bankAccount),
+      partnerType: p.isInternal || !p.partnerType ? null : p.partnerType,
     })),
   };
   return isEdit ? payload : { ...payload, code: nul(v.code), templateId: nul(v.templateId) };
@@ -283,6 +295,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
   const { register, control, formState, setError, setValue } = form;
   const errors = formState.errors;
   const parties = useFieldArray({ control, name: 'parties' });
+  const watchedParties = useWatch({ control, name: 'parties' });
 
   const [files, setFiles] = useState<File[]>([]);
   /** Nội dung hợp đồng chuyển từ file Word (chỉ khi lập mới, không chọn mẫu). */
@@ -339,6 +352,29 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     setValue(`parties.${index}.phone`, p.phone ?? '');
     setValue(`parties.${index}.representative`, p.representative ?? '');
     setValue(`parties.${index}.position`, p.position ?? '');
+    setValue(`parties.${index}.partnerType`, partyTypeOf(p.type) || directionSuggestion(), { shouldValidate: true });
+  };
+
+  /**
+   * Gợi ý phân loại bên đối tác theo chiều hợp đồng ghi trong tên mẫu/loại hợp đồng:
+   * "… SAHA là bên bán", "bán ra" ⇒ đối tác là Khách hàng; "… là bên mua", "mua vào" ⇒ Nhà cung cấp.
+   */
+  const directionSuggestion = (): '' | 'CUSTOMER' | 'SUPPLIER' => {
+    const tpl = templates.data?.items.find((t) => t.id === form.getValues('templateId'));
+    const type = lookups.data?.contractTypes.find((t) => t.id === form.getValues('contractTypeId'));
+    const text = foldVi(`${tpl?.name ?? ''} ${type?.name ?? ''}`);
+    if (/la ben ban|ban ra/.test(text)) return 'CUSTOMER';
+    if (/la ben mua|mua vao/.test(text)) return 'SUPPLIER';
+    return '';
+  };
+
+  /** Điền gợi ý cho các bên đối tác chưa phân loại (khi chọn mẫu/loại hợp đồng). */
+  const suggestEmptyPartyTypes = () => {
+    const s = directionSuggestion();
+    if (!s) return;
+    form.getValues('parties').forEach((p, i) => {
+      if (!p.isInternal && !p.partnerType) setValue(`parties.${i}.partnerType`, s);
+    });
   };
 
   /** Tích "Bên nội bộ" ⇒ điền thông tin pháp nhân doanh nghiệp mình (Cài đặt → Thông tin doanh nghiệp). */
@@ -348,6 +384,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     const set = (field: 'name' | 'taxCode' | 'address' | 'email' | 'phone' | 'representative' | 'position' | 'bankAccount', v: string | null) =>
       setValue(`parties.${index}.${field}`, v ?? '', { shouldValidate: field === 'name' || field === 'email' });
     setValue(`parties.${index}.partnerId`, '');
+    setValue(`parties.${index}.partnerType`, '', { shouldValidate: true });
     setValue(`parties.${index}.entityType`, 'ORGANIZATION');
     set('name', c.name);
     set('taxCode', c.taxCode);
@@ -365,6 +402,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
     for (const field of ['name', 'taxCode', 'address', 'email', 'phone', 'representative', 'position', 'bankAccount', 'authorizationRef'] as const)
       setValue(`parties.${index}.${field}`, '');
     setValue(`parties.${index}.partnerId`, '');
+    setValue(`parties.${index}.partnerType`, directionSuggestion());
   };
 
   /** Mã nhập tay/điền từ file đã được dùng (kể cả hợp đồng trong thùng rác) ⇒ báo ngay tại ô mã, không đợi đến lúc lưu. */
@@ -444,14 +482,21 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
       }
       partiesFilled++;
       const tax = p.taxCode?.replace(/\s/g, '');
-      if (!tax) continue;
-      if (company.data?.taxCode && company.data.taxCode.replace(/\s/g, '') === tax) {
+      if (tax && company.data?.taxCode && company.data.taxCode.replace(/\s/g, '') === tax) {
         setValue(`parties.${index}.isInternal`, true);
-      } else {
-        const found = await api<Paginated<Partner>>('/partners', { query: { q: tax, pageSize: 5 } }).catch(() => null);
-        const partner = found?.items.find((q) => q.taxCode?.replace(/\s/g, '') === tax);
-        if (partner) setValue(`parties.${index}.partnerId`, partner.id);
+        continue;
       }
+      let known: Partner | undefined;
+      if (tax) {
+        const found = await api<Paginated<Partner>>('/partners', { query: { q: tax, pageSize: 5 } }).catch(() => null);
+        known = found?.items.find((q) => q.taxCode?.replace(/\s/g, '') === tax);
+        if (known) setValue(`parties.${index}.partnerId`, known.id);
+      }
+      // Phân loại: bên ghi "(Bên Mua)" ⇒ khách hàng, "(Bên Bán)" ⇒ nhà cung cấp; ngược với bên nội bộ; rồi theo danh mục/mẫu.
+      const own = x.parties.find((q) => q !== p && company.data?.taxCode && q.taxCode?.replace(/\s/g, '') === company.data.taxCode.replace(/\s/g, ''));
+      const side = p.side ?? (own?.side === 'BUY' ? 'SELL' : own?.side === 'SELL' ? 'BUY' : undefined);
+      const suggested = side === 'BUY' ? 'CUSTOMER' : side === 'SELL' ? 'SUPPLIER' : partyTypeOf(known?.type) || directionSuggestion();
+      if (suggested && !form.getValues(`parties.${index}.partnerType`)) setValue(`parties.${index}.partnerType`, suggested);
     }
     if (partiesFilled) filled.push(`${partiesFilled} bên tham gia`);
     if (filled.length) toast.success(`Đã điền từ ${file.name}: ${filled.join(', ')}`, { description: 'Kiểm tra lại thông tin trước khi lưu.', duration: 8000 });
@@ -538,7 +583,10 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
                   className="w-full md:w-96"
                   allLabel="— Không dùng mẫu (soạn từ đầu) —"
                   value={field.value}
-                  onChange={(v) => field.onChange(v ?? '')}
+                  onChange={(v) => {
+                    field.onChange(v ?? '');
+                    suggestEmptyPartyTypes();
+                  }}
                   options={(templates.data?.items ?? []).map((t) => ({ value: t.id, label: `${t.name} · v${t.version}` }))}
                   ariaLabel="Mẫu hợp đồng"
                 />
@@ -575,7 +623,16 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
               control={control}
               name="contractTypeId"
               render={({ field }) => (
-                <FilterSelect className="w-full" allLabel="— Chưa chọn —" value={field.value} onChange={(v) => field.onChange(v ?? '')} options={(lookups.data?.contractTypes ?? []).map((t) => ({ value: t.id, label: t.name }))} />
+                <FilterSelect
+                  className="w-full"
+                  allLabel="— Chưa chọn —"
+                  value={field.value}
+                  onChange={(v) => {
+                    field.onChange(v ?? '');
+                    suggestEmptyPartyTypes();
+                  }}
+                  options={(lookups.data?.contractTypes ?? []).map((t) => ({ value: t.id, label: t.name }))}
+                />
               )}
             />
           </Field>
@@ -704,6 +761,26 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
                     />{' '}
                     Bên nội bộ (doanh nghiệp mình)
                   </label>
+                  {!watchedParties?.[i]?.isInternal && (
+                    <Controller
+                      control={control}
+                      name={`parties.${i}.partnerType`}
+                      render={({ field }) => (
+                        <div className="flex items-center gap-2">
+                          <Select value={field.value || undefined} onValueChange={field.onChange}>
+                            <SelectTrigger className="w-44" aria-label="Phân loại đối tác" aria-invalid={!!pe?.partnerType}>
+                              <SelectValue placeholder="Phân loại đối tác *" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="CUSTOMER">Khách hàng</SelectItem>
+                              <SelectItem value="SUPPLIER">Nhà cung cấp</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          {pe?.partnerType && <span className="text-xs text-destructive">{pe.partnerType.message}</span>}
+                        </div>
+                      )}
+                    />
+                  )}
                   <Button type="button" variant="ghost" size="icon-sm" className="ml-auto" aria-label="Xóa bên" onClick={() => parties.remove(i)}>
                     <Trash2 />
                   </Button>

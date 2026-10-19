@@ -26,6 +26,8 @@ export const partySchema = z.object({
   position: nullableText(255),
   authorizationRef: nullableText(500),
   bankAccount: nullableText(255),
+  // Phân loại bên đối tác để lưu vào danh mục Đối tác (không lưu trên bên tham gia).
+  partnerType: z.preprocess(emptyToNull, z.enum(['CUSTOMER', 'SUPPLIER']).nullable().optional()),
 });
 export type PartyInput = z.infer<typeof partySchema>;
 

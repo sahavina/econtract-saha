@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { partnerTypeFilter } from '@saha/shared';
 import type { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
@@ -17,7 +18,7 @@ export class PartnersService {
     const where: Prisma.PartnerWhereInput = {
       tenantId: user.tenantId,
       deletedAt: null,
-      type: q.type,
+      type: q.type && { in: partnerTypeFilter(q.type) },
       ...(q.q && {
         OR: [
           { name: { contains: q.q, mode: 'insensitive' } },

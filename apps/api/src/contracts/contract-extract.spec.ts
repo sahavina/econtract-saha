@@ -118,8 +118,9 @@ describe('extractContractFields', () => {
         bankAccount: '921019999 - Ngân hàng MB',
         representative: 'Nguyễn Đức Chung',
         position: 'Giám đốc',
+        side: 'BUY',
       },
-      { role: 'PARTY_B', name: 'CÔNG TY CỔ PHẦN TẬP ĐOÀN THUẬN THÀNH', phone: '028. 6290.9592' },
+      { role: 'PARTY_B', name: 'CÔNG TY CỔ PHẦN TẬP ĐOÀN THUẬN THÀNH', phone: '028. 6290.9592', side: 'SELL' },
     ]);
   });
 

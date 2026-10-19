@@ -15,6 +15,7 @@ import { PlanLimitsService } from '../platform/plan-limits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { TemplatesService } from '../templates/templates.service.js';
+import { syncPartyPartners } from './contract-partners.js';
 import { ContractRevisionsService, snapshotOf } from './contract-revisions.js';
 import { sanitizeContractHtml } from './sanitize-content.js';
 import {
@@ -186,7 +187,7 @@ export class ContractsService {
         department: { select: { id: true, code: true, name: true } },
         owner: { select: { id: true, fullName: true, email: true } },
         createdBy: { select: { id: true, fullName: true } },
-        parties: { orderBy: { sortOrder: 'asc' } },
+        parties: { orderBy: { sortOrder: 'asc' }, include: { partner: { select: { type: true } } } },
         template: { select: { id: true, code: true, name: true, version: true, requiredVariables: true } },
       },
     });
@@ -208,7 +209,9 @@ export class ContractsService {
       try {
         return await this.prisma.$transaction(async (tx) => {
           await this.limits.assertCanCreateContract(user.tenantId, tx);
-          const code = input.code ?? (await this.nextCode(tx, user, refs, input));
+          // Bên đối tác đã phân loại ⇒ thêm/cập nhật vào danh mục Đối tác và liên kết.
+          const parties = await syncPartyPartners(tx, user, this.audit, input.parties);
+          const code = input.code ?? (await this.nextCode(tx, user, refs, { ...input, parties }));
           const contract = await tx.contract.create({
             data: {
               ...this.mapScalars(input),
@@ -218,7 +221,7 @@ export class ContractsService {
               createdById: user.userId,
               ownerId: input.ownerId ?? user.userId,
               departmentId: input.departmentId ?? user.departmentId,
-              parties: { create: input.parties.map((p, i) => this.mapParty(p, i)) },
+              parties: { create: parties.map((p, i) => this.mapParty(p, i)) },
               templateId: template?.id ?? null,
               templateVersion: template?.version ?? null,
             },
@@ -271,9 +274,10 @@ export class ContractsService {
     await this.assertReferences(user, input);
     return this.prisma.$transaction(async (tx) => {
       if (input.parties) {
+        const parties = await syncPartyPartners(tx, user, this.audit, input.parties);
         await tx.contractParty.deleteMany({ where: { contractId: id } });
         await tx.contractParty.createMany({
-          data: input.parties.map((p, i) => ({ ...this.mapParty(p, i), contractId: id })),
+          data: parties.map((p, i) => ({ ...this.mapParty(p, i), contractId: id })),
         });
       }
       const contract = await tx.contract.update({
@@ -352,7 +356,7 @@ export class ContractsService {
       tags: src.tags,
       note: src.note,
       contentHtml: src.contentHtml,
-      parties: src.parties.map(({ id: _id, contractId: _c, sortOrder: _s, ...p }) => p),
+      parties: src.parties.map(({ id: _id, contractId: _c, sortOrder: _s, partner: _p, ...p }) => p),
     });
     await this.audit.log(user, {
       action: 'contract.duplicate',
@@ -579,6 +583,7 @@ export class ContractsService {
   }
 
   private mapParty(p: PartyInput, index: number) {
-    return { ...p, sortOrder: index };
+    const { partnerType: _type, ...party } = p;
+    return { ...party, sortOrder: index };
   }
 }
