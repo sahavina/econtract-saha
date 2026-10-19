@@ -26,6 +26,7 @@ const party = (role: string, name: string, extra: Partial<SnapshotSource['partie
 });
 
 const base: SnapshotSource = {
+  code: 'HD-2026-00001',
   title: 'HĐMB keo',
   group: null,
   value: { toString: () => '26400000' },

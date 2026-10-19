@@ -272,6 +272,28 @@ export class ContractsService {
     const current = await this.get(user, id);
     this.assertEditable(current);
     await this.assertReferences(user, input);
+    if (input.code !== undefined && input.code !== current.code) {
+      const check = await this.codeCheck(user, input.code);
+      if (!check.available) throw new ConflictException(check.message);
+    }
+    try {
+      return await this.updateTx(user, id, current, input, opts);
+    } catch (err) {
+      // Hai người cùng đổi sang một mã trong lúc chờ ⇒ ràng buộc duy nhất báo trùng.
+      if (input.code && err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') {
+        throw new ConflictException((await this.codeCheck(user, input.code)).message ?? `Mã hợp đồng "${input.code}" đã tồn tại`);
+      }
+      throw err;
+    }
+  }
+
+  private updateTx(
+    user: AuthUser,
+    id: string,
+    current: Awaited<ReturnType<ContractsService['get']>>,
+    input: ContractUpdate,
+    opts: { restoredFromSeq?: number },
+  ) {
     return this.prisma.$transaction(async (tx) => {
       if (input.parties) {
         const parties = await syncPartyPartners(tx, user, this.audit, input.parties);
@@ -284,6 +306,7 @@ export class ContractsService {
         where: { id },
         data: {
           ...this.mapScalars(input),
+          code: input.code,
           title: input.title,
           ownerId: input.ownerId,
           departmentId: input.departmentId,
@@ -564,7 +587,7 @@ export class ContractsService {
     return partnerAbbreviation(party.name);
   }
 
-  private mapScalars(input: ContractUpdate) {
+  private mapScalars(input: Omit<ContractUpdate, 'code'>) {
     return {
       contractTypeId: input.contractTypeId,
       group: input.group,

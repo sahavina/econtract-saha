@@ -189,7 +189,7 @@ function toPayload(v: FormValues, isEdit: boolean) {
       partnerType: p.isInternal || !p.partnerType ? null : p.partnerType,
     })),
   };
-  return isEdit ? payload : { ...payload, code: nul(v.code), templateId: nul(v.templateId) };
+  return isEdit ? { ...payload, code: v.code.trim() } : { ...payload, code: nul(v.code), templateId: nul(v.templateId) };
 }
 
 function Field({ label, error, children, className }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
@@ -408,7 +408,7 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
   /** Mã nhập tay/điền từ file đã được dùng (kể cả hợp đồng trong thùng rác) ⇒ báo ngay tại ô mã, không đợi đến lúc lưu. */
   const checkCode = async (raw: string) => {
     const code = raw.trim();
-    if (!code || isEdit) return;
+    if (!code || (isEdit && code === contract.code)) return;
     const r = await api<{ available: boolean; message?: string }>('/contracts/code-check', { query: { code } }).catch(() => null);
     if (!r || form.getValues('code').trim() !== code) return;
     if (r.available) form.clearErrors('code');
@@ -610,8 +610,8 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
         <CardContent className="grid gap-4 md:grid-cols-3">
           <Field label="Mã hợp đồng" error={errors.code?.message}>
             <Input
-              disabled={isEdit}
-              placeholder={selectedType ? `Tự sinh theo mẫu ${selectedType.codePattern}` : 'Để trống để tự sinh (HD-{YYYY}-{SEQUENCE:5})'}
+              aria-invalid={!!errors.code}
+              placeholder={isEdit ? 'Nhập mã hợp đồng' : selectedType ? `Tự sinh theo mẫu ${selectedType.codePattern}` : 'Để trống để tự sinh (HD-{YYYY}-{SEQUENCE:5})'}
               {...register('code', { onBlur: (e) => void checkCode(e.target.value) })}
             />
           </Field>

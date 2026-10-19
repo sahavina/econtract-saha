@@ -19,6 +19,7 @@ const CONFIDENTIALITY: Record<string, string> = { PUBLIC: 'Công khai', INTERNAL
 
 /** Trường thông tin chung được theo dõi (thứ tự hiển thị). */
 const FIELDS: [key: keyof ContractSnapshot, label: string][] = [
+  ['code', 'Mã hợp đồng'],
   ['title', 'Tên hợp đồng'],
   ['contractType', 'Loại hợp đồng'],
   ['group', 'Nhóm hợp đồng'],
@@ -64,6 +65,8 @@ export interface PartySnapshot {
 }
 
 export interface ContractSnapshot {
+  /** Không có trong phiên bản lưu trước khi cho sửa mã ⇒ tùy chọn. */
+  code?: string | null;
   title: string | null;
   contractType: string | null;
   group: string | null;
@@ -84,6 +87,7 @@ export interface ContractSnapshot {
 
 /** Dữ liệu hợp đồng tối thiểu để chụp trạng thái (khớp kết quả ContractsService.get). */
 export interface SnapshotSource {
+  code: string;
   title: string;
   group: string | null;
   value: { toString(): string };
@@ -127,6 +131,7 @@ const num = (v: { toString(): string } | null) => {
 
 export function snapshotOf(c: SnapshotSource): ContractSnapshot {
   return {
+    code: txt(c.code),
     title: txt(c.title),
     contractType: c.contractType?.name ?? null,
     group: txt(c.group),
@@ -172,8 +177,8 @@ function partyKeys(parties: PartySnapshot[]) {
 export function diffSnapshots(a: ContractSnapshot, b: ContractSnapshot): RevisionChange[] {
   const out: RevisionChange[] = [];
   for (const [key, label] of FIELDS) {
-    const before = a[key] as string | null;
-    const after = b[key] as string | null;
+    const before = (a[key] ?? null) as string | null;
+    const after = (b[key] ?? null) as string | null;
     if (before !== after) out.push({ field: key, label, before, after });
   }
   const pa = new Map(partyKeys(a.parties).map((x) => [x.key, x]));

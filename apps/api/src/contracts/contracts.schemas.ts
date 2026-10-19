@@ -71,7 +71,11 @@ export const contractCreateSchema = contractBase
   .refine(datesInOrder, DATE_ORDER_MSG);
 export type ContractCreate = z.infer<typeof contractCreateSchema>;
 
-export const contractUpdateSchema = contractBase.omit({ code: true }).partial().refine(datesInOrder, DATE_ORDER_MSG);
+// Sửa mã khi còn Nháp: bắt buộc có giá trị (không cho xóa trống vì mã chỉ tự sinh lúc tạo).
+export const contractUpdateSchema = contractBase
+  .extend({ code: z.string().trim().min(1, 'Vui lòng nhập mã hợp đồng').max(60) })
+  .partial()
+  .refine(datesInOrder, DATE_ORDER_MSG);
 export type ContractUpdate = z.infer<typeof contractUpdateSchema>;
 
 export const CONTRACT_VIEWS = [
