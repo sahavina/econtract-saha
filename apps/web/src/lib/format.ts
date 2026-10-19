@@ -44,6 +44,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'contract.unarchive': 'Bỏ lưu trữ hợp đồng',
   'contract.delete': 'Chuyển vào thùng rác',
   'contract.purge': 'Xóa vĩnh viễn hợp đồng',
+  'contract.revision_restore': 'Khôi phục nội dung về phiên bản cũ',
   'contract.restore': 'Khôi phục hợp đồng',
   'contract.document_upload': 'Tải lên tài liệu',
   'contract.document_delete': 'Xóa tài liệu',

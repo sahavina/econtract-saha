@@ -92,6 +92,7 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
         old ? { ...old, contentHtml: res.contentHtml, updatedAt: res.updatedAt } : old,
       );
       qc.invalidateQueries({ queryKey: ['contract', contract.id, 'timeline'] });
+      qc.invalidateQueries({ queryKey: ['contract', contract.id, 'revisions'] });
     },
     onError: (err) => setState({ kind: 'error', message: err instanceof Error ? err.message : 'Lưu thất bại' }),
   });

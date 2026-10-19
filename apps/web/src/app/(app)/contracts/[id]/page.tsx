@@ -11,6 +11,7 @@ import { ContractApprovalTab } from '@/components/contract-approval-tab';
 import { ContractContentTab } from '@/components/contract-content-tab';
 import { ContractDocumentsTab } from '@/components/contract-documents-tab';
 import { ContractLifecycleTab } from '@/components/contract-lifecycle-tab';
+import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
@@ -135,7 +136,7 @@ export default function ContractDetailPage() {
       />
 
       <Tabs defaultValue={initialTab}>
-        <TabsList>
+        <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           <TabsTrigger value="content">Nội dung hợp đồng</TabsTrigger>
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
@@ -143,6 +144,7 @@ export default function ContractDetailPage() {
           <TabsTrigger value="signature">Ký điện tử</TabsTrigger>
           <TabsTrigger value="lifecycle">Vòng đời</TabsTrigger>
           <TabsTrigger value="documents">Tài liệu</TabsTrigger>
+          <TabsTrigger value="revisions">Lịch sử chỉnh sửa</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
 
@@ -236,6 +238,10 @@ export default function ContractDetailPage() {
               </Card>
             ))
           )}
+        </TabsContent>
+
+        <TabsContent value="revisions" className="mt-4">
+          <ContractRevisionsTab contractId={c.id} canRestore={editable && can('contract.update')} />
         </TabsContent>
 
         <TabsContent value="history" className="mt-4">

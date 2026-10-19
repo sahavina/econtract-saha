@@ -15,6 +15,7 @@ import { PlanLimitsService } from '../platform/plan-limits.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { StorageService } from '../storage/storage.service.js';
 import { TemplatesService } from '../templates/templates.service.js';
+import { ContractRevisionsService, snapshotOf } from './contract-revisions.js';
 import { sanitizeContractHtml } from './sanitize-content.js';
 import { DEFAULT_CONTRACT_CODE_PATTERN, renderCode, sequenceKey } from './contract-code.js';
 import type {
@@ -68,6 +69,7 @@ export class ContractsService {
     private readonly templates: TemplatesService,
     private readonly limits: PlanLimitsService,
     private readonly storage: StorageService,
+    private readonly revisions: ContractRevisionsService,
   ) {}
 
   private readonly logger = new Logger(ContractsService.name);
@@ -207,6 +209,7 @@ export class ContractsService {
               templateVersion: template?.version ?? null,
             },
           });
+          await this.revisions.recordCreate(tx, user, contract.id, contract.contentHtml);
           await this.audit.log(
             user,
             {
@@ -248,7 +251,7 @@ export class ContractsService {
     };
   }
 
-  async update(user: AuthUser, id: string, input: ContractUpdate) {
+  async update(user: AuthUser, id: string, input: ContractUpdate, opts: { restoredFromSeq?: number } = {}) {
     const current = await this.get(user, id);
     this.assertEditable(current);
     await this.assertReferences(user, input);
@@ -268,13 +271,51 @@ export class ContractsService {
           departmentId: input.departmentId,
         },
       });
+      const after = await tx.contract.findUniqueOrThrow({
+        where: { id },
+        include: {
+          contractType: { select: { name: true } },
+          department: { select: { name: true } },
+          owner: { select: { fullName: true } },
+          parties: { orderBy: { sortOrder: 'asc' } },
+        },
+      });
+      const revision = await this.revisions.recordEdit(tx, user, {
+        contractId: id,
+        tenantId: user.tenantId,
+        before: snapshotOf(current),
+        after: snapshotOf(after),
+        contentBefore: current.contentHtml,
+        contentAfter: after.contentHtml,
+        baseline: { authorId: current.createdBy?.id ?? null, authorName: current.createdBy?.fullName ?? null, at: current.createdAt },
+        restoredFromSeq: opts.restoredFromSeq,
+      });
       await this.audit.log(
         user,
-        { action: 'contract.update', entityType: 'contract', entityId: id, data: { changes: Object.keys(input) } },
+        opts.restoredFromSeq !== undefined
+          ? { action: 'contract.revision_restore', entityType: 'contract', entityId: id, data: { fromSeq: opts.restoredFromSeq, revision } }
+          : { action: 'contract.update', entityType: 'contract', entityId: id, data: { changes: Object.keys(input), revision } },
         tx,
       );
       return contract;
     });
+  }
+
+  /** Lịch sử chỉnh sửa (mới nhất trước). */
+  async revisionList(user: AuthUser, id: string) {
+    await this.get(user, id);
+    return this.revisions.list(user.tenantId, id);
+  }
+
+  async revisionContent(user: AuthUser, id: string, seq: number) {
+    await this.get(user, id);
+    return this.revisions.contentAt(user.tenantId, id, seq);
+  }
+
+  /** Khôi phục nội dung về một phiên bản cũ (chỉ khi hợp đồng còn sửa được) – tạo phiên bản mới, không xóa lịch sử. */
+  async restoreRevision(user: AuthUser, id: string, seq: number) {
+    const { contentHtml } = await this.revisionContent(user, id, seq);
+    return this.update(user, id, { contentHtml }, { restoredFromSeq: seq });
   }
 
   async duplicate(user: AuthUser, id: string) {

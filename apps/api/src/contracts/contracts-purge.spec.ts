@@ -13,7 +13,7 @@ function setup(contract: Record<string, unknown> | null) {
   };
   const audit = { log: vi.fn() };
   const storage = { remove: vi.fn().mockResolvedValue(undefined) };
-  const svc = new ContractsService(prisma as never, audit as never, {} as never, {} as never, storage as never);
+  const svc = new ContractsService(prisma as never, audit as never, {} as never, {} as never, storage as never, {} as never);
   return { svc, prisma, tx, audit, storage };
 }
 

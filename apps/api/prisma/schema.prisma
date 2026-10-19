@@ -446,11 +446,35 @@ model Contract {
   liquidatedAt      DateTime?
   liquidationNote   String?
   parties           ContractParty[]
+  revisions         ContractRevision[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
   @@index([tenantId, expiryDate])
   @@index([tenantId, ownerId])
+}
+
+/// Lịch sử chỉnh sửa hợp đồng: mỗi bản ghi là một phiên sửa (cùng người, cách nhau < 15 phút được gộp).
+model ContractRevision {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @db.Uuid
+  contractId      String   @db.Uuid
+  seq             Int
+  /// CREATE | BASELINE (trạng thái trước lần sửa đầu, với hợp đồng tạo trước khi có tính năng) | EDIT | RESTORE
+  kind            String   @default("EDIT")
+  authorId        String?  @db.Uuid
+  authorName      String?
+  /// Thay đổi thông tin/các bên: [{ field, label, before, after }]
+  changes         Json     @default("[]")
+  /// Nội dung sau phiên sửa; null nếu phiên không đổi nội dung ('' = nội dung trống)
+  contentHtml     String?
+  restoredFromSeq Int?
+  startedAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  contract        Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+
+  @@unique([contractId, seq])
+  @@index([tenantId, contractId])
 }
 
 enum PartyRole {

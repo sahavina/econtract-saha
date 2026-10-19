@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { CONTRACT_STATUS_LABELS, PERMISSIONS } from '@saha/shared';
 import type { Response } from 'express';
@@ -106,6 +106,25 @@ export class ContractsController {
   @RequireAnyPermission(...VIEW)
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.contracts.get(user, id);
+  }
+
+  @Get(':id/revisions')
+  @RequireAnyPermission(...VIEW)
+  revisions(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.contracts.revisionList(user, id);
+  }
+
+  @Get(':id/revisions/:seq')
+  @RequireAnyPermission(...VIEW)
+  revision(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('seq', ParseIntPipe) seq: number) {
+    return this.contracts.revisionContent(user, id, seq);
+  }
+
+  @Post(':id/revisions/:seq/restore')
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.CONTRACT_UPDATE)
+  restoreRevision(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Param('seq', ParseIntPipe) seq: number) {
+    return this.contracts.restoreRevision(user, id, seq);
   }
 
   @Get(':id/timeline')
