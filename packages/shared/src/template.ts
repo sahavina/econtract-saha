@@ -39,6 +39,15 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
 
 export const TEMPLATE_VARIABLE_KEYS = new Set(TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => i.key)));
 
+const VARIABLE_LABELS = new Map(
+  TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => [i.key, g.group === 'Hợp đồng' ? i.label : `${g.group} – ${i.label}`] as const)),
+);
+
+/** Tên tiếng Việt của biến cho người dùng: "contract.vat_rate" → "Thuế VAT (%)", "party_b.phone" → "Bên B – Điện thoại". */
+export function variableLabel(key: string): string {
+  return VARIABLE_LABELS.get(key) ?? `{{${key}}}`;
+}
+
 export const VARIABLE_PATTERN = /\{\{\s*([a-z_]+\.[a-z_]+)\s*\}\}/g;
 
 export interface TemplateParty {

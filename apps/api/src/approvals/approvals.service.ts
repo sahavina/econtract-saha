@@ -5,6 +5,7 @@ import {
   type ApprovalStepConfig,
   APPROVAL_DECISION_LABELS,
   buildTemplateValues,
+  variableLabel,
 } from '@saha/shared';
 import { z } from 'zod';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -88,7 +89,7 @@ export class ApprovalsService {
     if (c.template?.requiredVariables.length) {
       const values = buildTemplateValues({ ...c, value: c.value.toString(), vatRate: c.vatRate?.toString() });
       const missing = c.template.requiredVariables.filter((k) => !values[k]);
-      if (missing.length) issues.push(`Thiếu dữ liệu bắt buộc theo mẫu: ${missing.map((k) => `{{${k}}}`).join(', ')}.`);
+      if (missing.length) issues.push(`Thiếu dữ liệu bắt buộc theo mẫu: ${missing.map(variableLabel).join(', ')}.`);
     }
     return issues;
   }

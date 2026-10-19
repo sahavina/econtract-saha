@@ -1,8 +1,9 @@
 'use client';
 
-import { buildTemplateValues, renderTemplate } from '@saha/shared';
+import { buildTemplateValues, renderTemplate, variableLabel } from '@saha/shared';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { AlertTriangle, Check, Eye, Loader2, Pencil, Printer, Save } from 'lucide-react';
+import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ContractEditor } from '@/components/contract-editor';
 import { EmptyState } from '@/components/page-header';
@@ -15,7 +16,18 @@ const AUTOSAVE_MS = 2000;
 
 type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved'; at: string } | { kind: 'error'; message: string };
 
-function A4Preview({ contract, html }: { contract: ContractDetail; html: string }) {
+/** Nút mở trang Sửa hợp đồng để bổ sung dữ liệu còn thiếu (thông tin chung / các bên). */
+function FillButton({ contractId, variant }: { contractId: string; variant: 'destructive' | 'outline' }) {
+  return (
+    <Button asChild size="sm" variant={variant} className="shrink-0">
+      <Link href={`/contracts/${contractId}/edit`}>
+        <Pencil /> Bổ sung ngay
+      </Link>
+    </Button>
+  );
+}
+
+function A4Preview({ contract, html, editable }: { contract: ContractDetail; html: string; editable: boolean }) {
   const rendered = useMemo(() => renderTemplate(html, buildTemplateValues(contract)), [contract, html]);
   // Biến bắt buộc của mẫu: chưa có dữ liệu (dù có hay không có trong nội dung).
   const values = useMemo(() => buildTemplateValues(contract), [contract]);
@@ -24,20 +36,23 @@ function A4Preview({ contract, html }: { contract: ContractDetail; html: string 
   return (
     <div className="space-y-3">
       {requiredMissing.length > 0 && (
-        <div role="alert" className="flex gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+        <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <p>
-            Thiếu dữ liệu bắt buộc theo mẫu {contract.template?.name}: {requiredMissing.map((k) => `{{${k}}}`).join(', ')}. Bổ sung ở thông tin chung / các bên.
+          <p className="flex-1">
+            Thiếu dữ liệu bắt buộc theo mẫu {contract.template?.name}: <strong>{requiredMissing.map(variableLabel).join(', ')}</strong>. Cần bổ sung trước khi gửi
+            duyệt/ký.
           </p>
+          {editable && <FillButton contractId={contract.id} variant="destructive" />}
         </div>
       )}
       {(optionalMissing.length > 0 || rendered.unknown.length > 0) && (
-        <div role="status" className="flex gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
+        <div role="status" className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-800 dark:text-amber-300">
           <AlertTriangle className="mt-0.5 size-4 shrink-0" />
-          <div>
-            {optionalMissing.length > 0 && <p>Biến chưa có dữ liệu: {optionalMissing.map((k) => `{{${k}}}`).join(', ')}</p>}
+          <div className="flex-1">
+            {optionalMissing.length > 0 && <p>Chưa có dữ liệu (để trống trong hợp đồng): {optionalMissing.map(variableLabel).join(', ')}</p>}
             {rendered.unknown.length > 0 && <p>Biến không hỗ trợ: {rendered.unknown.map((k) => `{{${k}}}`).join(', ')}</p>}
           </div>
+          {editable && optionalMissing.length > 0 && requiredMissing.length === 0 && <FillButton contractId={contract.id} variant="outline" />}
         </div>
       )}
       <div className="print-area overflow-x-auto rounded-lg bg-muted/40 p-4">
@@ -169,7 +184,7 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
       ) : mode === 'edit' && editable ? (
         <ContractEditor value={draft} onChange={setDraft} enableClauses />
       ) : (
-        <A4Preview contract={contract} html={html} />
+        <A4Preview contract={contract} html={html} editable={editable} />
       )}
     </div>
   );

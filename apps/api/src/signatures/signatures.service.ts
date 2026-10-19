@@ -7,7 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { buildTemplateValues, escapeHtml, PERMISSIONS, renderTemplate } from '@saha/shared';
+import { buildTemplateValues, escapeHtml, PERMISSIONS, renderTemplate, variableLabel } from '@saha/shared';
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import type { Prisma } from '../generated/prisma/client.js';
@@ -189,7 +189,7 @@ export class SignaturesService {
     );
     if (rendered.missing.length || rendered.unknown.length) {
       throw new BadRequestException(
-        `Nội dung còn biến chưa có dữ liệu: ${[...rendered.missing, ...rendered.unknown].map((k) => `{{${k}}}`).join(', ')}`,
+        `Nội dung còn dữ liệu trống: ${[...rendered.missing, ...rendered.unknown].map(variableLabel).join(', ')}. Bổ sung ở trang Sửa hợp đồng.`,
       );
     }
     const attachments = docs.length
