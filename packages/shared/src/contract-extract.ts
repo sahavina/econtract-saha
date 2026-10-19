@@ -175,7 +175,8 @@ export function extractContractFields(blocks: DocBlock[]): ExtractedContract {
         continue;
       }
       if (current) {
-        for (const part of text.split(/\t+|\s{3,}/)) {
+        // "Địa chỉ        ⇥: …" – bỏ khoảng trắng/tab trước dấu hai chấm rồi mới tách các cặp nhãn–giá trị theo tab.
+        for (const part of text.replace(/[ \t ]+(?=[:：])/g, '').split(/\t+|\s{3,}/)) {
           const i = part.search(/[:：]/);
           if (i > 0) {
             const field = fieldOf(part.slice(0, i));

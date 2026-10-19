@@ -94,6 +94,35 @@ describe('extractContractFields', () => {
     ]);
   });
 
+  it('reads labels padded with spaces/tabs before the colon (HĐNT TTG – SAHA layout)', () => {
+    const x = extractContractFields([
+      p('HỢP ĐỒNG NGUYÊN TẮC'),
+      p('Số: 0107/2025/HĐNT/TT-SAHA'),
+      p('Hôm nay, ngày 01 tháng 07 năm 2025, tại văn phòng Công ty, chúng tôi gồm có:'),
+      p('BÊN A (Bên Mua)\t: CÔNG TY TNHH THƯƠNG MẠI DỊCH VỤ TRỰC TUYẾN SAHA'),
+      p('Địa chỉ        \t: Số 54 đường Lương Ngọc Quyến, Hà Nội'),
+      p('Mã số thuế \t: 0110690109'),
+      p('Tài khoản số\t: 921019999 - Ngân hàng MB'),
+      p('Đại diện  \t: Ông Nguyễn Đức Chung\tChức vụ: Giám đốc'),
+      p('BÊN B (Bên Bán)\t: CÔNG TY CỔ PHẦN TẬP ĐOÀN THUẬN THÀNH'),
+      p('Điện thoại \t: 028. 6290.9592\tFax: 028. 6290.9591'),
+      p('ĐIỀU 1: HÀNG HÓA.'),
+    ]);
+    expect(x).toMatchObject({ title: 'HỢP ĐỒNG NGUYÊN TẮC', code: '0107/2025/HĐNT/TT-SAHA', signDate: '2025-07-01' });
+    expect(x.parties).toEqual([
+      {
+        role: 'PARTY_A',
+        name: 'CÔNG TY TNHH THƯƠNG MẠI DỊCH VỤ TRỰC TUYẾN SAHA',
+        address: 'Số 54 đường Lương Ngọc Quyến, Hà Nội',
+        taxCode: '0110690109',
+        bankAccount: '921019999 - Ngân hàng MB',
+        representative: 'Nguyễn Đức Chung',
+        position: 'Giám đốc',
+      },
+      { role: 'PARTY_B', name: 'CÔNG TY CỔ PHẦN TẬP ĐOÀN THUẬN THÀNH', phone: '028. 6290.9592' },
+    ]);
+  });
+
   it('parses Vietnamese numbers', () => {
     expect(parseVietnameseNumber('28.512.000 (VNĐ)')).toBe('28512000');
     expect(parseVietnameseNumber('1,250,000.50')).toBe('1250000.50');

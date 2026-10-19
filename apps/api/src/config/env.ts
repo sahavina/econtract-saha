@@ -46,6 +46,8 @@ const envSchema = z
     ),
     // Cho phép kết nối tích hợp tới địa chỉ nội bộ/HTTP (chỉ nên bật khi phát triển).
     INTEGRATION_ALLOW_PRIVATE_HOSTS: envBool(false),
+    // Lệnh LibreOffice dùng chuyển .doc → .docx (image API đã cài; máy dev không có thì chức năng báo chưa hỗ trợ).
+    SOFFICE_PATH: z.preprocess(emptyToUndefined, z.string().optional()),
   })
   .refine((e) => e.NODE_ENV !== 'production' || !!e.SMTP_HOST, {
     message: 'Production bắt buộc cấu hình SMTP_HOST để gửi email/OTP',

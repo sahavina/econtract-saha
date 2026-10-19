@@ -8,10 +8,13 @@ interface FileType {
 }
 
 const ZIP = [0x50, 0x4b, 0x03, 0x04];
+/** Word 97–2003 (.doc): tệp Compound File Binary (OLE). */
+const OLE = [0xd0, 0xcf, 0x11, 0xe0, 0xa1, 0xb1, 0x1a, 0xe1];
 
 /** Danh sách định dạng được phép. MIME lưu theo bảng này, không tin giá trị client gửi. */
 export const ALLOWED_FILE_TYPES: Record<string, FileType> = {
   pdf: { mime: 'application/pdf', signature: [0x25, 0x50, 0x44, 0x46] },
+  doc: { mime: 'application/msword', signature: OLE },
   docx: { mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', signature: ZIP },
   xlsx: { mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', signature: ZIP },
   png: { mime: 'image/png', signature: [0x89, 0x50, 0x4e, 0x47] },

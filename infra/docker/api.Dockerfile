@@ -30,6 +30,8 @@ CMD ["sh", "-c", "node_modules/.bin/prisma migrate deploy && node_modules/.bin/t
 # Cài dependency production ngay tại stage này thay vì COPY cây node_modules của pnpm giữa các stage
 # (snapshotter containerd, ví dụ Rancher Desktop, lỗi "failed to commit … snapshot does not exist" khi chép cây đó).
 FROM base AS runtime
+# LibreOffice Writer (~340 MB): chuyển Word 97–2003 (.doc) → .docx khi tạo hợp đồng từ file (POST /documents/convert-doc).
+RUN apk add --no-cache libreoffice-writer
 WORKDIR /app
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json .npmrc ./
 COPY apps/api/package.json apps/api/

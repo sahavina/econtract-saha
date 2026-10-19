@@ -2,7 +2,7 @@ import { api } from '@/lib/api';
 import type { ContractDocument } from '@/lib/types';
 
 /** Định dạng được backend chấp nhận (kiểm tra lại bằng magic bytes phía server). */
-export const DOCUMENT_ACCEPT = '.pdf,.docx,.xlsx,.png,.jpg,.jpeg';
+export const DOCUMENT_ACCEPT = '.pdf,.doc,.docx,.xlsx,.png,.jpg,.jpeg';
 export const DOCUMENT_MAX_BYTES = 20 * 1024 * 1024;
 
 export function formatFileSize(bytes: number) {

@@ -78,7 +78,7 @@ export function ContractDocumentsTab({
           <Button onClick={() => input.current?.click()} disabled={upload.isPending}>
             {upload.isPending ? <Loader2 className="animate-spin" /> : <Upload />} Tải lên tài liệu
           </Button>
-          <span className="text-xs text-muted-foreground">PDF, DOCX, XLSX, PNG, JPG · tối đa 20 MB · trùng tên sẽ tạo phiên bản mới</span>
+          <span className="text-xs text-muted-foreground">PDF, DOC, DOCX, XLSX, PNG, JPG · tối đa 20 MB · trùng tên sẽ tạo phiên bản mới</span>
         </div>
       )}
 

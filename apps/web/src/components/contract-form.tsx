@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useCompanyProfile } from '@/lib/company';
-import { readDocx } from '@/lib/docx';
+import { convertDocToDocx, readDocx } from '@/lib/docx';
 import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
@@ -236,7 +236,7 @@ function ContractFilesPicker({
         >
           <FileUp className="size-6" />
           <span className="font-medium text-foreground">Chọn hoặc kéo thả tệp vào đây</span>
-          <span>PDF, DOCX, XLSX, PNG, JPG · tối đa 20 MB mỗi tệp</span>
+          <span>PDF, DOC, DOCX, XLSX, PNG, JPG · tối đa 20 MB mỗi tệp</span>
         </button>
         {files.length > 0 && (
           <ul className="divide-y rounded-md border">
@@ -378,11 +378,23 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
   };
 
   /**
-   * Điền sẵn form từ file Word (.docx): chỉ điền ô còn trống, không ghi đè thông tin đã nhập.
+   * Điền sẵn form từ file Word (.docx; .doc được máy chủ chuyển sang .docx): chỉ điền ô còn trống, không ghi đè thông tin đã nhập.
    * Bên có MST trùng doanh nghiệp mình ⇒ đánh dấu "Bên nội bộ"; trùng đối tác trong danh mục ⇒ liên kết đối tác.
    */
   const applyDocx = async (file: File) => {
-    const doc = await readDocx(file);
+    let source: Blob = file;
+    if (/\.doc$/i.test(file.name)) {
+      // Word 97–2003: nhờ máy chủ chuyển sang .docx trước (vài giây).
+      const id = toast.loading(`Đang đọc ${file.name} (định dạng Word cũ)…`);
+      try {
+        source = await convertDocToDocx(file);
+        toast.dismiss(id);
+      } catch (e) {
+        toast.dismiss(id);
+        return toast.error(e instanceof Error ? e.message : `Không đọc được ${file.name}`);
+      }
+    }
+    const doc = await readDocx(source);
     if (!doc) return toast.error(`Không đọc được nội dung ${file.name} – hãy nhập thông tin thủ công`);
     const x = extractContractFields(doc.blocks);
     const filled: string[] = [];
@@ -470,8 +482,8 @@ export function ContractForm({ contract, fromFile = false }: { contract?: Contra
           setValue('title', added[0].name.replace(/\.[^.]+$/, '').slice(0, 500), { shouldValidate: true });
         }
         // File Word: đọc nội dung để điền sẵn thông tin chung và các bên.
-        const docx = added.find((x) => /\.docx$/i.test(x.name));
-        if (docx && !isEdit) void applyDocx(docx);
+        const word = added.find((x) => /\.docx?$/i.test(x.name));
+        if (word && !isEdit) void applyDocx(word);
       }}
     />
   );

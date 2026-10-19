@@ -1,4 +1,13 @@
 import type { DocBlock } from '@saha/shared';
+import { apiRaw } from '@/lib/api';
+
+/** Word 97–2003 (.doc) ⇒ máy chủ chuyển sang .docx (LibreOffice) để đọc như file .docx. Lỗi ⇒ ném ApiError kèm thông báo. */
+export async function convertDocToDocx(file: File): Promise<Blob> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiRaw('/documents/convert-doc', { method: 'POST', formData });
+  return res.blob();
+}
 
 /**
  * Đọc nội dung file Word (.docx) ngay trong trình duyệt, không cần thư viện:
