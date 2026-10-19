@@ -287,8 +287,12 @@ export function ContractEditor({
   });
 
   return (
-    <div className="overflow-hidden rounded-lg border bg-background">
-      {editor ? <Toolbar editor={editor} enableClauses={enableClauses} /> : <div className="h-11 border-b bg-muted/30" />}
+    // overflow-clip (không phải overflow-hidden) để thanh công cụ "sticky" được theo trang khi cuộn.
+    <div className="overflow-clip rounded-lg border bg-background">
+      {/* Thanh công cụ dính ngay dưới thanh đầu trang (h-14) khi cuộn nội dung dài; nền đặc để chữ bên dưới không lộ qua. */}
+      <div className="sticky top-14 z-10 bg-background">
+        {editor ? <Toolbar editor={editor} enableClauses={enableClauses} /> : <div className="h-11 border-b bg-muted/30" />}
+      </div>
       <EditorContent editor={editor} />
     </div>
   );
