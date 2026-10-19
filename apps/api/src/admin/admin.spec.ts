@@ -30,9 +30,9 @@ describe('admin schemas', () => {
   });
 
   it('validates contract code patterns and previews them', () => {
-    expect(contractTypeCreateSchema.safeParse({ code: 'hdtv', name: 'TV', codePattern: 'TV-{YYYY}' }).success).toBe(
-      false,
-    );
+    expect(contractTypeCreateSchema.safeParse({ code: 'hdtv', name: 'TV', codePattern: 'TV-{FOO}' }).success).toBe(false);
+    // Không bắt buộc {SEQUENCE}: mã trùng được thêm hậu tố -2, -3… khi tạo.
+    expect(contractTypeCreateSchema.safeParse({ code: 'hdnt', name: 'NT', codePattern: '{DD}{MM}/{YYYY}/HĐNT/{PARTNER}-SAHA' }).success).toBe(true);
     const ok = contractTypeCreateSchema.parse({
       code: 'hdtv',
       name: 'TV',

@@ -88,6 +88,7 @@ export interface Lookups {
 export interface Partner {
   id: string;
   code: string;
+  shortName: string | null;
   type: PartnerType;
   entityType: LegalEntityType;
   name: string;

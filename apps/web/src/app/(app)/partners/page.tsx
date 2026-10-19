@@ -32,6 +32,7 @@ const schema = z.object({
   type: z.enum(PARTNER_TYPES),
   entityType: z.enum(['ORGANIZATION', 'INDIVIDUAL']),
   name: z.string().trim().min(1, 'Nhập tên đối tác').max(255),
+  shortName: z.string().trim().max(30).regex(/^[A-Za-z0-9_-]*$/, 'Chỉ gồm chữ không dấu, số, "-" hoặc "_"'),
   taxCode: z.string().max(20),
   address: z.string(),
   email: z.union([z.literal(''), z.email('Email không hợp lệ')]),
@@ -47,6 +48,7 @@ const toForm = (p?: Partner, type?: PartnerType): FormValues => ({
   type: p?.type ?? type ?? 'CUSTOMER',
   entityType: p?.entityType ?? 'ORGANIZATION',
   name: p?.name ?? '',
+  shortName: p?.shortName ?? '',
   taxCode: p?.taxCode ?? '',
   address: p?.address ?? '',
   email: p?.email ?? '',
@@ -106,6 +108,7 @@ function PartnerDialog({ open, partner, defaultType, onClose }: { open: boolean;
             />
           </div>
           {F({ name: "name", label: "Tên đối tác *", className: "sm:col-span-2" })}
+          {F({ name: "shortName", label: "Tên viết tắt (dùng trong mã hợp đồng, vd APOLLO)" })}
           <div className="space-y-1.5">
             <Label>Loại chủ thể</Label>
             <Controller

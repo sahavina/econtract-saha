@@ -10,6 +10,11 @@ const partnerFields = z.object({
   type: z.enum(PARTNER_TYPES),
   entityType: z.enum(['ORGANIZATION', 'INDIVIDUAL']),
   name: z.string().trim().min(1, 'Vui lòng nhập tên đối tác').max(255),
+  // Viết hoa, không dấu, không khoảng trắng – dùng trong mã hợp đồng ({PARTNER}).
+  shortName: z.preprocess(
+    (v) => (typeof v === 'string' ? (v.trim() === '' ? null : v.trim().toUpperCase()) : v),
+    z.string().max(30).regex(/^[A-Z0-9_-]+$/, 'Tên viết tắt chỉ gồm chữ không dấu, số, "-" hoặc "_"').nullable().optional(),
+  ),
   taxCode: nullableText(20),
   idNumber: nullableText(30),
   address: nullableText(),

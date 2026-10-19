@@ -17,7 +17,15 @@ import { StorageService } from '../storage/storage.service.js';
 import { TemplatesService } from '../templates/templates.service.js';
 import { ContractRevisionsService, snapshotOf } from './contract-revisions.js';
 import { sanitizeContractHtml } from './sanitize-content.js';
-import { DEFAULT_CONTRACT_CODE_PATTERN, renderCode, sequenceKey } from './contract-code.js';
+import {
+  type CodeContext,
+  DEFAULT_CONTRACT_CODE_PATTERN,
+  hasSequence,
+  partnerAbbreviation,
+  renderCode,
+  sequenceKey,
+  withDuplicateSuffix,
+} from './contract-code.js';
 import type {
   ContractCreate,
   ContractExportQuery,
@@ -58,6 +66,12 @@ const listSelect = {
     select: { name: true, partnerId: true },
   },
 } satisfies Prisma.ContractSelect;
+
+/** Ngày cho mã hợp đồng: ngày dự kiến ký (YYYY-MM-DD, theo giờ địa phương), không có thì hôm nay. */
+const codeDate = (v: string | null | undefined) => {
+  const m = v ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(v) : null;
+  return m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date();
+};
 
 const toDate = (v: string | null | undefined) => (v === undefined ? undefined : v === null ? null : new Date(v));
 
@@ -194,7 +208,7 @@ export class ContractsService {
       try {
         return await this.prisma.$transaction(async (tx) => {
           await this.limits.assertCanCreateContract(user.tenantId, tx);
-          const code = input.code ?? (await this.nextCode(tx, user, refs));
+          const code = input.code ?? (await this.nextCode(tx, user, refs, input));
           const contract = await tx.contract.create({
             data: {
               ...this.mapScalars(input),
@@ -498,9 +512,27 @@ export class ContractsService {
     tx: Tx,
     user: AuthUser,
     refs: { type: { code: string; codePattern: string } | null; dept: { code: string } | null },
+    input: Pick<ContractCreate, 'expectedSignDate' | 'parties'>,
   ) {
     const pattern = refs.type?.codePattern ?? DEFAULT_CONTRACT_CODE_PATTERN;
-    const ctx = { date: new Date(), typeCode: refs.type?.code, departmentCode: refs.dept?.code };
+    const ctx: CodeContext = {
+      date: codeDate(input.expectedSignDate),
+      typeCode: refs.type?.code,
+      departmentCode: refs.dept?.code,
+      partnerCode: await this.partnerCodeOf(tx, user, input.parties),
+    };
+    if (!hasSequence(pattern)) {
+      // Mẫu không đánh số (vd "{DD}{MM}/{YYYY}/HĐNT/{PARTNER}-SAHA"): trùng thì thêm "-2", "-3"…, kể cả mã của hợp đồng trong thùng rác.
+      const base = renderCode(pattern, ctx, 0);
+      const taken = await tx.contract.findMany({
+        where: { tenantId: user.tenantId, code: { startsWith: base } },
+        select: { code: true },
+      });
+      return withDuplicateSuffix(
+        base,
+        taken.map((t) => t.code),
+      );
+    }
     const key = sequenceKey(pattern, ctx);
     // Tăng bộ đếm nguyên tử; an toàn khi nhiều người tạo cùng lúc.
     const rows = await tx.$queryRaw<{ current: number }[]>`
@@ -509,6 +541,23 @@ export class ContractsService {
       ON CONFLICT ("tenantId", "key") DO UPDATE SET "current" = "NumberSequence"."current" + 1, "updatedAt" = now()
       RETURNING "current"`;
     return renderCode(pattern, ctx, rows[0].current);
+  }
+
+  /**
+   * {PARTNER}: bên đối tác (bên đầu tiên không phải nội bộ) – tên viết tắt của đối tác trong danh mục, chưa khai báo thì
+   * mã đối tác; bên nhập tay (không liên kết danh mục) thì tự rút gọn từ tên.
+   */
+  private async partnerCodeOf(tx: Tx, user: AuthUser, parties: ContractCreate['parties']) {
+    const party = parties.find((p) => !p.isInternal) ?? parties[0];
+    if (!party) return null;
+    if (party.partnerId) {
+      const partner = await tx.partner.findFirst({
+        where: { id: party.partnerId, tenantId: user.tenantId },
+        select: { shortName: true, code: true },
+      });
+      if (partner) return partner.shortName || partner.code;
+    }
+    return partnerAbbreviation(party.name);
   }
 
   private mapScalars(input: ContractUpdate) {

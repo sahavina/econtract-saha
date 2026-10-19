@@ -310,6 +310,8 @@ model Partner {
   type            PartnerType
   entityType      LegalEntityType  @default(ORGANIZATION)
   name            String
+  /// Tên viết tắt dùng trong mã hợp đồng (token {PARTNER}), ví dụ APOLLO
+  shortName       String?
   taxCode         String?
   idNumber        String?
   address         String?

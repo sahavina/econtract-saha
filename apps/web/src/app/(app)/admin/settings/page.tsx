@@ -29,7 +29,7 @@ interface Draft {
   isActive: boolean;
 }
 
-const TOKENS = ['{TYPE}', '{DEPT}', '{BRANCH}', '{YYYY}', '{YY}', '{MM}', '{SEQUENCE:4}'];
+const TOKENS = ['{TYPE}', '{DEPT}', '{BRANCH}', '{YYYY}', '{YY}', '{MM}', '{DD}', '{PARTNER}', '{SEQUENCE:4}'];
 
 function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
   const qc = useQueryClient();
@@ -38,7 +38,7 @@ function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
   const set = (p: Partial<Draft>) => setD((x) => ({ ...x, ...p }));
   const patternError = validateCodePattern(d.codePattern);
   // Xem trước với ngày hiện tại, phòng ban KD, chi nhánh HN, số thứ tự 1.
-  const example = patternError ? null : renderCode(d.codePattern, { date: new Date(), typeCode: d.code.toUpperCase() || 'HD', departmentCode: 'KD', branchCode: 'HN' }, 1);
+  const example = patternError ? null : renderCode(d.codePattern, { date: new Date(), typeCode: d.code.toUpperCase() || 'HD', departmentCode: 'KD', branchCode: 'HN', partnerCode: 'APOLLO' }, 1);
 
   const save = useMutation({
     meta: { silent: true },
@@ -89,7 +89,9 @@ function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
             </p>
           )}
           <p className="text-xs text-muted-foreground">
-            Số thứ tự tự đếm lại khi phần tiền tố thay đổi (ví dụ có {'{YYYY}'} thì mỗi năm đếm lại từ 1). Đổi mẫu chỉ áp dụng cho hợp đồng tạo sau.
+            {'{DD}{MM}{YYYY}'}: ngày dự kiến ký (chưa có thì ngày tạo). {'{PARTNER}'}: tên viết tắt của đối tác (khai báo ở danh mục Đối tác; chưa có thì dùng mã đối tác). Số
+            thứ tự {'{SEQUENCE:n}'} không bắt buộc – tự đếm lại khi phần tiền tố thay đổi (có {'{YYYY}'} thì mỗi năm đếm lại từ 1); mẫu không có số thứ tự mà bị trùng mã
+            thì tự thêm -2, -3… Đổi mẫu chỉ áp dụng cho hợp đồng tạo sau.
           </p>
         </div>
         <label className="flex items-center gap-2 text-sm">

@@ -1,4 +1,4 @@
-import { renderCode, sequenceKey, validateCodePattern } from './contract-code.js';
+import { partnerAbbreviation, renderCode, sequenceKey, validateCodePattern, withDuplicateSuffix } from './contract-code.js';
 
 describe('contract code', () => {
   const ctx = { date: new Date(2026, 9, 17), typeCode: 'HDMB', departmentCode: 'KD' };
@@ -20,9 +20,30 @@ describe('contract code', () => {
 
   it('validates patterns', () => {
     expect(validateCodePattern('HD-{YYYY}-{SEQUENCE:5}')).toBeNull();
-    expect(validateCodePattern('HD-{YYYY}')).not.toBeNull();
+    expect(validateCodePattern('HD-{YYYY}')).toBeNull(); // không có {SEQUENCE}: trùng thì thêm hậu tố -2, -3…
+    expect(validateCodePattern('')).not.toBeNull();
     expect(validateCodePattern('HD-{SEQUENCE}-{SEQUENCE}')).not.toBeNull();
     expect(validateCodePattern('HD-{FOO}-{SEQUENCE}')).toContain('{FOO}');
+  });
+});
+
+describe('date and partner tokens', () => {
+  it('renders the HĐNT pattern: day+month, year, partner short name, no sequence', () => {
+    const c = { date: new Date(2026, 0, 5), partnerCode: 'APOLLO' };
+    expect(renderCode('{DD}{MM}/{YYYY}/HĐNT/{PARTNER}-SAHA', c, 0)).toBe('0501/2026/HĐNT/APOLLO-SAHA');
+    expect(renderCode('{DD}{MM}/{YYYY}/HĐNT/{PARTNER}-SAHA', { date: c.date }, 0)).toBe('0501/2026/HĐNT/DOITAC-SAHA');
+  });
+
+  it('adds -2, -3… to duplicates', () => {
+    expect(withDuplicateSuffix('A', [])).toBe('A');
+    expect(withDuplicateSuffix('A', ['A'])).toBe('A-2');
+    expect(withDuplicateSuffix('A', ['A', 'A-2', 'A-3'])).toBe('A-4');
+  });
+
+  it('abbreviates company names', () => {
+    expect(partnerAbbreviation('CÔNG TY CỔ PHẦN TẬP ĐOÀN THUẬN THÀNH')).toBe('THUANTHANH');
+    expect(partnerAbbreviation('Công ty TNHH Thương mại Apollo')).toBe('APOLLO');
+    expect(partnerAbbreviation('  ')).toBeNull();
   });
 });
 
