@@ -13,6 +13,9 @@ import { assertSafeIntegrationUrl } from './url-guard.js';
 
 const ODOO = 'odoo';
 const refOf = (odooId: number) => `odoo:${odooId}`;
+/** MST so sánh: bỏ khoảng trắng/ký tự phân cách và tiền tố quốc gia "VN" của Odoo. */
+const normVat = (v: string | null | undefined) => v?.replace(/[^0-9a-z]/gi, '').replace(/^vn/i, '').toUpperCase() || null;
+
 
 export const odooConfigSchema = z.object({
   url: z.string().trim().url('URL Odoo không hợp lệ').max(300),
@@ -38,6 +41,9 @@ export const odooImportSchema = z.object({
   type: z.enum(PARTNER_TYPES).optional(),
 });
 export type OdooImportInput = z.infer<typeof odooImportSchema>;
+
+export const odooLinkSchema = z.object({ odooId: z.coerce.number().int().positive() });
+export type OdooLinkInput = z.infer<typeof odooLinkSchema>;
 
 interface StoredConfig {
   url: string;
@@ -165,9 +171,16 @@ export class IntegrationsService {
     if (!p) throw new NotFoundException('Không tìm thấy đối tác trên Odoo');
     const rep = p.isCompany ? await this.wrap(() => client.findRepresentative(p.odooId)) : null;
     const externalRef = refOf(p.odooId);
-    const existing = await this.prisma.partner.findUnique({
+    const linked = await this.prisma.partner.findUnique({
       where: { tenantId_externalRef: { tenantId: user.tenantId, externalRef } },
     });
+    // Chưa ánh xạ nhưng đã có đối tác cùng MST (tạo tay/từ hợp đồng) ⇒ ánh xạ luôn đối tác đó, không tạo trùng.
+    const tax = normVat(p.taxCode);
+    const existing =
+      linked ??
+      (tax
+        ? await this.prisma.partner.findFirst({ where: { tenantId: user.tenantId, deletedAt: null, externalRef: null, taxCode: tax } })
+        : null);
     // Đối tác đã có mà nhập lại với loại khác (khách hàng ↔ nhà cung cấp) ⇒ "Khách hàng & Nhà cung cấp".
     const type =
       existing && (input.type === 'CUSTOMER' || input.type === 'SUPPLIER')
@@ -186,7 +199,7 @@ export class IntegrationsService {
 
     return this.prisma.$transaction(async (tx) => {
       const partner = existing
-        ? await tx.partner.update({ where: { id: existing.id }, data: { ...data, deletedAt: null } })
+        ? await tx.partner.update({ where: { id: existing.id }, data: { ...data, externalRef, deletedAt: null } })
         : await tx.partner.create({
             data: { ...data, tenantId: user.tenantId, externalRef, code: await this.freeCode(tx, user.tenantId, p) },
           });
@@ -213,6 +226,89 @@ export class IntegrationsService {
     const odooId = Number(partner.externalRef?.match(/^odoo:(\d+)$/)?.[1]);
     if (!odooId) throw new BadRequestException('Đối tác này không liên kết với Odoo');
     return this.importPartner(user, { odooId, type: partner.type });
+  }
+
+  /**
+   * Ánh xạ một đối tác có sẵn trong eContract (tạo tay, từ hợp đồng) với đối tác Odoo: ghi liên kết để đồng bộ về sau,
+   * chỉ điền các trường đang trống – không ghi đè tên, mã, loại đã có.
+   */
+  async linkPartner(user: AuthUser, partnerId: string, odooId: number) {
+    const client = await this.client(user.tenantId);
+    return this.linkWith(client, user, partnerId, odooId);
+  }
+
+  /**
+   * Ánh xạ tự động theo MST: mỗi đối tác chưa ánh xạ có MST được tìm trên Odoo; đúng 1 kết quả trùng MST thì ánh xạ,
+   * nhiều kết quả hoặc không thấy thì để người dùng ánh xạ tay.
+   */
+  async autoLink(user: AuthUser) {
+    const client = await this.client(user.tenantId);
+    const partners = await this.prisma.partner.findMany({
+      where: { tenantId: user.tenantId, deletedAt: null, externalRef: null, taxCode: { not: null } },
+      select: { id: true, code: true, name: true, taxCode: true },
+      orderBy: { code: 'asc' },
+      take: 200,
+    });
+    const result = {
+      linked: [] as { code: string; odooName: string }[],
+      ambiguous: [] as string[],
+      notFound: [] as string[],
+      failed: [] as { code: string; error: string }[],
+    };
+    for (const p of partners) {
+      const tax = normVat(p.taxCode);
+      if (!tax) continue;
+      const found = await this.wrap(() => client.searchPartners(tax, undefined, 10));
+      const matches = found.filter((o) => normVat(o.taxCode) === tax);
+      if (matches.length > 1) result.ambiguous.push(p.code);
+      else if (!matches.length) result.notFound.push(p.code);
+      else {
+        try {
+          await this.linkWith(client, user, p.id, matches[0].odooId);
+          result.linked.push({ code: p.code, odooName: matches[0].name });
+        } catch (e) {
+          result.failed.push({ code: p.code, error: e instanceof Error ? e.message : 'Lỗi' });
+        }
+      }
+    }
+    return result;
+  }
+
+  private async linkWith(client: OdooClient, user: AuthUser, partnerId: string, odooId: number) {
+    const partner = await this.prisma.partner.findFirst({ where: { id: partnerId, tenantId: user.tenantId, deletedAt: null } });
+    if (!partner) throw new NotFoundException('Không tìm thấy đối tác');
+    const externalRef = refOf(odooId);
+    if (partner.externalRef === externalRef) return partner;
+    const taken = await this.prisma.partner.findFirst({
+      where: { tenantId: user.tenantId, externalRef, NOT: { id: partner.id } },
+      select: { code: true, deletedAt: true },
+    });
+    if (taken) {
+      throw new BadRequestException(`Đối tác Odoo này đã ánh xạ với ${taken.code}${taken.deletedAt ? ' (đã xóa)' : ''}`);
+    }
+    const p = await this.wrap(() => client.readPartner(odooId));
+    if (!p) throw new NotFoundException('Không tìm thấy đối tác trên Odoo');
+    const data = {
+      externalRef,
+      taxCode: partner.taxCode ?? p.taxCode,
+      address: partner.address ?? p.address,
+      email: partner.email ?? p.email,
+      phone: partner.phone ?? p.phone,
+    } satisfies Prisma.PartnerUpdateInput;
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.partner.update({ where: { id: partner.id }, data });
+      await this.audit.log(
+        user,
+        {
+          action: 'partner.odoo_link',
+          entityType: 'partner',
+          entityId: partner.id,
+          data: { code: partner.code, odooId, odooName: p.name, previousRef: partner.externalRef },
+        },
+        tx,
+      );
+      return updated;
+    });
   }
 
   /** Mã đối tác: dùng "Reference" của Odoo nếu chưa trùng, ngược lại ODOO-<id>. */

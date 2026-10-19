@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { PARTNER_TYPE_LABELS, PARTNER_TYPES, type PartnerType } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CloudDownload, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CloudDownload, Link2, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -163,6 +163,8 @@ export default function PartnersPage() {
   const [dialog, setDialog] = useState<{ partner?: Partner } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [odooOpen, setOdooOpen] = useState(false);
+  /** Đối tác đang ánh xạ với Odoo (mở hộp thoại tìm trên Odoo). */
+  const [linking, setLinking] = useState<Partner | null>(null);
   const odoo = useOdooConfig();
 
   useEffect(() => {
@@ -187,6 +189,29 @@ export default function PartnersPage() {
     },
   });
 
+  /** Ánh xạ tự động theo MST các đối tác chưa liên kết Odoo. */
+  const autoLink = useMutation({
+    mutationFn: () =>
+      api<{ linked: { code: string; odooName: string }[]; ambiguous: string[]; notFound: string[]; failed: { code: string; error: string }[] }>(
+        '/integrations/odoo/partners/auto-link',
+        { method: 'POST' },
+      ),
+    onSuccess: (r) => {
+      qc.invalidateQueries({ queryKey: ['partners'] });
+      const lines = [
+        r.linked.length ? `Đã ánh xạ: ${r.linked.map((x) => `${x.code} → ${x.odooName}`).join('; ')}` : '',
+        r.ambiguous.length ? `Nhiều kết quả trùng MST (ánh xạ tay): ${r.ambiguous.join(', ')}` : '',
+        r.notFound.length ? `Không thấy trên Odoo: ${r.notFound.join(', ')}` : '',
+        r.failed.length ? `Lỗi: ${r.failed.map((x) => `${x.code} (${x.error})`).join('; ')}` : '',
+      ].filter(Boolean);
+      const fn = r.linked.length ? toast.success : toast.info;
+      fn(r.linked.length ? `Đã ánh xạ ${r.linked.length} đối tác với Odoo` : 'Không có đối tác nào ánh xạ được theo MST', {
+        description: lines.join('\n') || 'Mọi đối tác có MST đều đã liên kết Odoo.',
+        duration: 15_000,
+      });
+    },
+  });
+
   const remove = useMutation({
     mutationFn: (id: string) => api(`/partners/${id}`, { method: 'DELETE' }),
     onSuccess: () => {
@@ -207,9 +232,14 @@ export default function PartnersPage() {
           can('partner.manage') && (
             <div className="flex gap-2">
               {odooReady(odoo.data) && (
-                <Button variant="outline" onClick={() => setOdooOpen(true)}>
-                  <CloudDownload /> Nhập từ Odoo
-                </Button>
+                <>
+                  <Button variant="outline" disabled={autoLink.isPending} onClick={() => autoLink.mutate()} title="Liên kết các đối tác chưa ánh xạ với đối tác Odoo trùng mã số thuế">
+                    {autoLink.isPending ? <Loader2 className="animate-spin" /> : <Link2 />} Ánh xạ Odoo theo MST
+                  </Button>
+                  <Button variant="outline" onClick={() => setOdooOpen(true)}>
+                    <CloudDownload /> Nhập từ Odoo
+                  </Button>
+                </>
               )}
               <Button onClick={() => setDialog({})}><Plus /> Thêm đối tác</Button>
             </div>
@@ -269,6 +299,11 @@ export default function PartnersPage() {
                               <RefreshCw className={syncOdoo.isPending && syncOdoo.variables === p.id ? 'animate-spin' : undefined} />
                             </Button>
                           )}
+                          {!isOdooPartner(p) && odooReady(odoo.data) && (
+                            <Button variant="ghost" size="icon-sm" aria-label={`Ánh xạ ${p.code} với Odoo`} title="Ánh xạ với đối tác Odoo" onClick={() => setLinking(p)}>
+                              <Link2 />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon-sm"
@@ -297,6 +332,16 @@ export default function PartnersPage() {
       )}
 
       <PartnerDialog open={!!dialog} partner={dialog?.partner} defaultType={type} onClose={() => setDialog(null)} />
+      {linking && (
+        <OdooPartnerDialog
+          key={linking.id}
+          open
+          onOpenChange={(o) => !o && setLinking(null)}
+          mode="link"
+          linkPartner={{ id: linking.id, code: linking.code }}
+          initialQuery={linking.taxCode || linking.name}
+        />
+      )}
       <OdooPartnerDialog open={odooOpen} onOpenChange={setOdooOpen} mode="import" defaultKind={type === 'CUSTOMER' || type === 'SUPPLIER' ? type : undefined} />
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </>

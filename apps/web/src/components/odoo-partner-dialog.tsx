@@ -15,7 +15,8 @@ import type { Partner } from '@/lib/types';
 
 /**
  * Tìm khách hàng/nhà cung cấp trực tiếp trên Odoo (chỉ đọc) và nhập vào danh mục đối tác.
- * mode "import": nhập vào danh mục; mode "pick": nhập rồi trả đối tác cho form hợp đồng.
+ * mode "import": nhập vào danh mục; mode "pick": nhập rồi trả đối tác cho form hợp đồng;
+ * mode "link": ánh xạ một đối tác có sẵn trong eContract (linkPartner) với đối tác Odoo được chọn.
  */
 export function OdooPartnerDialog({
   open,
@@ -23,16 +24,22 @@ export function OdooPartnerDialog({
   mode,
   defaultKind,
   onPicked,
+  linkPartner,
+  initialQuery = '',
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  mode: 'import' | 'pick';
+  mode: 'import' | 'pick' | 'link';
   defaultKind?: OdooKind;
   onPicked?: (partner: Partner) => void;
+  /** mode "link": đối tác trong eContract cần ánh xạ. */
+  linkPartner?: { id: string; code: string };
+  /** Từ khóa tìm sẵn (vd MST của đối tác cần ánh xạ). */
+  initialQuery?: string;
 }) {
   const qc = useQueryClient();
-  const [input, setInput] = useState('');
-  const [q, setQ] = useState('');
+  const [input, setInput] = useState(initialQuery);
+  const [q, setQ] = useState(initialQuery);
   const [kind, setKind] = useState<OdooKind | undefined>(defaultKind);
   const searchRef = useRef<HTMLInputElement>(null);
 
@@ -51,10 +58,18 @@ export function OdooPartnerDialog({
 
   const importer = useMutation({
     meta: { silent: true },
-    mutationFn: (r: OdooPartnerResult) => importOdooPartner(r.odooId, kind),
+    mutationFn: (r: OdooPartnerResult) =>
+      mode === 'link' && linkPartner
+        ? api<Partner>(`/integrations/odoo/partners/${linkPartner.id}/link`, { method: 'POST', body: { odooId: r.odooId } })
+        : importOdooPartner(r.odooId, kind),
     onSuccess: (p, r) => {
       qc.invalidateQueries({ queryKey: ['partners'] });
       qc.invalidateQueries({ queryKey: ['odoo', 'partners'] });
+      if (mode === 'link') {
+        toast.success(`Đã ánh xạ ${p.code} với Odoo: ${r.name}`);
+        onOpenChange(false);
+        return;
+      }
       toast.success(r.imported ? `Đã cập nhật ${p.code} từ Odoo` : `Đã nhập ${p.code} – ${p.name}`);
       if (mode === 'pick') {
         onPicked?.(p);
@@ -75,9 +90,13 @@ export function OdooPartnerDialog({
         }}
       >
         <DialogHeader>
-          <DialogTitle>{mode === 'pick' ? 'Chọn đối tác từ Odoo' : 'Nhập đối tác từ Odoo'}</DialogTitle>
+          <DialogTitle>
+            {mode === 'link' ? `Ánh xạ ${linkPartner?.code ?? ''} với đối tác Odoo` : mode === 'pick' ? 'Chọn đối tác từ Odoo' : 'Nhập đối tác từ Odoo'}
+          </DialogTitle>
           <DialogDescription>
-            Tìm theo tên, mã số thuế, email hoặc mã tham chiếu. Dữ liệu được đọc trực tiếp từ Odoo; đối tác đã chọn được lưu vào danh mục để dùng lại.
+            {mode === 'link'
+              ? 'Chọn đúng đối tác trên Odoo. Sau khi ánh xạ có thể bấm "Cập nhật từ Odoo" để đồng bộ; các thông tin đang trống được điền từ Odoo, thông tin đã có giữ nguyên.'
+              : 'Tìm theo tên, mã số thuế, email hoặc mã tham chiếu. Dữ liệu được đọc trực tiếp từ Odoo; đối tác đã chọn được lưu vào danh mục để dùng lại.'}
           </DialogDescription>
         </DialogHeader>
         <div className="flex flex-wrap gap-2">
@@ -116,16 +135,16 @@ export function OdooPartnerDialog({
                       {[r.taxCode && `MST ${r.taxCode}`, r.isCustomer && 'Khách hàng', r.isSupplier && 'Nhà cung cấp', r.phone, r.email].filter(Boolean).join(' · ')}
                     </p>
                     {r.address && <p className="truncate text-xs text-muted-foreground" title={r.address}>{r.address}</p>}
-                    {r.imported && <p className="text-xs text-emerald-700 dark:text-emerald-400">Đã có trong danh mục: {r.imported.code}</p>}
+                    {r.imported && <p className="text-xs text-emerald-700 dark:text-emerald-400">{mode === 'link' ? 'Đã ánh xạ với' : 'Đã có trong danh mục:'} {r.imported.code}</p>}
                   </div>
                   <Button
                     size="sm"
                     variant={mode === 'pick' || !r.imported ? 'default' : 'outline'}
-                    disabled={importer.isPending}
+                    disabled={importer.isPending || (mode === 'link' && !!r.imported)}
                     onClick={() => importer.mutate(r)}
                   >
                     {importer.isPending && importer.variables?.odooId === r.odooId ? <Loader2 className="animate-spin" /> : <Download />}
-                    {mode === 'pick' ? 'Chọn' : r.imported ? 'Cập nhật' : 'Nhập'}
+                    {mode === 'link' ? 'Ánh xạ' : mode === 'pick' ? 'Chọn' : r.imported ? 'Cập nhật' : 'Nhập'}
                   </Button>
                 </li>
               ))}

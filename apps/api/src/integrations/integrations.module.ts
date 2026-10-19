@@ -21,6 +21,8 @@ import {
   odooConfigSchema,
   type OdooImportInput,
   odooImportSchema,
+  type OdooLinkInput,
+  odooLinkSchema,
   type OdooSearchInput,
   odooSearchSchema,
   IntegrationsService,
@@ -69,6 +71,26 @@ class OdooIntegrationController {
   @RequireAnyPermission(PERMISSIONS.PARTNER_MANAGE, PERMISSIONS.CONTRACT_CREATE)
   import(@CurrentUser() user: AuthUser, @Body(new ZodPipe(odooImportSchema)) body: OdooImportInput) {
     return this.integrations.importPartner(user, body);
+  }
+
+  /** Ánh xạ tự động các đối tác chưa liên kết theo MST (đúng 1 kết quả trên Odoo). */
+  @Post('partners/auto-link')
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PARTNER_MANAGE)
+  autoLink(@CurrentUser() user: AuthUser) {
+    return this.integrations.autoLink(user);
+  }
+
+  /** Ánh xạ một đối tác có sẵn trong eContract với đối tác Odoo đã chọn. */
+  @Post('partners/:id/link')
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PARTNER_MANAGE)
+  link(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(odooLinkSchema)) body: OdooLinkInput,
+  ) {
+    return this.integrations.linkPartner(user, id, body.odooId);
   }
 
   @Post('partners/:id/sync')
