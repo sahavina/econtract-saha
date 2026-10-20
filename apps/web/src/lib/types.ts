@@ -20,10 +20,32 @@ export type Confidentiality = 'PUBLIC' | 'INTERNAL' | 'CONFIDENTIAL' | 'SECRET';
 export type PartyRole = 'PARTY_A' | 'PARTY_B' | 'PARTY_C' | 'RELATED';
 export type LegalEntityType = 'ORGANIZATION' | 'INDIVIDUAL';
 
+export type ContractKind = 'CONTRACT' | 'ORDER';
+
+/** Dòng hàng của đơn đặt hàng (số dạng chuỗi Decimal). */
+export interface OrderItem {
+  id: string;
+  productId: string | null;
+  sortOrder: number;
+  code: string | null;
+  name: string;
+  unit: string | null;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+  deliveredQty: string;
+  note: string | null;
+}
+
 export interface ContractListItem {
   id: string;
   code: string;
   title: string;
+  kind: ContractKind;
+  vatRate: string | null;
+  deliveryDate: string | null;
+  parentContract: { id: string; code: string } | null;
+  items: Pick<OrderItem, 'quantity' | 'unitPrice' | 'amount' | 'deliveredQty'>[];
   value: string;
   currency: string;
   status: ContractStatus;
@@ -61,7 +83,13 @@ export interface ContractParty {
   bankAccount: string | null;
 }
 
-export interface ContractDetail extends Omit<ContractListItem, 'parties'> {
+export interface ContractDetail extends Omit<ContractListItem, 'parties' | 'items' | 'parentContract'> {
+  items: OrderItem[];
+  parentContract: { id: string; code: string; title: string; signedDate: string | null } | null;
+  parentContractId: string | null;
+  deliveryAddress: string | null;
+  paymentTerms: string | null;
+  _count?: { orders: number };
   contractTypeId: string | null;
   departmentId: string | null;
   ownerId: string | null;
@@ -82,7 +110,7 @@ export interface ContractDetail extends Omit<ContractListItem, 'parties'> {
 }
 
 export interface Lookups {
-  contractTypes: { id: string; code: string; name: string; codePattern: string }[];
+  contractTypes: { id: string; code: string; name: string; codePattern: string; kind: ContractKind }[];
   departments: { id: string; code: string; name: string }[];
   users: { id: string; fullName: string; email: string }[];
 }
@@ -407,6 +435,7 @@ export interface AdminContractType {
   code: string;
   name: string;
   codePattern: string;
+  kind: ContractKind;
   isActive: boolean;
   example: string;
   _count: { contracts: number };
@@ -607,4 +636,26 @@ export interface PublicPreviewView {
     createdAt: string;
     resolvedAt: string | null;
   }[];
+}
+
+// ───────── Đơn đặt hàng ─────────
+
+export interface Product {
+  id: string;
+  code: string;
+  name: string;
+  unit: string | null;
+  unitPrice: string;
+  vatRate: string | null;
+  description: string | null;
+  isActive: boolean;
+}
+
+export interface OrderSummary {
+  count: number;
+  signed: number;
+  value: string;
+  deliveredValue: string;
+  remainingValue: string;
+  byFulfillment: { NONE: number; PARTIAL: number; DONE: number };
 }

@@ -26,9 +26,11 @@ const fields = z.object({
   name: z.string().trim().min(1, 'Nhập tên loại hợp đồng').max(255),
   codePattern: pattern,
   isActive: z.boolean(),
+  /** Hợp đồng hay đơn đặt hàng – chỉ chọn khi tạo (đổi sau sẽ lệch với hợp đồng/đơn đã lập). */
+  kind: z.enum(['CONTRACT', 'ORDER']),
 });
-export const contractTypeCreateSchema = fields.extend({ isActive: fields.shape.isActive.default(true) });
-export const contractTypeUpdateSchema = fields.omit({ code: true }).partial();
+export const contractTypeCreateSchema = fields.extend({ isActive: fields.shape.isActive.default(true), kind: fields.shape.kind.default('CONTRACT') });
+export const contractTypeUpdateSchema = fields.omit({ code: true, kind: true }).partial();
 export type ContractTypeCreate = z.infer<typeof contractTypeCreateSchema>;
 export type ContractTypeUpdate = z.infer<typeof contractTypeUpdateSchema>;
 

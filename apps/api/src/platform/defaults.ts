@@ -19,6 +19,7 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.CONTRACT_LIQUIDATE,
       P.PARTNER_VIEW,
       P.PARTNER_MANAGE,
+      P.PRODUCT_MANAGE,
       P.TEMPLATE_VIEW,
       P.TEMPLATE_MANAGE,
       P.CLAUSE_APPROVE,
@@ -38,6 +39,7 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.CONTRACT_DELETE,
       P.PARTNER_VIEW,
       P.PARTNER_MANAGE,
+      P.PRODUCT_MANAGE,
       P.TEMPLATE_VIEW,
     ],
   },
@@ -53,6 +55,7 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.CONTRACT_DELETE,
       P.PARTNER_VIEW,
       P.PARTNER_MANAGE,
+      P.PRODUCT_MANAGE,
       P.TEMPLATE_VIEW,
     ],
   },
@@ -89,12 +92,13 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
   },
 ];
 
-/** Loại hợp đồng mặc định: [mã, tên, mẫu đánh số]. */
-export const DEFAULT_CONTRACT_TYPES: [string, string, string][] = [
+/** Loại hợp đồng mặc định: [mã, tên, mẫu đánh số, loại (hợp đồng/đơn đặt hàng)]. */
+export const DEFAULT_CONTRACT_TYPES: [string, string, string, ('CONTRACT' | 'ORDER')?][] = [
   ['HDMB', 'Hợp đồng mua bán', 'HDMB-{YYYY}-{SEQUENCE:4}'],
   ['HDDV', 'Hợp đồng dịch vụ', 'HDDV-{YYYY}-{SEQUENCE:4}'],
   ['HDNT', 'Hợp đồng nguyên tắc', 'HDNT/{DEPT}/{YYYY}/{SEQUENCE:3}'],
   ['HDLD', 'Hợp đồng lao động', 'HDLD-{YYYY}-{SEQUENCE:4}'],
+  ['DDH', 'Đơn đặt hàng', 'DDH-{YYYY}-{SEQUENCE:4}', 'ORDER'],
 ];
 
 /** Gói dịch vụ mặc định (seed và bootstrap production); không ghi đè gói đã có. */
@@ -179,7 +183,7 @@ export async function provisionTenant(tx: Prisma.TransactionClient, input: Provi
     if (r.code === 'tenant_admin') adminRoleId = role.id;
   }
   await tx.contractType.createMany({
-    data: DEFAULT_CONTRACT_TYPES.map(([code, name, codePattern]) => ({ tenantId: tenant.id, code, name, codePattern })),
+    data: DEFAULT_CONTRACT_TYPES.map(([code, name, codePattern, kind]) => ({ tenantId: tenant.id, code, name, codePattern, kind })),
   });
   const admin = await tx.user.create({
     data: {

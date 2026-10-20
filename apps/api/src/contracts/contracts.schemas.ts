@@ -31,6 +31,23 @@ export const partySchema = z.object({
 });
 export type PartyInput = z.infer<typeof partySchema>;
 
+const quantity = z
+  .union([z.number(), z.string()])
+  .transform((v) => String(v).trim())
+  .refine((v) => /^\d{1,15}(\.\d{1,3})?$/.test(v), 'Số lượng không hợp lệ (tối đa 3 chữ số thập phân)');
+
+/** Dòng hàng của đơn đặt hàng; thành tiền do máy chủ tính. */
+export const orderItemSchema = z.object({
+  productId: nullableUuid,
+  code: nullableText(60),
+  name: z.string().trim().min(1, 'Nhập tên hàng hóa').max(500),
+  unit: nullableText(30),
+  quantity: quantity.refine((v) => Number(v) > 0, 'Số lượng phải lớn hơn 0'),
+  unitPrice: money,
+  note: nullableText(500),
+});
+export type OrderItemInput = z.infer<typeof orderItemSchema>;
+
 const contractBase = z.object({
   code: z.preprocess(emptyToNull, z.string().trim().max(60).nullable().optional()),
   title: z.string().trim().min(1, 'Vui lòng nhập tên hợp đồng').max(500),
@@ -50,6 +67,12 @@ const contractBase = z.object({
   note: nullableText(5000),
   contentHtml: z.string().max(2_000_000).nullable().optional(),
   parties: z.array(partySchema).max(20),
+  // Đơn đặt hàng
+  parentContractId: nullableUuid,
+  deliveryDate: nullableDate,
+  deliveryAddress: nullableText(500),
+  paymentTerms: nullableText(2000),
+  items: z.array(orderItemSchema).max(200),
 });
 
 const datesInOrder = (v: { effectiveDate?: string | null; expiryDate?: string | null }) =>
@@ -65,6 +88,8 @@ export const contractCreateSchema = contractBase
     confidentiality: contractBase.shape.confidentiality.default('INTERNAL'),
     tags: contractBase.shape.tags.default([]),
     parties: contractBase.shape.parties.default([]),
+    kind: z.enum(['CONTRACT', 'ORDER']).default('CONTRACT'),
+    items: contractBase.shape.items.default([]),
     // Lập hợp đồng từ mẫu: sao chép nội dung & loại hợp đồng của mẫu (nếu không truyền).
     templateId: z.preprocess(emptyToNull, z.uuid().nullable().optional()),
   })
@@ -104,6 +129,9 @@ export const CONTRACT_SORT_FIELDS = [
 
 export const contractQuerySchema = paginationSchema.extend({
   view: z.enum(CONTRACT_VIEWS).default('all'),
+  /** Danh sách hợp đồng mặc định không gồm đơn đặt hàng. */
+  kind: z.enum(['CONTRACT', 'ORDER']).default('CONTRACT'),
+  parentContractId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
   q: optionalString,
   status: z.preprocess((v) => (v === '' ? undefined : v), z.enum(CONTRACT_STATUSES).optional()),
   contractTypeId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
@@ -122,3 +150,11 @@ export type ContractCodeCheck = z.infer<typeof contractCodeCheckSchema>;
 
 export const contractExportSchema = contractQuerySchema.omit({ page: true, pageSize: true });
 export type ContractExportQuery = z.infer<typeof contractExportSchema>;
+
+export const orderDeliverySchema = z.object({
+  items: z
+    .array(z.object({ id: z.uuid(), deliveredQty: quantity }))
+    .min(1)
+    .max(200),
+});
+export type OrderDelivery = z.infer<typeof orderDeliverySchema>;

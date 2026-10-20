@@ -29,6 +29,8 @@ interface Draft {
   name: string;
   codePattern: string;
   isActive: boolean;
+  /** Chỉ chọn khi tạo loại mới. */
+  kind: 'CONTRACT' | 'ORDER';
 }
 
 const TOKENS = ['{TYPE}', '{DEPT}', '{BRANCH}', '{YYYY}', '{YY}', '{MM}', '{DD}', '{PARTNER}', '{SEQUENCE:4}'];
@@ -46,7 +48,7 @@ function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
     meta: { silent: true },
     mutationFn: () => {
       const body = { name: d.name, codePattern: d.codePattern, isActive: d.isActive };
-      return d.id ? api(`/contract-types/${d.id}`, { method: 'PATCH', body }) : api('/contract-types', { method: 'POST', body: { ...body, code: d.code } });
+      return d.id ? api(`/contract-types/${d.id}`, { method: 'PATCH', body }) : api('/contract-types', { method: 'POST', body: { ...body, code: d.code, kind: d.kind } });
     },
     onSuccess: () => {
       toast.success('Đã lưu loại hợp đồng');
@@ -96,6 +98,13 @@ function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
             thì tự thêm -2, -3… Đổi mẫu chỉ áp dụng cho hợp đồng tạo sau.
           </p>
         </div>
+        {d.id ? (
+          <p className="text-sm text-muted-foreground">Dùng cho: {d.kind === 'ORDER' ? 'đơn đặt hàng' : 'hợp đồng'}</p>
+        ) : (
+          <label className="flex items-center gap-2 text-sm">
+            <Checkbox checked={d.kind === 'ORDER'} onCheckedChange={(v) => set({ kind: v ? 'ORDER' : 'CONTRACT' })} /> Dùng cho đơn đặt hàng (không đổi được sau khi tạo)
+          </label>
+        )}
         <label className="flex items-center gap-2 text-sm">
           <Checkbox checked={d.isActive} onCheckedChange={(v) => set({ isActive: !!v })} /> Đang sử dụng
         </label>
@@ -131,7 +140,7 @@ export default function AdminSettingsPage() {
             <CardTitle className="text-base">Loại hợp đồng & mẫu mã</CardTitle>
             <CardDescription>Mã hợp đồng tự sinh theo mẫu của từng loại; hợp đồng không chọn loại dùng mẫu HD-{'{YYYY}'}-{'{SEQUENCE:5}'}.</CardDescription>
           </div>
-          <Button onClick={() => setEditing({ code: '', name: '', codePattern: '{TYPE}-{YYYY}-{SEQUENCE:4}', isActive: true })}>
+          <Button onClick={() => setEditing({ code: '', name: '', codePattern: '{TYPE}-{YYYY}-{SEQUENCE:4}', isActive: true, kind: 'CONTRACT' })}>
             <Plus /> Thêm loại
           </Button>
         </CardHeader>
@@ -158,7 +167,7 @@ export default function AdminSettingsPage() {
                     <TableRow key={t.id} className={t.isActive ? '' : 'opacity-50'}>
                       <TableCell className="font-medium">{t.code}</TableCell>
                       <TableCell>
-                        {t.name} {!t.isActive && <Badge variant="outline">Ngừng</Badge>}
+                        {t.name} {t.kind === 'ORDER' && <Badge variant="secondary">Đơn đặt hàng</Badge>} {!t.isActive && <Badge variant="outline">Ngừng</Badge>}
                       </TableCell>
                       <TableCell>
                         <code className="text-xs">{t.codePattern}</code>
@@ -168,7 +177,7 @@ export default function AdminSettingsPage() {
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
                       <TableCell className="text-right">
-                        <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${t.name}`} onClick={() => setEditing({ id: t.id, code: t.code, name: t.name, codePattern: t.codePattern, isActive: t.isActive })}>
+                        <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${t.name}`} onClick={() => setEditing({ id: t.id, code: t.code, name: t.name, codePattern: t.codePattern, isActive: t.isActive, kind: t.kind })}>
                           <Pencil />
                         </Button>
                       </TableCell>

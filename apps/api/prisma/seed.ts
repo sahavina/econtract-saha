@@ -151,11 +151,24 @@ async function main() {
     });
   }
 
-  for (const [code, name, codePattern] of DEFAULT_CONTRACT_TYPES) {
+  for (const [code, name, codePattern, kind] of DEFAULT_CONTRACT_TYPES) {
     await prisma.contractType.upsert({
       where: { tenantId_code: { tenantId: t, code } },
       update: {},
-      create: { tenantId: t, code, name, codePattern },
+      create: { tenantId: t, code, name, codePattern, kind },
+    });
+  }
+
+  // Danh mục sản phẩm mẫu cho đơn đặt hàng.
+  for (const [code, name, unit, unitPrice] of [
+    ['SIL-A500', 'Keo silicone trung tính A500 (300 ml)', 'Thùng', '1250000'],
+    ['SIL-A300', 'Keo silicone axit A300 (300 ml)', 'Thùng', '980000'],
+    ['PU-F15', 'Keo bọt nở PU F15 (750 ml)', 'Thùng', '1560000'],
+  ] as const) {
+    await prisma.product.upsert({
+      where: { tenantId_code: { tenantId: t, code } },
+      update: {},
+      create: { tenantId: t, code, name, unit, unitPrice, vatRate: 8 },
     });
   }
 

@@ -6,6 +6,9 @@ import {
   Building,
   Building2,
   Boxes,
+  Package,
+  PackagePlus,
+  ShoppingCart,
   CreditCard,
   Gauge,
   Receipt,
@@ -80,6 +83,14 @@ export const NAV: NavGroup[] = [
       { title: 'Tạo hợp đồng từ file', icon: FileUp, href: '/contracts/new?from=file', permissions: [PERMISSIONS.CONTRACT_CREATE] },
       { title: 'Mẫu hợp đồng', icon: ScrollText, href: '/templates', permissions: [PERMISSIONS.TEMPLATE_VIEW] },
       { title: 'Thư viện điều khoản', icon: ClipboardCheck, href: '/clauses', permissions: [PERMISSIONS.TEMPLATE_VIEW] },
+    ],
+  },
+  {
+    label: 'Đơn đặt hàng',
+    items: [
+      { title: 'Tất cả đơn hàng', icon: ShoppingCart, href: '/orders', permissions: VIEW_CONTRACT },
+      { title: 'Tạo đơn đặt hàng', icon: PackagePlus, href: '/orders/new', permissions: [PERMISSIONS.CONTRACT_CREATE] },
+      { title: 'Sản phẩm', icon: Package, href: '/products', permissions: [PERMISSIONS.PRODUCT_MANAGE, PERMISSIONS.CONTRACT_CREATE] },
     ],
   },
   {

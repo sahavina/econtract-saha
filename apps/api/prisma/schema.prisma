@@ -118,6 +118,7 @@ model Tenant {
   clauses       Clause[]
   workflows     ApprovalWorkflow[]
   integrations  TenantIntegration[]
+  products      Product[]
 }
 
 // ───────────────────────────── Tổ chức & Người dùng ─────────────────────────────
@@ -350,11 +351,18 @@ model PartnerContact {
 
 // ───────────────────────────── Hợp đồng ─────────────────────────────
 
+/// Hợp đồng thường hay đơn đặt hàng (đơn dùng chung mẫu, phê duyệt, ký với hợp đồng).
+enum ContractKind {
+  CONTRACT
+  ORDER
+}
+
 model ContractType {
   id          String             @id @default(uuid()) @db.Uuid
   tenantId    String             @db.Uuid
   code        String
   name        String
+  kind        ContractKind       @default(CONTRACT)
   // Mẫu mã: hỗ trợ {TYPE} {DEPT} {BRANCH} {YYYY} {YY} {MM} {SEQUENCE} {SEQUENCE:5}
   codePattern String             @default("HD-{YYYY}-{SEQUENCE:5}")
   isActive    Boolean            @default(true)
@@ -408,6 +416,15 @@ model Contract {
   tenantId          String               @db.Uuid
   code              String
   title             String
+  kind              ContractKind         @default(CONTRACT)
+  /// Đơn đặt hàng thuộc hợp đồng nguyên tắc nào.
+  parentContractId  String?              @db.Uuid
+  parentContract    Contract?            @relation("ContractOrders", fields: [parentContractId], references: [id], onDelete: SetNull)
+  orders            Contract[]           @relation("ContractOrders")
+  deliveryDate      DateTime?            @db.Date
+  deliveryAddress   String?
+  paymentTerms      String?
+  items             ContractItem[]
   contractTypeId    String?              @db.Uuid
   group             String?
   description       String?
@@ -455,6 +472,8 @@ model Contract {
   feedback          ContractFeedback[]
 
   @@unique([tenantId, code])
+  @@index([tenantId, kind])
+  @@index([parentContractId])
   @@index([tenantId, status])
   @@index([tenantId, expiryDate])
   @@index([tenantId, ownerId])
@@ -1108,4 +1127,45 @@ model ContractFeedback {
 
   @@index([tenantId, contractId, status])
   @@index([linkId, createdAt])
+}
+
+/// Danh mục sản phẩm/hàng hóa dùng cho dòng hàng của đơn đặt hàng.
+model Product {
+  id          String         @id @default(uuid()) @db.Uuid
+  tenantId    String         @db.Uuid
+  code        String
+  name        String
+  unit        String?
+  unitPrice   Decimal        @default(0) @db.Decimal(20, 2)
+  vatRate     Decimal?       @db.Decimal(5, 2)
+  description String?
+  isActive    Boolean        @default(true)
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  items       ContractItem[]
+
+  @@unique([tenantId, code])
+}
+
+/// Dòng hàng của đơn đặt hàng (sao chép tên/đơn giá tại thời điểm lập đơn); deliveredQty để theo dõi giao hàng.
+model ContractItem {
+  id           String   @id @default(uuid()) @db.Uuid
+  tenantId     String   @db.Uuid
+  contractId   String   @db.Uuid
+  productId    String?  @db.Uuid
+  sortOrder    Int      @default(0)
+  code         String?
+  name         String
+  unit         String?
+  quantity     Decimal  @db.Decimal(18, 3)
+  unitPrice    Decimal  @db.Decimal(20, 2)
+  amount       Decimal  @db.Decimal(20, 2)
+  deliveredQty Decimal  @default(0) @db.Decimal(18, 3)
+  note         String?
+  contract     Contract @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  product      Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([contractId])
+  @@index([tenantId, productId])
 }

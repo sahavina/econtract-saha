@@ -17,13 +17,14 @@ export default function EditContractPage() {
 
   const c = q.data;
   const editable = c.status === 'DRAFT' && !c.archivedAt && !c.deletedAt;
+  const isOrder = c.kind === 'ORDER';
   return (
     <>
       <PageHeader
-        title={`Sửa hợp đồng ${c.code}`}
-        crumbs={[{ label: 'Quản lý hợp đồng', href: '/contracts' }, { label: c.code, href: `/contracts/${c.id}` }, { label: 'Chỉnh sửa' }]}
+        title={`Sửa ${isOrder ? 'đơn hàng' : 'hợp đồng'} ${c.code}`}
+        crumbs={[isOrder ? { label: 'Đơn đặt hàng', href: '/orders' } : { label: 'Quản lý hợp đồng', href: '/contracts' }, { label: c.code, href: `/contracts/${c.id}` }, { label: 'Chỉnh sửa' }]}
       />
-      {editable ? <ContractForm contract={c} /> : <p className="text-sm text-muted-foreground">Chỉ được chỉnh sửa hợp đồng ở trạng thái Nháp.</p>}
+      {editable ? <ContractForm contract={c} /> : <p className="text-sm text-muted-foreground">Chỉ được chỉnh sửa {isOrder ? 'đơn hàng' : 'hợp đồng'} ở trạng thái Nháp.</p>}
     </>
   );
 }

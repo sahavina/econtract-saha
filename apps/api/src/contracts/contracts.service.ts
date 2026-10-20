@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { EXPIRING_SOON_DAYS, PERMISSIONS } from '@saha/shared';
+import { DEFAULT_ORDER_HTML, deliveredValue, EXPIRING_SOON_DAYS, fromScaled, itemAmount, orderFulfillment, orderTotals, PERMISSIONS, toScaled } from '@saha/shared';
 import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
@@ -32,6 +32,8 @@ import type {
   ContractExportQuery,
   ContractQuery,
   ContractUpdate,
+  OrderDelivery,
+  OrderItemInput,
   PartyInput,
 } from './contracts.schemas.js';
 
@@ -40,11 +42,18 @@ type Tx = Prisma.TransactionClient;
 const EDITABLE_APPROVAL = new Set(['NOT_SUBMITTED', 'REJECTED', 'CHANGES_REQUESTED']);
 const NULLABLE_SORT = new Set(['signedDate', 'effectiveDate', 'expiryDate']);
 const DELETABLE_STATUS = new Set(['DRAFT', 'CANCELLED']);
+/** Đơn đã ký mới được cập nhật số lượng đã giao. */
+const DELIVERABLE_STATUS = new Set(['SIGNED', 'ACTIVE']);
 
 const listSelect = {
   id: true,
   code: true,
   title: true,
+  kind: true,
+  vatRate: true,
+  deliveryDate: true,
+  parentContract: { select: { id: true, code: true } },
+  items: { select: { quantity: true, unitPrice: true, amount: true, deliveredQty: true } },
   value: true,
   currency: true,
   status: true,
@@ -134,6 +143,8 @@ export class ContractsService {
     if (q.view === 'archived') and.push({ archivedAt: { not: null } });
     else if (q.view !== 'trash') and.push({ archivedAt: null });
 
+    and.push({ kind: q.kind });
+    if (q.parentContractId) and.push({ parentContractId: q.parentContractId });
     if (q.status) and.push({ status: q.status });
     if (q.contractTypeId) and.push({ contractTypeId: q.contractTypeId });
     if (q.departmentId) and.push({ departmentId: q.departmentId });
@@ -189,6 +200,9 @@ export class ContractsService {
         createdBy: { select: { id: true, fullName: true } },
         parties: { orderBy: { sortOrder: 'asc' }, include: { partner: { select: { type: true } } } },
         template: { select: { id: true, code: true, name: true, version: true, requiredVariables: true } },
+        items: { orderBy: { sortOrder: 'asc' } },
+        parentContract: { select: { id: true, code: true, title: true, signedDate: true } },
+        _count: { select: { orders: { where: { deletedAt: null } } } },
       },
     });
     if (!contract) throw new NotFoundException('Không tìm thấy hợp đồng');
@@ -205,6 +219,15 @@ export class ContractsService {
         }
       : rawInput;
     const refs = await this.assertReferences(user, input);
+    // Loại "Đơn đặt hàng" ⇒ luôn là đơn; đơn không dùng loại hợp đồng thường.
+    const kind = refs.type?.kind === 'ORDER' ? 'ORDER' : input.kind;
+    if (kind === 'ORDER' && refs.type && refs.type.kind !== 'ORDER') {
+      throw new BadRequestException('Loại hợp đồng đã chọn không dùng cho đơn đặt hàng');
+    }
+    if (kind !== 'ORDER' && (input.items.length || input.parentContractId)) {
+      throw new BadRequestException('Chỉ đơn đặt hàng mới có dòng hàng và hợp đồng nguyên tắc');
+    }
+    const items = this.mapItems(user, input.items);
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await this.prisma.$transaction(async (tx) => {
@@ -214,14 +237,21 @@ export class ContractsService {
           const code = input.code ?? (await this.nextCode(tx, user, refs, { ...input, parties }));
           const contract = await tx.contract.create({
             data: {
-              ...this.mapScalars(input),
+              ...this.mapScalars({
+                ...input,
+                // Đơn soạn từ đầu ⇒ nội dung mặc định có sẵn bảng hàng hóa và các biến đơn hàng.
+                contentHtml: input.contentHtml ?? (kind === 'ORDER' ? DEFAULT_ORDER_HTML : input.contentHtml),
+                ...(kind === 'ORDER' && { value: this.itemsValue(items, input.value) }),
+              }),
               tenantId: user.tenantId,
+              kind,
               code,
               title: input.title,
               createdById: user.userId,
               ownerId: input.ownerId ?? user.userId,
               departmentId: input.departmentId ?? user.departmentId,
               parties: { create: parties.map((p, i) => this.mapParty(p, i)) },
+              items: { create: items },
               templateId: template?.id ?? null,
               templateVersion: template?.version ?? null,
             },
@@ -236,6 +266,8 @@ export class ContractsService {
               data: {
                 code,
                 title: contract.title,
+                kind: kind === 'ORDER' ? kind : undefined,
+                items: items.length || undefined,
                 template: template ? `${template.code} v${template.version}` : undefined,
               },
             },
@@ -271,7 +303,13 @@ export class ContractsService {
   async update(user: AuthUser, id: string, input: ContractUpdate, opts: { restoredFromSeq?: number } = {}) {
     const current = await this.get(user, id);
     this.assertEditable(current);
-    await this.assertReferences(user, input);
+    const refs = await this.assertReferences(user, input, id);
+    if (refs.type && (refs.type.kind === 'ORDER') !== (current.kind === 'ORDER')) {
+      throw new BadRequestException(current.kind === 'ORDER' ? 'Đơn đặt hàng phải dùng loại "Đơn đặt hàng"' : 'Loại "Đơn đặt hàng" chỉ dùng cho đơn đặt hàng');
+    }
+    if (current.kind !== 'ORDER' && ((input.items && input.items.length) || input.parentContractId)) {
+      throw new BadRequestException('Chỉ đơn đặt hàng mới có dòng hàng và hợp đồng nguyên tắc');
+    }
     if (input.code !== undefined && input.code !== current.code) {
       const check = await this.codeCheck(user, input.code);
       if (!check.available) throw new ConflictException(check.message);
@@ -294,6 +332,7 @@ export class ContractsService {
     input: ContractUpdate,
     opts: { restoredFromSeq?: number },
   ) {
+    const items = input.items && current.kind === 'ORDER' ? this.mapItems(user, input.items) : null;
     return this.prisma.$transaction(async (tx) => {
       if (input.parties) {
         const parties = await syncPartyPartners(tx, user, this.audit, input.parties);
@@ -302,10 +341,14 @@ export class ContractsService {
           data: parties.map((p, i) => ({ ...this.mapParty(p, i), contractId: id })),
         });
       }
+      if (items) {
+        await tx.contractItem.deleteMany({ where: { contractId: id } });
+        await tx.contractItem.createMany({ data: items.map((i) => ({ ...i, contractId: id })) });
+      }
       const contract = await tx.contract.update({
         where: { id },
         data: {
-          ...this.mapScalars(input),
+          ...this.mapScalars({ ...input, ...(items && { value: this.itemsValue(items, input.value ?? current.value.toString()) }) }),
           code: input.code,
           title: input.title,
           ownerId: input.ownerId,
@@ -380,6 +423,20 @@ export class ContractsService {
       note: src.note,
       contentHtml: src.contentHtml,
       parties: src.parties.map(({ id: _id, contractId: _c, sortOrder: _s, partner: _p, ...p }) => p),
+      kind: src.kind,
+      parentContractId: src.parentContractId,
+      deliveryDate: null,
+      deliveryAddress: src.deliveryAddress,
+      paymentTerms: src.paymentTerms,
+      items: src.items.map((i) => ({
+        productId: i.productId,
+        code: i.code,
+        name: i.name,
+        unit: i.unit,
+        quantity: i.quantity.toString(),
+        unitPrice: i.unitPrice.toString(),
+        note: i.note,
+      })),
     });
     await this.audit.log(user, {
       action: 'contract.duplicate',
@@ -471,7 +528,7 @@ export class ContractsService {
     const [contractTypes, departments, users] = await this.prisma.$transaction([
       this.prisma.contractType.findMany({
         where: { tenantId: user.tenantId, isActive: true },
-        select: { id: true, code: true, name: true, codePattern: true },
+        select: { id: true, code: true, name: true, codePattern: true, kind: true },
         orderBy: { name: 'asc' },
       }),
       this.prisma.department.findMany({
@@ -510,8 +567,21 @@ export class ContractsService {
   }
 
   /** Mọi ID tham chiếu phải thuộc cùng tenant – không tin dữ liệu từ client. */
-  private async assertReferences(user: AuthUser, input: Partial<ContractCreate>) {
+  private async assertReferences(user: AuthUser, input: Partial<ContractCreate>, selfId?: string) {
     const tenantId = user.tenantId;
+    if (input.parentContractId) {
+      // Hợp đồng nguyên tắc: hợp đồng thường (không phải đơn) mà người dùng xem được, chưa vào thùng rác.
+      const parent = await this.prisma.contract.findFirst({
+        where: { AND: [this.scopeWhere(user), { id: input.parentContractId, kind: 'CONTRACT', deletedAt: null }] },
+        select: { id: true },
+      });
+      if (!parent || parent.id === selfId) throw new BadRequestException('Hợp đồng nguyên tắc không hợp lệ');
+    }
+    const productIds = [...new Set((input.items ?? []).map((i) => i.productId).filter((x): x is string => !!x))];
+    if (productIds.length) {
+      const count = await this.prisma.product.count({ where: { id: { in: productIds }, tenantId } });
+      if (count !== productIds.length) throw new BadRequestException('Sản phẩm không hợp lệ');
+    }
     const [type, dept, owner] = await Promise.all([
       input.contractTypeId
         ? this.prisma.contractType.findFirst({ where: { id: input.contractTypeId, tenantId } })
@@ -602,7 +672,86 @@ export class ContractsService {
       tags: input.tags,
       note: input.note,
       contentHtml: input.contentHtml ? sanitizeContractHtml(input.contentHtml) : input.contentHtml,
+      parentContractId: input.parentContractId,
+      deliveryDate: toDate(input.deliveryDate),
+      deliveryAddress: input.deliveryAddress,
+      paymentTerms: input.paymentTerms,
     };
+  }
+
+  /** Dòng hàng: thành tiền tính lại ở máy chủ, không tin số liệu từ client. */
+  private mapItems(user: AuthUser, items: OrderItemInput[]) {
+    return items.map((i, index) => ({
+      tenantId: user.tenantId,
+      productId: i.productId ?? null,
+      sortOrder: index,
+      code: i.code ?? null,
+      name: i.name,
+      unit: i.unit ?? null,
+      quantity: i.quantity,
+      unitPrice: i.unitPrice,
+      amount: itemAmount(i.quantity, i.unitPrice),
+      note: i.note ?? null,
+    }));
+  }
+
+  /** Giá trị đơn = cộng tiền hàng (chưa gồm VAT); đơn chưa có dòng hàng thì giữ giá trị nhập tay. */
+  private itemsValue(items: { amount: string }[], fallback: string | undefined) {
+    return items.length ? orderTotals(items.map((i) => ({ name: '', quantity: 0, unitPrice: 0, amount: i.amount }))).subtotal : fallback;
+  }
+
+  // ───────────────────────── đơn đặt hàng ─────────────────────────
+
+  /** Cập nhật số lượng đã giao của từng dòng hàng (đơn đã ký). */
+  async updateDelivery(user: AuthUser, id: string, input: OrderDelivery) {
+    const order = await this.get(user, id);
+    if (order.kind !== 'ORDER') throw new BadRequestException('Chỉ đơn đặt hàng mới cập nhật giao hàng');
+    if (order.deletedAt || order.archivedAt) throw new BadRequestException('Đơn đã lưu trữ hoặc ở thùng rác');
+    if (!DELIVERABLE_STATUS.has(order.status)) throw new BadRequestException('Chỉ cập nhật giao hàng khi đơn đã ký');
+    const byId = new Map(order.items.map((i) => [i.id, i]));
+    const changes: { name: string; from: string; to: string }[] = [];
+    for (const row of input.items) {
+      const item = byId.get(row.id);
+      if (!item) throw new BadRequestException('Dòng hàng không thuộc đơn này');
+      if (toScaled(row.deliveredQty, 3) > toScaled(item.quantity.toString(), 3)) {
+        throw new BadRequestException(`"${item.name}": số lượng đã giao vượt số lượng đặt`);
+      }
+      if (toScaled(row.deliveredQty, 3) !== toScaled(item.deliveredQty.toString(), 3)) {
+        changes.push({ name: item.name, from: item.deliveredQty.toString(), to: row.deliveredQty });
+      }
+    }
+    if (!changes.length) return this.get(user, id);
+    await this.prisma.$transaction(async (tx) => {
+      for (const row of input.items) await tx.contractItem.update({ where: { id: row.id }, data: { deliveredQty: row.deliveredQty } });
+      const items = await tx.contractItem.findMany({ where: { contractId: id }, select: { quantity: true, deliveredQty: true } });
+      const status = orderFulfillment(items.map((i) => ({ quantity: i.quantity.toString(), deliveredQty: i.deliveredQty.toString() })));
+      await this.audit.log(user, { action: 'order.delivery_update', entityType: 'contract', entityId: id, data: { code: order.code, changes, fulfillment: status } }, tx);
+    });
+    return this.get(user, id);
+  }
+
+  /** Tổng hợp đơn theo bộ lọc (vd một khách hàng): số đơn, giá trị, đã giao, theo trạng thái giao hàng. */
+  async orderSummary(user: AuthUser, q: ContractExportQuery) {
+    const rows = await this.prisma.contract.findMany({
+      where: this.buildWhere(user, { ...q, kind: 'ORDER' }),
+      select: { status: true, value: true, vatRate: true, items: { select: { quantity: true, unitPrice: true, amount: true, deliveredQty: true } } },
+      take: 10_000,
+    });
+    let value = 0n;
+    let delivered = 0n;
+    const byFulfillment = { NONE: 0, PARTIAL: 0, DONE: 0 };
+    let signed = 0;
+    for (const r of rows) {
+      const items = r.items.map((i) => ({ name: '', quantity: i.quantity.toString(), unitPrice: i.unitPrice.toString(), amount: i.amount.toString(), deliveredQty: i.deliveredQty.toString() }));
+      value += toScaled(items.length ? orderTotals(items).subtotal : r.value.toString(), 2);
+      delivered += toScaled(deliveredValue(items), 2);
+      if (DELIVERABLE_STATUS.has(r.status)) {
+        signed++;
+        byFulfillment[orderFulfillment(items)]++;
+      }
+    }
+    const money = (n: bigint) => fromScaled(n, 2);
+    return { count: rows.length, signed, value: money(value), deliveredValue: money(delivered), remainingValue: money(value - delivered), byFulfillment };
   }
 
   private mapParty(p: PartyInput, index: number) {

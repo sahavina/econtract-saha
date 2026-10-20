@@ -5,3 +5,4 @@ export * from './approval.js';
 export * from './password.js';
 export * from './contract-code.js';
 export * from './contract-extract.js';
+export * from './order.js';

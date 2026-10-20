@@ -16,6 +16,8 @@ import {
   contractQuerySchema,
   type ContractUpdate,
   contractUpdateSchema,
+  type OrderDelivery,
+  orderDeliverySchema,
 } from './contracts.schemas.js';
 import { ContractsService } from './contracts.service.js';
 
@@ -102,10 +104,24 @@ export class ContractsController {
     res.send('﻿' + [header.map(csvCell).join(','), ...lines].join('\r\n'));
   }
 
+  /** Tổng hợp đơn đặt hàng theo bộ lọc (vd theo khách hàng, theo hợp đồng nguyên tắc). */
+  @Get('order-summary')
+  @RequireAnyPermission(...VIEW)
+  orderSummary(@CurrentUser() user: AuthUser, @Query(new ZodPipe(contractExportSchema)) query: ContractExportQuery) {
+    return this.contracts.orderSummary(user, query);
+  }
+
   @Get(':id')
   @RequireAnyPermission(...VIEW)
   get(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.contracts.get(user, id);
+  }
+
+  /** Cập nhật số lượng đã giao của đơn đặt hàng đã ký. */
+  @Patch(':id/delivery')
+  @RequirePermissions(PERMISSIONS.CONTRACT_UPDATE)
+  updateDelivery(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @Body(new ZodPipe(orderDeliverySchema)) body: OrderDelivery) {
+    return this.contracts.updateDelivery(user, id, body);
   }
 
   @Get(':id/revisions')

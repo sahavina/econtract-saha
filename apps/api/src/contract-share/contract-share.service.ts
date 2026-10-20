@@ -9,7 +9,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { buildTemplateValues, renderTemplate, type TemplateParty } from '@saha/shared';
+import { buildTemplateValues, type OrderItemLike, renderTemplate, type TemplateParty } from '@saha/shared';
 import { createHash, randomBytes } from 'node:crypto';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
@@ -58,6 +58,11 @@ export interface PreviewSource {
     name: string;
     authorizationRef: string | null;
   })[];
+  items?: OrderItemLike[];
+  parentContract?: { code: string; signedDate: Date | null } | null;
+  deliveryDate?: Date | null;
+  deliveryAddress?: string | null;
+  paymentTerms?: string | null;
 }
 
 const MISSING_MARK = /<mark data-missing="(?:empty|unknown)">\{\{[^<]*?\}\}<\/mark>/g;
@@ -142,6 +147,9 @@ const feedbackSelect = {
 const contractInclude = {
   contractType: { select: { name: true } },
   parties: { orderBy: { sortOrder: 'asc' } },
+  // Đơn đặt hàng: bảng hàng hóa và số hợp đồng nguyên tắc trong nội dung.
+  items: { orderBy: { sortOrder: 'asc' } },
+  parentContract: { select: { code: true, signedDate: true } },
 } satisfies Prisma.ContractInclude;
 
 @Injectable()

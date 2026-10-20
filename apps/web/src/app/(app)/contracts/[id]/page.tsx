@@ -12,6 +12,7 @@ import { ContractContentTab } from '@/components/contract-content-tab';
 import { ContractDocumentsTab } from '@/components/contract-documents-tab';
 import { ContractFeedbackTab, useContractFeedback } from '@/components/contract-feedback-tab';
 import { ContractLifecycleTab } from '@/components/contract-lifecycle-tab';
+import { ContractOrdersTab, OrderItemsTab } from '@/components/contract-orders';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
@@ -66,11 +67,13 @@ export default function ContractDetailPage() {
   if (!q.data) return <Skeleton className="h-96" />;
   const c = q.data;
   const editable = c.status === 'DRAFT' && !c.archivedAt && !c.deletedAt;
+  const isOrder = c.kind === 'ORDER';
+  const noun = isOrder ? 'đơn hàng' : 'hợp đồng';
 
   return (
     <>
       <PageHeader
-        crumbs={[{ label: 'Quản lý hợp đồng', href: '/contracts' }, { label: c.code }]}
+        crumbs={[isOrder ? { label: 'Đơn đặt hàng', href: '/orders' } : { label: 'Quản lý hợp đồng', href: '/contracts' }, { label: c.code }]}
         title={
           <span className="flex flex-wrap items-center gap-2">
             {c.title} <ContractStatusBadge status={c.status} />
@@ -78,7 +81,19 @@ export default function ContractDetailPage() {
             {c.deletedAt && <Badge variant="destructive">Thùng rác</Badge>}
           </span>
         }
-        description={`${c.code} · Phụ trách: ${c.owner?.fullName ?? '—'}`}
+        description={
+          <>
+            {c.code} · Phụ trách: {c.owner?.fullName ?? '—'}
+            {c.parentContract && (
+              <>
+                {' · Thuộc hợp đồng '}
+                <Link href={`/contracts/${c.parentContract.id}?tab=orders`} className="text-primary hover:underline">
+                  {c.parentContract.code}
+                </Link>
+              </>
+            )}
+          </>
+        }
         actions={
           c.deletedAt ? (
             can('contract.delete') && (
@@ -111,7 +126,7 @@ export default function ContractDetailPage() {
                     <ArchiveRestore /> Bỏ lưu trữ
                   </Button>
                 ) : (
-                  <Button variant="outline" onClick={() => setConfirm({ title: 'Lưu trữ hợp đồng này?', onConfirm: () => op.mutateAsync('archive').then(() => void toast.success('Đã lưu trữ')) })}>
+                  <Button variant="outline" onClick={() => setConfirm({ title: `Lưu trữ ${noun} này?`, onConfirm: () => op.mutateAsync('archive').then(() => void toast.success('Đã lưu trữ')) })}>
                     <Archive /> Lưu trữ
                   </Button>
                 )
@@ -121,11 +136,11 @@ export default function ContractDetailPage() {
                   variant="destructive"
                   onClick={() =>
                     setConfirm({
-                      title: 'Chuyển hợp đồng vào thùng rác?',
+                      title: `Chuyển ${noun} vào thùng rác?`,
                       description: 'Có thể khôi phục từ Thùng rác.',
                       destructive: true,
                       confirmLabel: 'Xóa',
-                      onConfirm: () => op.mutateAsync('delete').then(() => { toast.success('Đã chuyển vào thùng rác'); router.push('/contracts'); }),
+                      onConfirm: () => op.mutateAsync('delete').then(() => { toast.success('Đã chuyển vào thùng rác'); router.push(isOrder ? '/orders' : '/contracts'); }),
                     })
                   }
                 >
@@ -140,7 +155,9 @@ export default function ContractDetailPage() {
       <Tabs defaultValue={initialTab}>
         <TabsList className="h-auto flex-wrap justify-start">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-          <TabsTrigger value="content">Nội dung hợp đồng</TabsTrigger>
+          {isOrder && <TabsTrigger value="items">Hàng hóa & giao hàng ({c.items.length})</TabsTrigger>}
+          <TabsTrigger value="content">{isOrder ? 'Nội dung đơn hàng' : 'Nội dung hợp đồng'}</TabsTrigger>
+          {!isOrder && <TabsTrigger value="orders">Đơn đặt hàng ({c._count?.orders ?? 0})</TabsTrigger>}
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
           <TabsTrigger value="approval">Phê duyệt</TabsTrigger>
           <TabsTrigger value="signature">Ký điện tử</TabsTrigger>
@@ -159,9 +176,19 @@ export default function ContractDetailPage() {
             <CardHeader><CardTitle className="text-base">Thông tin chung</CardTitle></CardHeader>
             <CardContent>
               <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Info label="Mã hợp đồng">{c.code}</Info>
-                <Info label="Loại hợp đồng">{c.contractType?.name}</Info>
-                <Info label="Nhóm hợp đồng">{c.group}</Info>
+                <Info label={isOrder ? 'Số đơn hàng' : 'Mã hợp đồng'}>{c.code}</Info>
+                <Info label={isOrder ? 'Loại đơn' : 'Loại hợp đồng'}>{c.contractType?.name}</Info>
+                {isOrder ? (
+                  <Info label="Hợp đồng nguyên tắc">
+                    {c.parentContract && (
+                      <Link href={`/contracts/${c.parentContract.id}`} className="text-primary hover:underline">
+                        {c.parentContract.code}
+                      </Link>
+                    )}
+                  </Info>
+                ) : (
+                  <Info label="Nhóm hợp đồng">{c.group}</Info>
+                )}
                 <Info label="Phòng ban">{c.department?.name}</Info>
                 <Info label="Người phụ trách">{c.owner?.fullName}</Info>
                 <Info label="Người tạo">{c.createdBy.fullName}</Info>
@@ -182,15 +209,35 @@ export default function ContractDetailPage() {
             <CardHeader><CardTitle className="text-base">Giá trị & thời hạn</CardTitle></CardHeader>
             <CardContent>
               <dl className="grid gap-4">
-                <Info label="Giá trị hợp đồng"><span className="text-lg font-semibold">{formatMoney(c.value, c.currency)}</span></Info>
+                <Info label={isOrder ? 'Giá trị đơn (chưa VAT)' : 'Giá trị hợp đồng'}><span className="text-lg font-semibold">{formatMoney(c.value, c.currency)}</span></Info>
                 <Info label="Thuế VAT">{c.vatRate ? `${Number(c.vatRate)}%` : null}</Info>
-                <Info label="Ngày dự kiến ký">{formatDate(c.expectedSignDate)}</Info>
+                <Info label={isOrder ? 'Ngày đặt hàng' : 'Ngày dự kiến ký'}>{formatDate(c.expectedSignDate)}</Info>
                 <Info label="Ngày ký">{formatDate(c.signedDate)}</Info>
-                <Info label="Hiệu lực">{formatDate(c.effectiveDate)} → {formatDate(c.expiryDate)}</Info>
+                {isOrder ? (
+                  <>
+                    <Info label="Ngày giao hàng">{formatDate(c.deliveryDate)}</Info>
+                    <Info label="Địa điểm giao hàng">{c.deliveryAddress}</Info>
+                    <Info label="Điều kiện thanh toán">{c.paymentTerms}</Info>
+                  </>
+                ) : (
+                  <Info label="Hiệu lực">{formatDate(c.effectiveDate)} → {formatDate(c.expiryDate)}</Info>
+                )}
               </dl>
             </CardContent>
           </Card>
         </TabsContent>
+
+        {isOrder && (
+          <TabsContent value="items" className="mt-4">
+            {/* key: dữ liệu giao hàng đổi (sau khi lưu) thì khởi tạo lại ô nhập. */}
+            <OrderItemsTab key={c.items.map((i) => `${i.id}:${i.deliveredQty}`).join('|')} order={c} />
+          </TabsContent>
+        )}
+        {!isOrder && (
+          <TabsContent value="orders" className="mt-4">
+            <ContractOrdersTab contract={c} />
+          </TabsContent>
+        )}
 
         <TabsContent value="content" className="mt-4">
           <ContractContentTab key={c.id} contract={c} editable={editable && can('contract.update')} />

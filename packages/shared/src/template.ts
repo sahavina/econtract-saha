@@ -3,6 +3,8 @@
  * Dùng chung cho trình soạn thảo (chèn/xem trước) và backend (xuất PDF sau này).
  */
 
+import { amountInWordsVnd, type OrderItemLike, orderItemsTableHtml, orderTotals } from './order.js';
+
 export interface TemplateVariable {
   key: string;
   label: string;
@@ -20,6 +22,21 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
       { key: 'contract.start_date', label: 'Ngày hiệu lực' },
       { key: 'contract.end_date', label: 'Ngày hết hạn' },
       { key: 'contract.sign_date', label: 'Ngày dự kiến ký' },
+    ],
+  },
+  {
+    group: 'Đơn đặt hàng',
+    items: [
+      { key: 'order.items_table', label: 'Bảng hàng hóa' },
+      { key: 'order.subtotal', label: 'Cộng tiền hàng' },
+      { key: 'order.vat_amount', label: 'Tiền thuế GTGT' },
+      { key: 'order.total', label: 'Tổng thanh toán' },
+      { key: 'order.total_words', label: 'Tổng thanh toán bằng chữ' },
+      { key: 'order.parent_code', label: 'Số hợp đồng nguyên tắc' },
+      { key: 'order.parent_date', label: 'Ngày ký hợp đồng nguyên tắc' },
+      { key: 'order.delivery_date', label: 'Ngày giao hàng' },
+      { key: 'order.delivery_address', label: 'Địa điểm giao hàng' },
+      { key: 'order.payment_terms', label: 'Điều kiện thanh toán' },
     ],
   },
   ...(['party_a', 'party_b'] as const).map((p) => ({
@@ -40,7 +57,7 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
 export const TEMPLATE_VARIABLE_KEYS = new Set(TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => i.key)));
 
 const VARIABLE_LABELS = new Map(
-  TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => [i.key, g.group === 'Hợp đồng' ? i.label : `${g.group} – ${i.label}`] as const)),
+  TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => [i.key, g.group === 'Hợp đồng' || g.group === 'Đơn đặt hàng' ? i.label : `${g.group} – ${i.label}`] as const)),
 );
 
 /** Tên tiếng Việt của biến cho người dùng: "contract.vat_rate" → "Thuế VAT (%)", "party_b.phone" → "Bên B – Điện thoại". */
@@ -72,7 +89,16 @@ export interface TemplateContract {
   expiryDate?: string | Date | null;
   expectedSignDate?: string | Date | null;
   parties: TemplateParty[];
+  // Đơn đặt hàng
+  items?: OrderItemLike[];
+  parentContract?: { code: string; signedDate?: string | Date | null } | null;
+  deliveryDate?: string | Date | null;
+  deliveryAddress?: string | null;
+  paymentTerms?: string | null;
 }
+
+/** Biến có giá trị là HTML dựng sẵn (đã escape bên trong) – không escape lại khi thay. */
+const RAW_HTML_VARIABLES = new Set(['order.items_table']);
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -104,6 +130,19 @@ export function buildTemplateValues(c: TemplateContract): Record<string, string 
     'contract.end_date': formatDateVi(c.expiryDate),
     'contract.sign_date': formatDateVi(c.expectedSignDate),
   };
+  const items = (c.items ?? []).map((i) => ({ ...i, quantity: String(i.quantity), unitPrice: String(i.unitPrice), amount: i.amount == null ? null : String(i.amount) }));
+  const vat = c.vatRate === null || c.vatRate === undefined ? null : String(c.vatRate);
+  const totals = items.length ? orderTotals(items, vat) : null;
+  values['order.items_table'] = orderItemsTableHtml(items, vat);
+  values['order.subtotal'] = totals ? formatNumberVi(totals.subtotal) : null;
+  values['order.vat_amount'] = totals?.vatAmount ? formatNumberVi(totals.vatAmount) : null;
+  values['order.total'] = totals ? formatNumberVi(totals.total) : null;
+  values['order.total_words'] = totals && c.currency === 'VND' ? amountInWordsVnd(totals.total) : null;
+  values['order.parent_code'] = c.parentContract?.code || null;
+  values['order.parent_date'] = formatDateVi(c.parentContract?.signedDate);
+  values['order.delivery_date'] = formatDateVi(c.deliveryDate);
+  values['order.delivery_address'] = c.deliveryAddress || null;
+  values['order.payment_terms'] = c.paymentTerms || null;
   for (const [prefix, role] of [
     ['party_a', 'PARTY_A'],
     ['party_b', 'PARTY_B'],
@@ -140,7 +179,12 @@ export interface RenderResult {
 export function renderTemplate(html: string, values: Record<string, string | null>): RenderResult {
   const missing = new Set<string>();
   const unknown = new Set<string>();
-  const out = html.replace(VARIABLE_PATTERN, (_m, key: string) => {
+  // Bảng hàng hóa đứng riêng một đoạn ⇒ thay cả đoạn (bảng không được nằm trong <p>).
+  const blocks = html.replace(/<p[^>]*>\s*\{\{\s*([a-z_]+\.[a-z_]+)\s*\}\}\s*<\/p>/g, (m, key: string) => {
+    const v = RAW_HTML_VARIABLES.has(key) ? values[key] : null;
+    return v ? v : m;
+  });
+  const out = blocks.replace(VARIABLE_PATTERN, (_m, key: string) => {
     if (!TEMPLATE_VARIABLE_KEYS.has(key)) {
       unknown.add(key);
       return `<mark data-missing="unknown">{{${escapeHtml(key)}}}</mark>`;
@@ -150,7 +194,7 @@ export function renderTemplate(html: string, values: Record<string, string | nul
       missing.add(key);
       return `<mark data-missing="empty">{{${escapeHtml(key)}}}</mark>`;
     }
-    return escapeHtml(v);
+    return RAW_HTML_VARIABLES.has(key) ? v : escapeHtml(v);
   });
   return { html: out, missing: [...missing], unknown: [...unknown] };
 }
