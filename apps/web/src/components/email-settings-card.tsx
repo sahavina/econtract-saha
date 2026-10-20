@@ -116,11 +116,14 @@ function EmailSettingsForm({ cfg }: { cfg: EmailConfig }) {
       ...x,
       host: 'smtp.gmail.com',
       port: '465',
+      // Gmail bắt buộc đăng nhập bằng chính địa chỉ Gmail gửi thư.
+      username: x.username || x.fromEmail,
       fromEmail: x.fromEmail || x.username,
       fromName: x.fromName || 'SAHA eContract',
     }));
   const configured = cfg.configured;
   const canTest = configured || cfg.serverFallback;
+  const gmail = d.host.trim().toLowerCase() === 'smtp.gmail.com';
 
   return (
     <>
@@ -130,6 +133,12 @@ function EmailSettingsForm({ cfg }: { cfg: EmailConfig }) {
             {cfg.serverFallback
               ? 'Chưa cấu hình riêng – email đang gửi qua máy chủ SMTP chung của hệ thống.'
               : 'Chưa cấu hình – hệ thống chưa gửi được email (thư mời ký, OTP, link xem trước).'}
+          </p>
+        )}
+        {configured && cfg.host === 'smtp.gmail.com' && !cfg.username && (
+          <p role="alert" className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            Cấu hình đang thiếu Tài khoản SMTP nên mật khẩu chưa được lưu – Gmail sẽ từ chối gửi. Nhập địa chỉ Gmail vào Tài
+            khoản SMTP, nhập lại Mật khẩu ứng dụng rồi bấm Lưu.
           </p>
         )}
         <div className="grid gap-3 md:grid-cols-2">
@@ -148,7 +157,7 @@ function EmailSettingsForm({ cfg }: { cfg: EmailConfig }) {
             <p className="text-xs text-muted-foreground">465 (SSL) hoặc 587 (STARTTLS).</p>
           </div>
           <div className="space-y-1.5">
-            <Label htmlFor="smtp-user">Tài khoản SMTP</Label>
+            <Label htmlFor="smtp-user">Tài khoản SMTP {gmail || d.password ? '*' : ''}</Label>
             <Input
               id="smtp-user"
               autoComplete="off"

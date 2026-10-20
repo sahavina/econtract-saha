@@ -87,6 +87,15 @@ describe('smtpConfigSchema', () => {
     expect(smtpConfigSchema.safeParse({ ...base, host: 'smtp://x.vn' }).success).toBe(false);
     expect(smtpConfigSchema.safeParse({ ...base, fromName: 'A <evil@x.vn>' }).success).toBe(false);
   });
+
+  it('refuses a password or Gmail without an SMTP account instead of dropping the password', () => {
+    const r = smtpConfigSchema.safeParse({ ...base, username: '' });
+    expect(r.success).toBe(false);
+    expect(r.error?.issues[0]).toMatchObject({ path: ['username'], message: expect.stringContaining('Tài khoản SMTP') });
+    expect(smtpConfigSchema.safeParse({ ...base, username: '', password: '' }).success).toBe(false);
+    // Relay nội bộ không đăng nhập: không tài khoản, không mật khẩu ⇒ hợp lệ.
+    expect(smtpConfigSchema.safeParse({ ...base, host: 'relay.congty.vn', port: 25, username: '', password: '' }).success).toBe(true);
+  });
 });
 
 describe('SmtpSettingsService', () => {
@@ -139,5 +148,6 @@ describe('SmtpSettingsService', () => {
     expect(r.ok).toBe(false);
     expect(r.error).toContain('Mật khẩu ứng dụng');
     expect(smtpErrorMessage(err)).toContain('Sai tài khoản hoặc mật khẩu SMTP');
+    expect(smtpErrorMessage(Object.assign(new Error('530-5.7.0 Authentication Required'), { responseCode: 530 }))).toContain('yêu cầu đăng nhập');
   });
 });

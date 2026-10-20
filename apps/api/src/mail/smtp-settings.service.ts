@@ -10,7 +10,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { MailService, SMTP_PROVIDER, type StoredSmtpConfig } from './mail.service.js';
 
 const SMTP_PORTS = [25, 465, 587, 2525];
-const blankToUndefined = (v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
+const isGmail = (host: string) => host === 'smtp.gmail.com';
+const blankToUndefined =(v: unknown) => (typeof v === 'string' && v.trim() === '' ? undefined : v);
 
 export const smtpConfigSchema = z
   .object({
@@ -37,8 +38,13 @@ export const smtpConfigSchema = z
     fromEmail: z.string().trim().email('Email người gửi không hợp lệ').max(200),
     enabled: z.boolean().default(true),
   })
+  // Không có tài khoản thì mật khẩu bị bỏ (máy chủ không đăng nhập) – báo lỗi thay vì âm thầm bỏ mật khẩu đã nhập.
+  .refine((v) => v.username || (!v.password && !isGmail(v.host)), {
+    message: 'Nhập Tài khoản SMTP (với Gmail là chính địa chỉ Gmail dùng để gửi)',
+    path: ['username'],
+  })
   // Gmail hiển thị mật khẩu ứng dụng thành 4 nhóm có dấu cách – bỏ dấu cách.
-  .transform((v) => (v.host === 'smtp.gmail.com' && v.password ? { ...v, password: v.password.replace(/\s+/g, '') } : v));
+  .transform((v) => (isGmail(v.host) && v.password ? { ...v, password: v.password.replace(/\s+/g, '') } : v));
 export type SmtpConfigInput = z.infer<typeof smtpConfigSchema>;
 
 export const smtpTestSchema = z.object({
@@ -167,6 +173,8 @@ export function smtpErrorMessage(e: unknown): string {
   const raw = err?.message ?? 'Lỗi không xác định';
   if (err?.code === 'EAUTH' || err?.responseCode === 535)
     return `Sai tài khoản hoặc mật khẩu SMTP (với Gmail phải dùng Mật khẩu ứng dụng 16 ký tự). Chi tiết: ${raw}`;
+  if (err?.responseCode === 530 || /authentication required/i.test(raw))
+    return `Máy chủ SMTP yêu cầu đăng nhập – nhập Tài khoản SMTP và mật khẩu rồi lưu lại. Chi tiết: ${raw}`;
   if (err?.code === 'ETIMEDOUT' || err?.code === 'ECONNECTION' || err?.code === 'ESOCKET')
     return `Không kết nối được máy chủ SMTP (kiểm tra máy chủ, cổng 465/587). Chi tiết: ${raw}`;
   if (err?.code === 'EDNS') return `Không tìm thấy máy chủ SMTP. Chi tiết: ${raw}`;
