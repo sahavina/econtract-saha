@@ -90,6 +90,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Tất cả đơn hàng', icon: ShoppingCart, href: '/orders', permissions: VIEW_CONTRACT },
       { title: 'Tạo đơn đặt hàng', icon: PackagePlus, href: '/orders/new', permissions: [PERMISSIONS.CONTRACT_CREATE] },
+      { title: 'Tạo đơn từ file', icon: FileUp, href: '/orders/new?from=file', permissions: [PERMISSIONS.CONTRACT_CREATE] },
       { title: 'Sản phẩm', icon: Package, href: '/products', permissions: [PERMISSIONS.PRODUCT_MANAGE, PERMISSIONS.CONTRACT_CREATE] },
     ],
   },

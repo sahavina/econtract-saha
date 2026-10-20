@@ -32,7 +32,7 @@ export interface ExtractedContract {
   parties: ExtractedParty[];
 }
 
-type PartyField = Exclude<keyof ExtractedParty, 'role' | 'side'>;
+export type PartyField = Exclude<keyof ExtractedParty, 'role' | 'side'>;
 
 /** Bỏ dấu, chữ thường, gộp khoảng trắng: "Mã số thuế" → "ma so thue". */
 export function foldVi(s: string): string {
@@ -59,14 +59,14 @@ const LABELS: [RegExp, PartyField][] = [
   [/^(so tai khoan|tai khoan|stk|tk)\b/, 'bankAccount'],
 ];
 
-function fieldOf(label: string): PartyField | null {
+export function fieldOf(label: string): PartyField | null {
   const f = foldVi(label).replace(/[:：]$/, '').trim();
   if (!f || f.length > 40) return null;
   for (const [re, field] of LABELS) if (re.test(f)) return field;
   return null;
 }
 
-function normalizeValue(field: PartyField, raw: string): string | undefined {
+export function normalizeValue(field: PartyField, raw: string): string | undefined {
   let v = clean(raw);
   if (!v || /^[.…_\s-]+$/.test(v)) return undefined; // ô để trống "………"
   switch (field) {

@@ -17,7 +17,7 @@ export async function convertDocToDocx(file: File): Promise<Blob> {
 
 const W = 'http://schemas.openxmlformats.org/wordprocessingml/2006/main';
 
-async function readZipEntry(file: Blob, entryName: string): Promise<Uint8Array | null> {
+export async function readZipEntry(file: Blob, entryName: string): Promise<Uint8Array | null> {
   const buf = new Uint8Array(await file.arrayBuffer());
   const view = new DataView(buf.buffer);
   // End of central directory: chữ ký 0x06054b50, nằm trong 64 KB cuối file.

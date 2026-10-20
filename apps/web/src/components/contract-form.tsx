@@ -1,6 +1,18 @@
 'use client';
 
-import { extractContractFields, foldVi, formatQtyVi, itemAmount, orderTotals } from '@saha/shared';
+import {
+  buildTemplateValues,
+  DEFAULT_ORDER_HTML,
+  type DocBlock,
+  extractContractFields,
+  type ExtractedOrder,
+  extractOrderFields,
+  foldVi,
+  formatQtyVi,
+  itemAmount,
+  orderTotals,
+  renderTemplate,
+} from '@saha/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CloudDownload, FileText, FileUp, Loader2, PackagePlus, Plus, Trash2, X } from 'lucide-react';
@@ -20,11 +32,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useCompanyProfile } from '@/lib/company';
 import { convertDocToDocx, readDocx } from '@/lib/docx';
+import { readPdfText } from '@/lib/pdf-text';
+import { readXlsx } from '@/lib/xlsx';
 import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
 import { useLookups } from '@/lib/queries';
-import type { ContractDetail, ContractKind, ContractListItem, Partner, Product, TemplateListItem } from '@/lib/types';
+import type { ContractDetail, ContractKind, ContractListItem, Partner, Product, TemplateDetail, TemplateListItem } from '@/lib/types';
 
 const PARTY_ROLES = [
   { value: 'PARTY_A', label: 'Bên A' },
@@ -261,10 +275,12 @@ function ContractFilesPicker({
   files,
   onChange,
   required,
+  isOrder,
 }: {
   files: File[];
   onChange: (files: File[], added: File[]) => void;
   required?: boolean;
+  isOrder?: boolean;
 }) {
   const input = useRef<HTMLInputElement>(null);
   const add = (list: FileList | null) => {
@@ -278,11 +294,18 @@ function ContractFilesPicker({
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Tệp hợp đồng{required && ' *'}</CardTitle>
+        <CardTitle>
+          {isOrder ? 'Tệp đơn đặt hàng' : 'Tệp hợp đồng'}
+          {required && ' *'}
+        </CardTitle>
         <CardDescription>
-          {required
-            ? 'Tải lên bản hợp đồng đã soạn sẵn (PDF khuyến nghị để đối tác xem trực tiếp khi ký). Không cần soạn nội dung trong hệ thống.'
-            : 'Tùy chọn: đính kèm luôn bản hợp đồng hoặc phụ lục có sẵn. Có thể bổ sung sau ở tab Tài liệu.'}
+          {isOrder
+            ? required
+              ? 'Tải lên đơn của khách (Word, Excel hoặc PDF có chữ): hệ thống tự điền số đơn, ngày, các bên, bảng hàng hóa, giao hàng, thanh toán và đính kèm tệp vào tab Tài liệu. Ảnh/PDF scan chỉ được đính kèm.'
+              : 'Tùy chọn: đính kèm đơn gốc của khách; có thể bổ sung sau ở tab Tài liệu.'
+            : required
+              ? 'Tải lên bản hợp đồng đã soạn sẵn (PDF khuyến nghị để đối tác xem trực tiếp khi ký). Không cần soạn nội dung trong hệ thống.'
+              : 'Tùy chọn: đính kèm luôn bản hợp đồng hoặc phụ lục có sẵn. Có thể bổ sung sau ở tab Tài liệu.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -474,6 +497,52 @@ export function ContractForm({
     setValue(`parties.${index}.partnerType`, directionSuggestion());
   };
 
+  /**
+   * Đơn từ file: dòng hàng (khớp mã/tên với danh mục Sản phẩm để liên kết), giao hàng, thanh toán.
+   * Chỉ điền khi form chưa có dòng hàng/ô còn trống – không ghi đè dữ liệu đã nhập.
+   */
+  const applyOrderFields = async (x: ExtractedOrder) => {
+    const filled: string[] = [];
+    if (x.items.length && !form.getValues('items').some((i) => i.name.trim())) {
+      const catalog = await qc
+        .fetchQuery({ queryKey: ['products', 'picker'], queryFn: () => api<Paginated<Product>>('/products', { query: { pageSize: 200 } }) })
+        .catch(() => null);
+      const byCode = new Map((catalog?.items ?? []).map((p) => [p.code.toLowerCase(), p]));
+      const byName = new Map((catalog?.items ?? []).map((p) => [foldVi(p.name), p]));
+      let matched = 0;
+      setValue(
+        'items',
+        x.items.map((i) => {
+          const p = (i.code && byCode.get(i.code.toLowerCase())) || byName.get(foldVi(i.name));
+          if (p) matched++;
+          return {
+            productId: p?.id ?? '',
+            code: i.code ?? p?.code ?? '',
+            name: i.name,
+            unit: i.unit ?? p?.unit ?? '',
+            quantity: i.quantity,
+            unitPrice: i.unitPrice !== '0' ? i.unitPrice : p ? String(Number(p.unitPrice)) : '0',
+          };
+        }),
+        { shouldValidate: true },
+      );
+      filled.push(`${x.items.length} dòng hàng${matched ? ` (${matched} khớp danh mục sản phẩm)` : ''}`);
+    }
+    if (x.deliveryDate && !form.getValues('deliveryDate')) {
+      setValue('deliveryDate', x.deliveryDate);
+      filled.push('ngày giao');
+    }
+    if (x.deliveryAddress && !form.getValues('deliveryAddress').trim()) {
+      setValue('deliveryAddress', x.deliveryAddress.slice(0, 500));
+      filled.push('địa điểm giao');
+    }
+    if (x.paymentTerms && !form.getValues('paymentTerms').trim()) {
+      setValue('paymentTerms', x.paymentTerms.slice(0, 2000));
+      filled.push('điều kiện thanh toán');
+    }
+    return filled;
+  };
+
   /** Chọn hợp đồng nguyên tắc ⇒ chép các bên của hợp đồng đó nếu đơn chưa nhập bên nào. */
   const applyParentParties = async (parentContractId: string) => {
     if (!parentContractId || form.getValues('parties').some((p) => p.name.trim())) return;
@@ -498,42 +567,54 @@ export function ContractForm({
    * Bên có MST trùng doanh nghiệp mình ⇒ đánh dấu "Bên nội bộ"; trùng đối tác trong danh mục ⇒ liên kết đối tác.
    */
   const applyDocx = async (file: File) => {
-    let source: Blob = file;
-    if (/\.doc$/i.test(file.name)) {
-      // Word 97–2003: nhờ máy chủ chuyển sang .docx trước (vài giây).
-      const id = toast.loading(`Đang đọc ${file.name} (định dạng Word cũ)…`);
-      try {
-        source = await convertDocToDocx(file);
-        toast.dismiss(id);
-      } catch (e) {
-        toast.dismiss(id);
-        return toast.error(e instanceof Error ? e.message : `Không đọc được ${file.name}`);
+    let doc: { blocks: DocBlock[]; html?: string } | null = null;
+    if (/\.docx?$/i.test(file.name)) {
+      let source: Blob = file;
+      if (/\.doc$/i.test(file.name)) {
+        // Word 97–2003: nhờ máy chủ chuyển sang .docx trước (vài giây).
+        const id = toast.loading(`Đang đọc ${file.name} (định dạng Word cũ)…`);
+        try {
+          source = await convertDocToDocx(file);
+          toast.dismiss(id);
+        } catch (e) {
+          toast.dismiss(id);
+          return toast.error(e instanceof Error ? e.message : `Không đọc được ${file.name}`);
+        }
       }
+      doc = await readDocx(source);
+    } else if (/\.xlsx$/i.test(file.name)) {
+      doc = await readXlsx(file).catch(() => null);
+    } else if (/\.pdf$/i.test(file.name)) {
+      const id = toast.loading(`Đang đọc ${file.name}…`);
+      doc = await readPdfText(file).catch(() => null);
+      toast.dismiss(id);
+      if (!doc) return toast.info(`${file.name} là PDF dạng ảnh scan – chưa tự đọc được. Tệp vẫn được đính kèm; hãy nhập thông tin và hàng hóa thủ công.`, { duration: 10_000 });
+    } else if (/\.(png|jpe?g)$/i.test(file.name)) {
+      return toast.info(`${file.name} là ảnh – chưa tự đọc được. Tệp vẫn được đính kèm; hãy nhập thông tin và hàng hóa thủ công.`, { duration: 10_000 });
     }
-    const doc = await readDocx(source);
     if (!doc) return toast.error(`Không đọc được nội dung ${file.name} – hãy nhập thông tin thủ công`);
-    const x = extractContractFields(doc.blocks);
+    const x: ExtractedOrder = isOrder ? extractOrderFields(doc.blocks) : { ...extractContractFields(doc.blocks), items: [] };
     const filled: string[] = [];
     // Chép nội dung file Word làm nội dung hợp đồng (khi không dùng mẫu) để xem, in/xuất PDF, ký như hợp đồng soạn trong hệ thống.
     if (doc.html && !form.getValues('templateId')) {
       setImported({ name: file.name, html: doc.html, use: true });
-      filled.push('nội dung hợp đồng');
+      filled.push(`nội dung ${noun}`);
     }
     const isBlank = (v: string) => !v.trim() || v.trim() === '0';
     const fileTitle = file.name.replace(/\.[^.]+$/, '').slice(0, 500);
     const title = form.getValues('title');
     if (x.title && (isBlank(title) || title === fileTitle)) {
       setValue('title', x.title.slice(0, 500), { shouldValidate: true });
-      filled.push('tên hợp đồng');
+      filled.push(isOrder ? 'tên đơn' : 'tên hợp đồng');
     }
     if (x.code && isBlank(form.getValues('code'))) {
       setValue('code', x.code);
-      filled.push('số hợp đồng');
+      filled.push(isOrder ? 'số đơn' : 'số hợp đồng');
       void checkCode(x.code);
     }
     if (x.signDate && !form.getValues('expectedSignDate')) {
       setValue('expectedSignDate', x.signDate);
-      filled.push('ngày ký');
+      filled.push(isOrder ? 'ngày đặt hàng' : 'ngày ký');
     }
     if (x.value && isBlank(form.getValues('value'))) {
       setValue('value', x.value, { shouldValidate: true });
@@ -577,6 +658,7 @@ export function ContractForm({
       if (suggested && !form.getValues(`parties.${index}.partnerType`)) setValue(`parties.${index}.partnerType`, suggested);
     }
     if (partiesFilled) filled.push(`${partiesFilled} bên tham gia`);
+    if (isOrder) filled.push(...(await applyOrderFields(x)));
     if (filled.length) toast.success(`Đã điền từ ${file.name}: ${filled.join(', ')}`, { description: 'Kiểm tra lại thông tin trước khi lưu.', duration: 8000 });
     else toast.info(`Không tìm thấy thông tin để điền từ ${file.name}`);
   };
@@ -602,6 +684,7 @@ export function ContractForm({
     <ContractFilesPicker
       files={files}
       required={fromFile}
+      isOrder={isOrder}
       onChange={(next, added) => {
         setFiles(next);
         if (imported && !next.some((x) => x.name === imported.name)) setImported(null);
@@ -610,8 +693,10 @@ export function ContractForm({
           setValue('title', added[0].name.replace(/\.[^.]+$/, '').slice(0, 500), { shouldValidate: true });
         }
         // File Word: đọc nội dung để điền sẵn thông tin chung và các bên.
-        const word = added.find((x) => /\.docx?$/i.test(x.name));
-        if (word && !isEdit) void applyDocx(word);
+        // Đơn đặt hàng còn đọc được Excel, PDF có lớp chữ (ảnh/PDF scan chỉ đính kèm).
+        const readable = isOrder ? /\.(docx?|xlsx|pdf|png|jpe?g)$/i : /\.docx?$/i;
+        const source = added.find((x) => /\.docx?$/i.test(x.name)) ?? added.find((x) => readable.test(x.name));
+        if (source && !isEdit) void applyDocx(source);
       }}
     />
   );
@@ -643,7 +728,7 @@ export function ContractForm({
   return (
     <form
       onSubmit={form.handleSubmit((v) => {
-        if (fromFile && !files.length) return toast.error('Chọn ít nhất một tệp hợp đồng');
+        if (fromFile && !files.length) return toast.error(`Chọn ít nhất một tệp ${noun}`);
         save.mutate(v);
       })}
       className="space-y-4"
@@ -651,7 +736,7 @@ export function ContractForm({
     >
       {!isEdit && fromFile && filesPicker}
       {!isEdit && fromFile && importedCard}
-      {!isEdit && !fromFile && (
+      {!isEdit && (!fromFile || isOrder) && (
         <Card>
           <CardHeader>
             <CardTitle>{isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}</CardTitle>
@@ -917,6 +1002,8 @@ export function ContractForm({
         </CardContent>
       </Card>
 
+      {isOrder && !isEdit && !imported?.use && <OrderContentPreview form={form} templateId={templateId} />}
+
       {!isEdit && !fromFile && filesPicker}
       {!isEdit && !fromFile && importedCard}
 
@@ -1110,6 +1197,66 @@ function OrderItemsCard({ form }: { form: OrderForm }) {
             <dt className="font-medium">Tổng thanh toán</dt>
             <dd className="text-right font-semibold tabular-nums">{formatQtyVi(totals.total)}</dd>
           </dl>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * Xem trước nội dung đơn (mẫu đã chọn hoặc nội dung đơn mặc định) với dữ liệu đang nhập/điền từ file.
+ * Biến còn trống được tô vàng để biết cần bổ sung gì; sau khi lưu sửa tiếp ở tab "Nội dung đơn hàng".
+ */
+function OrderContentPreview({ form, templateId }: { form: OrderForm; templateId: string }) {
+  const v = useWatch({ control: form.control });
+  const template = useQuery({
+    queryKey: ['templates', templateId],
+    queryFn: () => api<TemplateDetail>(`/templates/${templateId}`),
+    enabled: !!templateId,
+  });
+  const parent = useQuery({
+    queryKey: ['contract', v.parentContractId],
+    queryFn: () => api<ContractDetail>(`/contracts/${v.parentContractId}`),
+    enabled: !!v.parentContractId,
+  });
+  const html = templateId ? template.data?.contentHtml : DEFAULT_ORDER_HTML;
+  const items = (v.items ?? []).filter((i) => i?.name && qtyRegex.test(i.quantity ?? '') && moneyRegex.test(i.unitPrice ?? ''));
+  const rendered = html
+    ? renderTemplate(
+        html,
+        buildTemplateValues({
+          code: v.code?.trim() || '(số đơn tự sinh khi lưu)',
+          title: v.title ?? '',
+          value: items.length ? orderTotals(items.map((i) => ({ name: i.name!, quantity: i.quantity!, unitPrice: i.unitPrice! }))).subtotal : (v.value ?? '0'),
+          currency: v.currency ?? 'VND',
+          vatRate: v.vatRate || null,
+          expectedSignDate: v.expectedSignDate || null,
+          parties: (v.parties ?? []).map((p) => ({ ...p, role: p?.role ?? 'PARTY_A', name: p?.name ?? '' })),
+          items: items.map((i) => ({ code: i.code, name: i.name!, unit: i.unit, quantity: i.quantity!, unitPrice: i.unitPrice! })),
+          parentContract: parent.data ? { code: parent.data.code, signedDate: parent.data.signedDate } : null,
+          deliveryDate: v.deliveryDate || null,
+          deliveryAddress: v.deliveryAddress || null,
+          paymentTerms: v.paymentTerms || null,
+        }),
+      )
+    : null;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Nội dung đơn hàng (xem trước)</CardTitle>
+        <CardDescription>
+          {templateId ? 'Theo mẫu đã chọn' : 'Nội dung đơn mặc định'} với dữ liệu ở trên. Ô tô vàng là dữ liệu còn trống – bổ sung ở form trước khi gửi duyệt/ký; sửa câu chữ ở tab
+          “Nội dung đơn hàng” sau khi lưu.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        {!rendered ? (
+          <p className="text-sm text-muted-foreground">Đang tải mẫu…</p>
+        ) : (
+          <div className="max-h-[560px] overflow-y-auto rounded-md border bg-white px-8 py-6 text-[#111]">
+            {/* HTML mẫu đã được máy chủ làm sạch; giá trị biến được escape khi thay. */}
+            <div className="contract-content" dangerouslySetInnerHTML={{ __html: rendered.html }} />
+          </div>
         )}
       </CardContent>
     </Card>
