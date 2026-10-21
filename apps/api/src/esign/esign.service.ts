@@ -186,26 +186,11 @@ export class EsignService {
   }
 
   /**
-   * Kiểm tra ClientID/ClientSecret: gọi làm mới token bằng mã giả. Gateway chấp nhận ứng dụng thì lỗi trả về là
-   * "refresh token không hợp lệ" (Auth:002/003); sai ClientID/Secret thì Auth:001/004.
+   * Kiểm tra ClientID/ClientSecret (xem MisaEsignClient.checkCredentials) và ghi kết quả lần kiểm tra gần nhất.
    */
   async test(user: AuthUser) {
     const client = await this.client(user.tenantId);
-    let ok = false;
-    let message = '';
-    try {
-      await client.refresh('econtract-connection-test');
-      ok = true;
-      message = 'Kết nối được tới MISA eSign';
-    } catch (e) {
-      const code = e instanceof MisaError ? String(e.code ?? '') : '';
-      if (code === 'Auth:002' || code === 'Auth:003') {
-        ok = true;
-        message = 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng';
-      } else {
-        message = e instanceof Error ? e.message : 'Không kết nối được tới MISA eSign';
-      }
-    }
+    const { ok, message } = await client.checkCredentials();
     await this.prisma.tenantIntegration.update({
       where: { tenantId_provider: { tenantId: user.tenantId, provider: PROVIDER } },
       data: { lastTestedAt: new Date(), lastTestOk: ok },

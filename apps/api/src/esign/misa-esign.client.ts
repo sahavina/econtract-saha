@@ -170,6 +170,22 @@ export class MisaEsignClient {
     await this.call('POST', '/esign/v1/auth/resend-otp-auth', { userName, language: 'vi-VN' });
   }
 
+  /**
+   * Kiểm tra ClientID/ClientSecret: gọi làm mới token bằng mã giả. Cổng MISA chấp nhận ứng dụng thì yêu cầu đi qua
+   * (MISA trả 2xx – kể cả 204 không có nội dung – hoặc lỗi token Auth:002/003); sai ClientID/Secret ⇒ Auth:001/004 hoặc 401/403.
+   */
+  async checkCredentials(): Promise<{ ok: boolean; message: string }> {
+    try {
+      await this.call('POST', '/esign/v1/auth/refreshtoken', { refreshToken: 'econtract-connection-test' });
+      return { ok: true, message: 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng' };
+    } catch (e) {
+      if (!(e instanceof MisaError)) throw e;
+      const code = String(e.code ?? '');
+      if (code === 'Auth:002' || code === 'Auth:003') return { ok: true, message: 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng' };
+      return { ok: false, message: e.message };
+    }
+  }
+
   async refresh(refreshToken: string): Promise<MisaTokens> {
     return MisaEsignClient.tokens(await this.call('POST', '/esign/v1/auth/refreshtoken', { refreshToken }));
   }

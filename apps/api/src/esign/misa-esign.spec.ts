@@ -59,6 +59,15 @@ describe('MisaEsignClient', () => {
     expect(JSON.parse(fetchMock.mock.calls[3][1].body).pdfDocs[0]).toMatchObject({ signature: 'SIG', documentBytes: 'DB', documentHash: 'DH' });
   });
 
+  it('kiểm tra ClientID/Secret: MISA trả 204 rỗng hoặc Auth:003 ⇒ hợp lệ; Auth:001 ⇒ không hợp lệ', async () => {
+    const empty = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
+    expect(await new MisaEsignClient(cfg, empty).checkCredentials()).toMatchObject({ ok: true });
+    const badToken = vi.fn().mockResolvedValue(json({ status: { type: 'fail', error: true, errorCode: 'Auth:003' } }, 400));
+    expect(await new MisaEsignClient(cfg, badToken).checkCredentials()).toMatchObject({ ok: true });
+    const badClient = vi.fn().mockResolvedValue(json({ errorCode: 'Auth:001' }, 401));
+    expect(await new MisaEsignClient(cfg, badClient).checkCredentials()).toEqual({ ok: false, message: 'ClientID/ClientSecret MISA eSign không hợp lệ' });
+  });
+
   it('đếm số trang PDF', () => {
     expect(pdfPageCount(Buffer.from('<< /Type /Pages /Count 2 >> << /Type /Page >> << /Type/Page >>'))).toBe(2);
   });
