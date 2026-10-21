@@ -1,6 +1,6 @@
 import { escapeHtml } from '@saha/shared';
 import { createSignatureSchema, externalSignSchema, internalSignSchema } from './signatures.schemas.js';
-import { frozenAttachments } from './signatures.service.js';
+import { frozenAttachments, orderSigners } from './signatures.service.js';
 
 const png = 'data:image/png;base64,iVBORw0KGgo=';
 
@@ -58,5 +58,24 @@ describe('frozenAttachments', () => {
   it('ignores hashes that are not in attachment rows', () => {
     expect(frozenAttachments(`<p>${h1}</p><table><tr><td>${h1}</td></tr></table>`)).toEqual([]);
     expect(frozenAttachments('<p>Không có tài liệu</p>')).toEqual([]);
+  });
+});
+
+describe('orderSigners – ký số MISA ký sau cùng', () => {
+  const saha = { userId: 'u1', name: 'SAHA' };
+  const partner = { userId: null, name: 'Đối tác' };
+  it('lần lượt: người ký nội bộ (ký số) được chuyển xuống sau đối tác', () => {
+    expect(orderSigners([saha, partner], true, true).map((x) => [x.signer.name, x.order])).toEqual([
+      ['Đối tác', 1],
+      ['SAHA', 2],
+    ]);
+  });
+  it('đồng thời: đối tác lượt 1, người ký số lượt 2; không ký số thì giữ nguyên', () => {
+    expect(orderSigners([saha, partner], false, true).map((x) => x.order)).toEqual([1, 2]);
+    expect(orderSigners([saha, partner], false, false).map((x) => x.order)).toEqual([1, 1]);
+    expect(orderSigners([saha, partner], true, false).map((x) => x.signer.name)).toEqual(['SAHA', 'Đối tác']);
+  });
+  it('chỉ có người ký nội bộ ký số ⇒ bắt đầu ngay ở lượt 1', () => {
+    expect(orderSigners([saha], false, true).map((x) => x.order)).toEqual([1]);
   });
 });

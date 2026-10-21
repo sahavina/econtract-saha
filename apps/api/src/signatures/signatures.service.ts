@@ -15,6 +15,7 @@ import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import type { Env } from '../config/env.js';
 import { ContractsService } from '../contracts/contracts.service.js';
+import { DocumentsService } from '../documents/documents.service.js';
 import { MailService } from '../mail/mail.service.js';
 import { NotificationsService } from '../notifications/notifications.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -56,6 +57,7 @@ const signerSelect = {
   signedHash: true,
   ip: true,
   rejectReason: true,
+  evidence: true,
 } satisfies Prisma.SignerSelect;
 
 @Injectable()
@@ -68,6 +70,7 @@ export class SignaturesService {
     private readonly config: ConfigService<Env, true>,
     private readonly notifications: NotificationsService,
     private readonly storage: StorageService,
+    private readonly documents: DocumentsService,
   ) {}
 
   private appUrl(path: string) {
@@ -91,15 +94,17 @@ export class SignaturesService {
     });
     if (internal.length !== new Set(userIds).size) throw new BadRequestException('Người ký nội bộ không hợp lệ');
 
+    const digital = input.internalDigital && userIds.length > 0;
+    if (digital) await this.assertMisaReady(user.tenantId);
+
     const snapshot = await this.buildSnapshot(contract);
     const documentHash = sha256(snapshot);
     const expiresAt = new Date(Date.now() + input.expiresInDays * DAY);
     const sequential = input.signingOrder === 'SEQUENTIAL';
 
-    const signers = input.signers.map((s, i) => {
+    const signers = orderSigners(input.signers, sequential, digital).map(({ signer: s, order }) => {
       const u = internal.find((x) => x.id === s.userId);
       const token = u ? null : randomBytes(32).toString('base64url');
-      const order = sequential ? i + 1 : 1;
       return {
         token,
         data: {
@@ -110,7 +115,7 @@ export class SignaturesService {
           email: u?.email ?? s.email,
           title: s.title ?? null,
           userId: u?.id ?? null,
-          method: u ? ('INTERNAL_PASSWORD' as const) : ('EMAIL_OTP' as const),
+          method: u ? (digital ? ('MISA_ESIGN' as const) : ('INTERNAL_PASSWORD' as const)) : ('EMAIL_OTP' as const),
           status: order === 1 ? ('PENDING' as const) : ('WAITING' as const),
           tokenHash: token ? sha256(token) : null,
         },
@@ -149,6 +154,7 @@ export class SignaturesService {
             documentHash,
             signers: r.signers.map((s) => s.name).join(', '),
             order: input.signingOrder,
+            digital: digital || undefined,
           },
         },
         tx,
@@ -262,6 +268,7 @@ export class SignaturesService {
       where: { requestId: request.id, userId: user.userId, status: 'PENDING' },
     });
     if (!signer) throw new ForbiddenException('Bạn không có lượt ký đang chờ cho hợp đồng này');
+    if (signer.method === 'MISA_ESIGN') throw new BadRequestException('Lượt ký này dùng chữ ký số MISA eSign – bấm "Ký số MISA eSign"');
     const account = await this.prisma.user.findUniqueOrThrow({
       where: { id: user.userId },
       select: { passwordHash: true },
@@ -349,6 +356,98 @@ export class SignaturesService {
         tx,
       );
     });
+  }
+
+  // ───────────────────────── Ký số MISA eSign (người ký nội bộ) ─────────────────────────
+
+  /** Doanh nghiệp đã cấu hình và bật MISA eSign. */
+  private async assertMisaReady(tenantId: string) {
+    const cfg = await this.prisma.tenantIntegration.findUnique({
+      where: { tenantId_provider: { tenantId, provider: 'misa_esign' } },
+      select: { enabled: true, secretEnc: true },
+    });
+    if (!cfg?.secretEnc || !cfg.enabled) {
+      throw new BadRequestException('Chưa cấu hình hoặc đang tắt chữ ký số MISA eSign (Quản trị → Cấu hình → Chữ ký số MISA eSign)');
+    }
+  }
+
+  /** Lượt ký số đang chờ của người dùng trong yêu cầu ký hiện tại. */
+  async digitalTarget(user: AuthUser, contractId: string) {
+    const contract = await this.contracts.get(user, contractId);
+    const request = await this.activeRequest(contractId, user.tenantId);
+    const signer = await this.prisma.signer.findFirst({
+      where: { requestId: request.id, userId: user.userId, status: 'PENDING', method: 'MISA_ESIGN' },
+    });
+    if (!signer) throw new ForbiddenException('Bạn không có lượt ký số đang chờ cho hợp đồng này');
+    return { contract, request, signer };
+  }
+
+  /**
+   * Bản PDF để ký số: tạo một lần từ nội dung đã đóng băng (trình duyệt dựng PDF kèm chữ ký các bên đã ký rồi tải lên).
+   * Đã có ⇒ trả lại bản hiện có (người ký số sau ký tiếp lên phiên bản mới nhất).
+   */
+  async attachSigningPdf(user: AuthUser, contractId: string, file: Express.Multer.File | undefined) {
+    const { contract, request } = await this.digitalTarget(user, contractId);
+    if (request.signedDocumentId) return { documentId: request.signedDocumentId, created: false };
+    if (!file?.buffer?.length || file.buffer.subarray(0, 5).toString('latin1') !== '%PDF-') {
+      throw new BadRequestException('Tệp ký số phải là PDF');
+    }
+    const doc = await this.documents.storeVersion(
+      user,
+      contract,
+      { fileName: `${contract.code.replace(/[\\/:*?"<>|]+/g, '_')} - ban ky so.pdf`, mimeType: 'application/pdf', buffer: file.buffer },
+      'contract.signature_pdf',
+      { requestId: request.id, documentHash: request.documentHash },
+    );
+    // Hai người cùng tạo ⇒ chỉ bản đầu tiên được dùng.
+    const set = await this.prisma.signatureRequest.updateMany({
+      where: { id: request.id, signedDocumentId: null },
+      data: { signedDocumentId: doc.id },
+    });
+    if (!set.count) {
+      const r = await this.prisma.signatureRequest.findUniqueOrThrow({ where: { id: request.id }, select: { signedDocumentId: true } });
+      return { documentId: r.signedDocumentId!, created: false };
+    }
+    return { documentId: doc.id, created: true };
+  }
+
+  /** MISA xác nhận ký thành công và PDF đã ký được lưu ⇒ ghi nhận lượt ký (gọi từ EsignService). */
+  async completeDigital(
+    user: AuthUser,
+    signerId: string,
+    info: { documentId: string; sha256: string; transactionId: string | null; certSubject: string | null },
+  ) {
+    const signer = await this.prisma.signer.findFirst({
+      where: { id: signerId, tenantId: user.tenantId, userId: user.userId, method: 'MISA_ESIGN' },
+      include: { request: true },
+    });
+    if (!signer) throw new NotFoundException('Không tìm thấy lượt ký số');
+    const request = signer.request;
+    if (request.status !== 'IN_PROGRESS') throw new BadRequestException('Yêu cầu ký đã kết thúc trước khi ký số xong');
+    const contract = await this.prisma.contract.findUniqueOrThrow({ where: { id: request.contractId }, select: { code: true } });
+    const afterCommit: (() => Promise<void>)[] = [];
+    const outcome = await this.prisma.$transaction(async (tx) => {
+      const o = await this.markSigned(tx, request, signer, { typedName: `Ký số MISA eSign – ${info.certSubject ?? signer.name}` }, {}, afterCommit);
+      await tx.signer.update({
+        where: { id: signer.id },
+        data: { evidence: { provider: 'MISA_ESIGN', transactionId: info.transactionId, certSubject: info.certSubject, documentId: info.documentId, pdfSha256: info.sha256 } },
+      });
+      await tx.signatureRequest.update({ where: { id: request.id }, data: { signedDocumentId: info.documentId } });
+      await this.audit.log(
+        user,
+        {
+          action: 'contract.signed',
+          entityType: 'contract',
+          entityId: request.contractId,
+          data: { code: contract.code, signer: signer.name, method: 'Chữ ký số MISA eSign', documentHash: request.documentHash, pdfSha256: info.sha256, certSubject: info.certSubject },
+        },
+        tx,
+      );
+      if (o === 'COMPLETED') await this.logCompleted(tx, request.tenantId, contract.code, request.contractId);
+      return o;
+    });
+    await this.runAfterCommit(afterCommit);
+    return outcome;
   }
 
   // ───────────────────────── Ký bên ngoài (liên kết + OTP) ─────────────────────────
@@ -614,14 +713,19 @@ export class SignaturesService {
       return 'COMPLETED';
     }
 
-    if (request.signingOrder === 'SEQUENTIAL') {
-      const pendingNow = await tx.signer.count({ where: { requestId: request.id, status: 'PENDING' } });
-      if (pendingNow === 0) {
-        const next = await tx.signer.findFirst({
-          where: { requestId: request.id, status: 'WAITING' },
-          orderBy: { order: 'asc' },
-        });
-        if (next) {
+    // Hết người đang chờ ký ⇒ mở lượt cho nhóm kế tiếp (ký lần lượt: một người; ký đồng thời kèm ký số: nhóm ký số sau cùng).
+    const pendingNow = await tx.signer.count({ where: { requestId: request.id, status: 'PENDING' } });
+    if (pendingNow === 0) {
+      const first = await tx.signer.findFirst({
+        where: { requestId: request.id, status: 'WAITING' },
+        orderBy: { order: 'asc' },
+        select: { order: true },
+      });
+      const group = first
+        ? await tx.signer.findMany({ where: { requestId: request.id, status: 'WAITING', order: first.order } })
+        : [];
+      for (const next of group) {
+        {
           // Người ký kế tiếp: cấp liên kết mới (bên ngoài) và gửi lời mời sau khi giao dịch hoàn tất.
           const token = next.userId ? null : randomBytes(32).toString('base64url');
           await tx.signer.update({
@@ -758,6 +862,7 @@ export class SignaturesService {
         expiresAt: true,
         createdAt: true,
         completedAt: true,
+        signedDocumentId: true,
         createdBy: { select: { id: true, fullName: true } },
         signers: { select: signerSelect, orderBy: [{ order: 'asc' }, { createdAt: 'asc' }] },
       },
@@ -800,6 +905,16 @@ export class SignaturesService {
       },
     });
   }
+}
+
+/**
+ * Thứ tự ký: lần lượt ⇒ 1, 2, 3…; đồng thời ⇒ cùng lượt 1. Có ký số MISA ⇒ chữ ký số phải nằm sau cùng trên PDF
+ * (PDF đã ký số không thêm được nội dung) nên người ký nội bộ xếp sau mọi người ký bên ngoài (đồng thời: lượt 2).
+ */
+export function orderSigners<T extends { userId?: string | null }>(signers: T[], sequential: boolean, digital: boolean) {
+  const ordered = digital ? [...signers.filter((s) => !s.userId), ...signers.filter((s) => s.userId)] : signers;
+  const external = ordered.filter((s) => !s.userId).length;
+  return ordered.map((signer, i) => ({ signer, order: sequential ? i + 1 : digital && signer.userId && external > 0 ? 2 : 1 }));
 }
 
 /** Đọc lại bảng "Tài liệu đính kèm" mà buildSnapshot ghi vào nội dung đóng băng (tên file đã escape HTML). */

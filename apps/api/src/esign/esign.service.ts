@@ -8,6 +8,7 @@ import type { AuthUser } from '../common/auth-user.js';
 import type { Env } from '../config/env.js';
 import { ContractsService } from '../contracts/contracts.service.js';
 import { DocumentsService } from '../documents/documents.service.js';
+import { SignaturesService } from '../signatures/signatures.service.js';
 import type { Prisma } from '../generated/prisma/client.js';
 import { SecretBox } from '../integrations/secret-box.js';
 import { assertSafeIntegrationUrl } from '../integrations/url-guard.js';
@@ -83,6 +84,7 @@ export class EsignService {
     private readonly config: ConfigService<Env, true>,
     private readonly contracts: ContractsService,
     private readonly documents: DocumentsService,
+    private readonly signatures: SignaturesService,
   ) {}
 
   private box() {
@@ -342,7 +344,23 @@ export class EsignService {
    * Bắt đầu ký số một tệp PDF trong tab Tài liệu: băm (kèm khung chữ ký hiển thị) và gửi yêu cầu ký;
    * người ký xác nhận trên ứng dụng MISA eSign. Kết quả lấy qua session().
    */
-  async start(user: AuthUser, contractId: string, documentId: string, input: MisaSignInput) {
+  start(user: AuthUser, contractId: string, documentId: string, input: MisaSignInput) {
+    return this.startOn(user, contractId, documentId, input, null);
+  }
+
+  /**
+   * Ký số trong yêu cầu ký điện tử: người ký nội bộ (phương thức MISA_ESIGN) ký lên bản PDF của yêu cầu
+   * (phiên bản mới nhất); MISA xác nhận xong ⇒ ghi nhận lượt ký (session()).
+   */
+  async startForSigner(user: AuthUser, contractId: string, input: MisaSignInput) {
+    const { request, signer } = await this.signatures.digitalTarget(user, contractId);
+    if (!request.signedDocumentId) throw new BadRequestException('Chưa có bản PDF để ký số – tải lại trang và thử lại');
+    // Nhiều người ký số: khung chữ ký xếp chồng lên nhau theo thứ tự đã ký.
+    const slot = await this.prisma.signer.count({ where: { requestId: request.id, method: 'MISA_ESIGN', status: 'SIGNED' } });
+    return this.startOn(user, contractId, request.signedDocumentId, input, { id: signer.id, slot });
+  }
+
+  private async startOn(user: AuthUser, contractId: string, documentId: string, input: MisaSignInput, signer: { id: string; slot: number } | null) {
     const contract = await this.contracts.get(user, contractId);
     if (contract.deletedAt || contract.archivedAt) throw new BadRequestException('Hợp đồng đã lưu trữ hoặc ở thùng rác');
     const account = await this.accountOf(user);
@@ -362,7 +380,7 @@ export class EsignService {
       page,
       // Tọa độ PDF tính từ góc dưới trái trang (A4 = 595 × 842 pt).
       positionX: input.position === 'BOTTOM_LEFT' ? 40 : 375,
-      positionY: 40,
+      positionY: 40 + (signer?.slot ?? 0) * 70,
       width: 180,
       height: 60,
       signedBy: account.certSubject ?? account.displayName ?? user.fullName,
@@ -390,6 +408,7 @@ export class EsignService {
           contractId,
           documentId,
           userId: user.userId,
+          signerId: signer?.id ?? null,
           provider: PROVIDER,
           transactionId,
           hashData: data as unknown as Prisma.InputJsonValue,
@@ -398,7 +417,7 @@ export class EsignService {
       });
       await this.audit.log(
         user,
-        { action: 'contract.esign_request', entityType: 'contract', entityId: contractId, data: { code: contract.code, documentId, fileName: doc.fileName, page, certSubject: account.certSubject, transactionId } },
+        { action: 'contract.esign_request', entityType: 'contract', entityId: contractId, data: { code: contract.code, documentId, fileName: doc.fileName, page, certSubject: account.certSubject, transactionId, signature: signer ? true : undefined } },
         tx,
       );
       return s;
@@ -439,6 +458,16 @@ export class EsignService {
         'contract.document_esign',
         { provider: PROVIDER, sourceVersion: data.sourceVersion, transactionId: s.transactionId },
       );
+      if (s.signerId) {
+        // Lượt ký số trong yêu cầu ký điện tử ⇒ ghi nhận người ký đã ký (có thể hoàn tất hợp đồng).
+        const account = await this.accountOf(user);
+        await this.signatures.completeDigital(user, s.signerId, {
+          documentId: saved.id,
+          sha256: saved.sha256,
+          transactionId: s.transactionId,
+          certSubject: account?.certSubject ?? null,
+        });
+      }
       return this.sessionView(await this.prisma.esignSession.update({ where: { id: s.id }, data: { status: 'SUCCESS', resultDocumentId: saved.id } }));
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Gắn chữ ký thất bại';

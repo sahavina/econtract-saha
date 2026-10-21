@@ -17,6 +17,8 @@ export const createSignatureSchema = z
     expiresInDays: z.coerce.number().int().min(1).max(60).default(7),
     message: z.preprocess((v) => (v === '' ? null : v), z.string().trim().max(2000).nullable().optional()),
     signers: z.array(signerInputSchema).min(1, 'Cần ít nhất một người ký').max(10),
+    /** Người ký nội bộ ký số bằng MISA eSign lên bản PDF (ký sau cùng, sau người ký bên ngoài). */
+    internalDigital: z.boolean().default(false),
   })
   .refine((v) => new Set(v.signers.map((s) => s.email)).size === v.signers.length, {
     message: 'Mỗi người ký phải có email khác nhau',

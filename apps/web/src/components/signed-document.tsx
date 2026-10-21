@@ -81,7 +81,7 @@ export function SignedDocument({
                   <tr key={s.id}>
                     <td className="border border-gray-300 px-1.5 py-1">{s.name}</td>
                     <td className="border border-gray-300 px-1.5 py-1">{s.email ?? '—'}</td>
-                    <td className="border border-gray-300 px-1.5 py-1">{s.method === 'EMAIL_OTP' ? 'OTP qua email' : s.method === 'INTERNAL_PASSWORD' ? 'Tài khoản + mật khẩu' : '—'}</td>
+                    <td className="border border-gray-300 px-1.5 py-1">{s.method === 'EMAIL_OTP' ? 'OTP qua email' : s.method === 'INTERNAL_PASSWORD' ? 'Tài khoản + mật khẩu' : s.method === 'MISA_ESIGN' ? 'Chữ ký số MISA eSign' : '—'}</td>
                     <td className="border border-gray-300 px-1.5 py-1">{formatDateTime(s.signedAt)}</td>
                     <td className="border border-gray-300 px-1.5 py-1">{s.ip ?? '—'}</td>
                     <td className="border border-gray-300 px-1.5 py-1">{s.signedHash ? (s.signedHash === documentHash ? 'Có' : 'Không') : '—'}</td>

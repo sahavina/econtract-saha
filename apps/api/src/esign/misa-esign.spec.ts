@@ -76,7 +76,7 @@ describe('MisaEsignClient', () => {
 const user = { tenantId: 't1', userId: 'u1', fullName: 'Admin', email: 'a@saha.vn' } as AuthUser;
 const KEY = 'x'.repeat(32);
 
-function setupSession(status: 'PENDING' | 'SUCCESS' | 'FAILED') {
+function setupSession(status: 'PENDING' | 'SUCCESS' | 'FAILED', signerId: string | null = null) {
   const box = new SecretBox(KEY);
   const session = {
     id: 's1',
@@ -85,6 +85,7 @@ function setupSession(status: 'PENDING' | 'SUCCESS' | 'FAILED') {
     contractId: 'c1',
     documentId: 'doc1',
     transactionId: 'tx1',
+    signerId,
     status: 'PENDING',
     error: null,
     resultDocumentId: null,
@@ -105,12 +106,13 @@ function setupSession(status: 'PENDING' | 'SUCCESS' | 'FAILED') {
     status: vi.fn().mockResolvedValue({ status, signatures: [{ documentId: 'd1', signature: 'SIG' }], error: status === 'FAILED' ? 'Từ chối' : undefined }),
     attach: vi.fn().mockResolvedValue(Buffer.from('%PDF-signed').toString('base64')),
   };
-  const documents = { storeVersion: vi.fn().mockResolvedValue({ id: 'doc2' }) };
+  const documents = { storeVersion: vi.fn().mockResolvedValue({ id: 'doc2', sha256: 'abc' }) };
+  const signatures = { completeDigital: vi.fn().mockResolvedValue('COMPLETED') };
   const contracts = { get: vi.fn().mockResolvedValue({ id: 'c1', code: 'HD-01' }) };
   const config = { get: vi.fn((k: string) => (k === 'INTEGRATION_SECRET' ? KEY : undefined)) };
-  const svc = new EsignService(prisma as never, { log: vi.fn() } as never, config as never, contracts as never, documents as never);
+  const svc = new EsignService(prisma as never, { log: vi.fn() } as never, config as never, contracts as never, documents as never, signatures as never);
   (svc as unknown as { client: () => Promise<unknown> }).client = () => Promise.resolve(client);
-  return { svc, prisma, client, documents };
+  return { svc, prisma, client, documents, signatures };
 }
 
 describe('EsignService.session', () => {
@@ -139,6 +141,18 @@ describe('EsignService.session', () => {
   it('đang chờ ⇒ giữ PENDING; bị từ chối ⇒ FAILED', async () => {
     expect(await setupSession('PENDING').svc.session(user, 's1')).toMatchObject({ status: 'PENDING' });
     expect(await setupSession('FAILED').svc.session(user, 's1')).toMatchObject({ status: 'FAILED', error: 'Từ chối' });
+  });
+
+  it('lượt ký số trong yêu cầu ký ⇒ ghi nhận người ký sau khi lưu PDF đã ký', async () => {
+    const { svc, signatures } = setupSession('SUCCESS', 'signer1');
+    expect(await svc.session(user, 's1')).toMatchObject({ status: 'SUCCESS', resultDocumentId: 'doc2' });
+    expect(signatures.completeDigital).toHaveBeenCalledWith(user, 'signer1', expect.objectContaining({ documentId: 'doc2', sha256: 'abc', transactionId: 'tx1' }));
+  });
+
+  it('tài liệu lẻ (không thuộc yêu cầu ký) ⇒ không ghi nhận lượt ký', async () => {
+    const { svc, signatures } = setupSession('SUCCESS');
+    await svc.session(user, 's1');
+    expect(signatures.completeDigital).not.toHaveBeenCalled();
   });
 
   it('lỗi gắn chữ ký ⇒ đánh dấu FAILED', async () => {

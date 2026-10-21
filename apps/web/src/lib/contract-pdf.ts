@@ -33,7 +33,12 @@ function withColumnPercents(html: string): string {
 function signatureBlock(s: DocSigner): Content {
   const mark: Content =
     s.status !== 'SIGNED' || !s.signatureImage
-      ? { text: s.status === 'REJECTED' ? 'Đã từ chối ký' : 'Chưa ký', color: '#888888', fontSize: 9, margin: [0, 22, 0, 22] }
+      ? {
+          text: s.status === 'REJECTED' ? 'Đã từ chối ký' : s.method === 'MISA_ESIGN' ? 'Ký số MISA eSign (trang Chữ ký số)' : 'Chưa ký',
+          color: '#888888',
+          fontSize: 9,
+          margin: [0, 22, 0, 22],
+        }
       : s.signatureImage.startsWith('text:')
         ? { text: s.signatureImage.slice(5), italics: true, fontSize: 18, color: '#1e3a8a', margin: [0, 16, 0, 16] }
         : { image: s.signatureImage, fit: [150, 56], alignment: 'center', margin: [0, 4, 0, 4] };
@@ -48,6 +53,18 @@ function signatureBlock(s: DocSigner): Content {
     alignment: 'center',
     unbreakable: true,
   };
+}
+
+/** Trang cuối dành cho chữ ký số: khung chữ ký MISA eSign đặt ở góc dưới phải, xếp chồng theo thứ tự ký. */
+function digitalPage(names: string[]): Content[] {
+  return [
+    { text: 'CHỮ KÝ SỐ', bold: true, fontSize: 14, alignment: 'center', pageBreak: 'before', margin: [0, 0, 0, 8] },
+    {
+      text: `Văn bản được ký bằng chữ ký số (chứng thư số MISA eSign) của: ${names.join(', ')}. Kiểm tra chữ ký số bằng Adobe Acrobat Reader hoặc phần mềm đọc PDF có hỗ trợ chữ ký số; mọi chỉnh sửa sau khi ký sẽ làm chữ ký mất hiệu lực.`,
+      fontSize: 10,
+      color: '#444444',
+    },
+  ];
 }
 
 function signedSection(documentHash: string, signers: DocSigner[]): Content[] {
@@ -96,9 +113,11 @@ export interface ContractPdfInput {
   /** HTML nội dung đã thay biến (bản xem trước) hoặc snapshot đã ký. */
   html: string;
   signed?: { documentHash: string; signers: DocSigner[] };
+  /** Bản để ký số: thêm trang cuối "Chữ ký số" dành chỗ cho khung chữ ký MISA eSign (không đè lên nội dung). */
+  digitalSigners?: string[];
 }
 
-async function createContractPdf({ title, html, signed }: Omit<ContractPdfInput, 'fileName'>) {
+async function createContractPdf({ title, html, signed, digitalSigners }: Omit<ContractPdfInput, 'fileName'>) {
   const [{ default: pdfMake }, { default: htmlToPdfmake }] = await Promise.all([
     import('pdfmake/build/pdfmake'),
     import('html-to-pdfmake'),
@@ -144,7 +163,7 @@ async function createContractPdf({ title, html, signed }: Omit<ContractPdfInput,
     pageMargins: [MARGIN, MARGIN, MARGIN, MARGIN],
     defaultStyle: { font: 'Tinos', fontSize: 12, lineHeight: 1.25 },
     footer: (current, total) => ({ text: `${current}/${total}`, alignment: 'center', fontSize: 8, color: '#888888', margin: [0, 20, 0, 0] }),
-    content: [...body, ...(signed ? signedSection(signed.documentHash, signed.signers) : [])],
+    content: [...body, ...(signed ? signedSection(signed.documentHash, signed.signers) : []), ...(digitalSigners?.length ? digitalPage(digitalSigners) : [])],
   };
   return pdfMake.createPdf(doc);
 }

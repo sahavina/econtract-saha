@@ -1,10 +1,11 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Check, Copy, Link2, Loader2, PenLine, Plus, Printer, Send, Trash2, X } from 'lucide-react';
+import { Ban, Check, Copy, Download, FileKey2, Link2, Loader2, PenLine, Plus, Printer, Send, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
+import { MisaEsignDialog } from '@/components/misa-esign-dialog';
 import { EmptyState, ErrorState } from '@/components/page-header';
 import { type SignatureMark, SignaturePad } from '@/components/signature-pad';
 import { SignedDocument } from '@/components/signed-document';
@@ -18,7 +19,9 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
-import { api, ApiError } from '@/lib/api';
+import { api, ApiError, downloadFile } from '@/lib/api';
+import { contractPdfFile } from '@/lib/contract-pdf';
+import { useMisaStatus } from '@/lib/esign';
 import { useAuth } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { useLookups } from '@/lib/queries';
@@ -71,7 +74,10 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
   const [order, setOrder] = useState<'SEQUENTIAL' | 'PARALLEL'>('SEQUENTIAL');
   const [days, setDays] = useState('7');
   const [message, setMessage] = useState('');
+  const [digital, setDigital] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
+  const misa = useMisaStatus();
+  const hasInternal = signers.some((s) => s.internal);
   const update = (key: number, patch: Partial<SignerDraft>) => setSigners((l) => l.map((s) => (s.key === key ? { ...s, ...patch } : s)));
 
   const create = useMutation({
@@ -83,6 +89,7 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
           signingOrder: order,
           expiresInDays: Number(days) || 7,
           message: message || null,
+          internalDigital: digital && hasInternal,
           signers: signers.map((s) => {
             const u = lookups.data?.users.find((x) => x.id === s.userId);
             return s.internal
@@ -179,6 +186,18 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
             <Input id="sig-days" inputMode="numeric" value={days} onChange={(e) => setDays(e.target.value.replace(/[^\d]/g, ''))} />
           </div>
         </div>
+        {misa.data?.ready && hasInternal && (
+          <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
+            <Checkbox className="mt-0.5" checked={digital} onCheckedChange={(v) => setDigital(!!v)} />
+            <span>
+              <span className="font-medium">Người ký nội bộ ký bằng chữ ký số MISA eSign</span>
+              <span className="block text-xs text-muted-foreground">
+                Đối tác ký trước qua liên kết + OTP; sau đó người ký nội bộ ký số (chứng thư MISA eSign) lên bản PDF gồm nội dung và chữ ký các bên – hệ thống tự xếp
+                người ký số sau cùng. Bản PDF ký số kiểm tra được bằng Adobe Reader.
+              </span>
+            </span>
+          </label>
+        )}
         <div className="space-y-1.5">
           <Label htmlFor="sig-msg">Lời nhắn trong email mời ký</Label>
           <Textarea id="sig-msg" rows={2} value={message} onChange={(e) => setMessage(e.target.value)} />
@@ -286,12 +305,32 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
   const { user, can } = useAuth();
   const qc = useQueryClient();
   const [signing, setSigning] = useState(false);
+  const [digitalSigning, setDigitalSigning] = useState(false);
   const [rejecting, setRejecting] = useState(false);
   const [links, setLinks] = useState<Record<string, string>>({});
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const active = request.status === 'IN_PROGRESS';
   const mine = active && request.signers.find((s) => s.userId === user?.id && s.status === 'PENDING');
   const canManage = active && can('contract.update');
+  const refresh = () => {
+    qc.invalidateQueries({ queryKey: ['contract', contract.id] });
+    qc.invalidateQueries({ queryKey: ['contracts'] });
+    qc.invalidateQueries({ queryKey: ['signatures'] });
+  };
+  /** Bản PDF để ký số: tạo một lần từ nội dung đóng băng + chữ ký các bên đã ký, thêm trang "Chữ ký số". */
+  const prepareDigitalPdf = async () => {
+    if (request.signedDocumentId) return;
+    const file = await contractPdfFile({
+      fileName: `${contract.code} - ban ky so`,
+      title: `${contract.code} – ${contract.title}`,
+      html: request.contentSnapshot,
+      signed: { documentHash: request.documentHash, signers: request.signers },
+      digitalSigners: request.signers.filter((x) => x.method === 'MISA_ESIGN').map((x) => x.name),
+    });
+    const fd = new FormData();
+    fd.append('file', file);
+    await api(`/contracts/${contract.id}/signature/digital-pdf`, { method: 'POST', formData: fd });
+  };
 
   const resend = useMutation({
     mutationFn: (signerId: string) => api<{ url: string }>(`/contracts/${contract.id}/signature/signers/${signerId}/resend`, { method: 'POST' }),
@@ -323,9 +362,15 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
               <CardDescription>Hạn ký: {formatDateTime(request.expiresAt)}</CardDescription>
             </div>
             <div className="flex gap-2">
-              <Button onClick={() => setSigning(true)}>
-                <PenLine /> Ký ngay
-              </Button>
+              {mine.method === 'MISA_ESIGN' ? (
+                <Button onClick={() => setDigitalSigning(true)}>
+                  <FileKey2 /> Ký số MISA eSign
+                </Button>
+              ) : (
+                <Button onClick={() => setSigning(true)}>
+                  <PenLine /> Ký ngay
+                </Button>
+              )}
               <Button variant="outline" onClick={() => setRejecting(true)}>
                 <X /> Từ chối
               </Button>
@@ -346,6 +391,15 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
             </CardDescription>
           </div>
           <div className="flex gap-2">
+            {request.signedDocumentId && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => downloadFile(`/contracts/${contract.id}/documents/${request.signedDocumentId}/download`).catch((e: Error) => toast.error(e.message))}
+              >
+                <Download /> Tải PDF ký số
+              </Button>
+            )}
             {request.status === 'COMPLETED' && (
               <Button variant="outline" size="sm" asChild>
                 <a href={`/print/contracts/${contract.id}?doc=signed`} target="_blank" rel="noopener">
@@ -380,11 +434,17 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
                 <span className="font-medium">{s.name}</span>
                 <span className="text-muted-foreground">{s.partyRole ? ROLE_LABELS[s.partyRole] : ''}</span>
                 <span className="text-xs text-muted-foreground">
-                  {s.email} · {s.method === 'EMAIL_OTP' ? 'Liên kết + OTP' : 'Tài khoản nội bộ'}
+                  {s.email} · {s.method === 'EMAIL_OTP' ? 'Liên kết + OTP' : s.method === 'MISA_ESIGN' ? 'Chữ ký số MISA eSign' : 'Tài khoản nội bộ'}
                 </span>
                 <Badge variant={SIGNER_STATUS[s.status].variant}>{SIGNER_STATUS[s.status].label}</Badge>
                 {s.signedAt && <span className="text-xs text-muted-foreground">{formatDateTime(s.signedAt)}</span>}
                 {s.rejectReason && <span className="w-full pl-8 text-xs text-destructive">Lý do: {s.rejectReason}</span>}
+                {s.evidence?.certSubject && (
+                  <span className="w-full pl-8 text-xs text-muted-foreground">
+                    Chứng thư: {s.evidence.certSubject}
+                    {s.evidence.transactionId && ` · Giao dịch MISA: ${s.evidence.transactionId}`}
+                  </span>
+                )}
                 {canManage && s.method === 'EMAIL_OTP' && (s.status === 'PENDING' || s.status === 'WAITING') && (
                   <Button variant="ghost" size="sm" className="ml-auto" disabled={resend.isPending} onClick={() => resend.mutate(s.id)}>
                     <Link2 /> Gửi lại liên kết
@@ -410,6 +470,20 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
       )}
 
       {mine && <SignDialog contract={contract} request={request} open={signing} onClose={() => setSigning(false)} />}
+      {mine && digitalSigning && (
+        <MisaEsignDialog
+          contractId={contract.id}
+          signature={{ prepare: prepareDigitalPdf }}
+          onClose={() => {
+            setDigitalSigning(false);
+            refresh();
+          }}
+          onSigned={() => {
+            setDigitalSigning(false);
+            refresh();
+          }}
+        />
+      )}
       <RejectDialog contractId={contract.id} open={rejecting} onClose={() => setRejecting(false)} />
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </div>

@@ -10,15 +10,20 @@ import {
   Req,
   Res,
   StreamableFile,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle } from '@nestjs/throttler';
 import { PERMISSIONS } from '@saha/shared';
 import type { Request, Response } from 'express';
+import { memoryStorage } from 'multer';
 import { z } from 'zod';
 import type { AuthUser } from '../common/auth-user.js';
 import { CurrentUser, Public, RequireAnyPermission, RequirePermissions } from '../common/decorators.js';
 import { ZodPipe } from '../common/zod.pipe.js';
+import { MAX_UPLOAD_BYTES } from '../documents/file-types.js';
 import { setFileHeaders } from '../documents/send-file.js';
 import {
   type CreateSignatureInput,
@@ -89,6 +94,16 @@ export class SignaturesController {
   @RequirePermissions(PERMISSIONS.CONTRACT_UPDATE)
   cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.signatures.cancel(user, id);
+  }
+
+  /** Bản PDF để người ký nội bộ ký số MISA eSign (trình duyệt dựng từ nội dung đóng băng, tải lên một lần). */
+  @ApiBearerAuth()
+  @Post('contracts/:id/signature/digital-pdf')
+  @HttpCode(200)
+  @RequireAnyPermission(...VIEW)
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } }))
+  digitalPdf(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string, @UploadedFile() file: Express.Multer.File | undefined) {
+    return this.signatures.attachSigningPdf(user, id, file);
   }
 
   /** Quyền ký thực tế được kiểm tra theo người ký được chỉ định. */

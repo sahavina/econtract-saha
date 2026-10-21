@@ -321,13 +321,15 @@ export interface SignerInfo {
   email: string;
   title: string | null;
   userId: string | null;
-  method: 'INTERNAL_PASSWORD' | 'EMAIL_OTP';
+  method: 'INTERNAL_PASSWORD' | 'EMAIL_OTP' | 'MISA_ESIGN';
   status: SignerStatus;
   signatureImage: string | null;
   signedAt: string | null;
   signedHash: string | null;
   ip: string | null;
   rejectReason: string | null;
+  /** Ký số MISA: mã giao dịch, chứng thư, SHA-256 bản PDF đã ký. */
+  evidence?: { transactionId?: string | null; certSubject?: string | null; pdfSha256?: string; documentId?: string } | null;
 }
 
 export interface SignatureRequestInfo {
@@ -341,6 +343,8 @@ export interface SignatureRequestInfo {
   expiresAt: string;
   createdAt: string;
   completedAt: string | null;
+  /** Bản PDF ký số (phiên bản mới nhất) khi có người ký MISA eSign. */
+  signedDocumentId?: string | null;
   createdBy: { id: string; fullName: string };
   signers: SignerInfo[];
 }

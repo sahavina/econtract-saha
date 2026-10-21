@@ -7,6 +7,7 @@ import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../common
 import { ZodPipe } from '../common/zod.pipe.js';
 import { ContractsModule } from '../contracts/contracts.module.js';
 import { DocumentsModule } from '../documents/documents.module.js';
+import { SignaturesModule } from '../signatures/signatures.module.js';
 import {
   EsignService,
   type MisaConfigInput,
@@ -113,6 +114,14 @@ class EsignController {
     return this.esign.start(user, contractId, documentId, body);
   }
 
+  /** Ký số lượt của mình trong yêu cầu ký điện tử (phương thức MISA_ESIGN). */
+  @Post('contracts/:contractId/signature/sign')
+  @HttpCode(200)
+  @RequireAnyPermission(...VIEW)
+  signRequest(@CurrentUser() user: AuthUser, @Param('contractId', ParseUUIDPipe) contractId: string, @Body(new ZodPipe(misaSignSchema)) body: MisaSignInput) {
+    return this.esign.startForSigner(user, contractId, body);
+  }
+
   @Get('sessions/:id')
   @RequireAnyPermission(...VIEW)
   session(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
@@ -121,7 +130,7 @@ class EsignController {
 }
 
 @Module({
-  imports: [ContractsModule, DocumentsModule],
+  imports: [ContractsModule, DocumentsModule, SignaturesModule],
   controllers: [EsignController],
   providers: [EsignService],
 })

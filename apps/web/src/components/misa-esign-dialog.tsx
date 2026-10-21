@@ -17,8 +17,28 @@ import type { ContractDocument } from '@/lib/types';
 const errText = (e: unknown) => (e instanceof ApiError && e.errors.length ? e.errors.map((x) => x.message).join('; ') : e instanceof Error ? e.message : 'Thao tác thất bại');
 const ACTIVE = ['PENDING', 'ATTACHING'];
 
-/** Ký số một tệp PDF bằng tài khoản MISA eSign của người dùng hiện tại. */
-export function MisaEsignDialog({ contractId, doc, onClose, onSigned }: { contractId: string; doc: ContractDocument; onClose: () => void; onSigned: () => void }) {
+/** Ký số trong yêu cầu ký điện tử: chuẩn bị bản PDF (tạo/tải lên nếu chưa có) rồi ký lượt của người dùng. */
+export interface SignatureTarget {
+  prepare: () => Promise<void>;
+}
+
+/**
+ * Ký số bằng tài khoản MISA eSign của người dùng hiện tại: một tệp PDF trong tab Tài liệu (`doc`)
+ * hoặc lượt ký của mình trong yêu cầu ký điện tử (`signature`).
+ */
+export function MisaEsignDialog({
+  contractId,
+  doc,
+  signature,
+  onClose,
+  onSigned,
+}: {
+  contractId: string;
+  doc?: ContractDocument;
+  signature?: SignatureTarget;
+  onClose: () => void;
+  onSigned: () => void;
+}) {
   const status = useMisaStatus();
   const [sessionId, setSessionId] = useState<string | null>(null);
   const s = status.data;
@@ -30,7 +50,9 @@ export function MisaEsignDialog({ contractId, doc, onClose, onSigned }: { contra
         <DialogHeader>
           <DialogTitle>Ký số MISA eSign</DialogTitle>
           <DialogDescription>
-            {doc.fileName} (v{doc.version}) · bản đã ký được lưu thành phiên bản mới của tệp này.
+            {doc
+              ? `${doc.fileName} (v${doc.version}) · bản đã ký được lưu thành phiên bản mới của tệp này.`
+              : 'Ký lượt của bạn bằng chứng thư số lên bản PDF của yêu cầu ký (trang "Chữ ký số" cuối văn bản). Ký xong, lượt ký được ghi nhận tự động.'}
           </DialogDescription>
         </DialogHeader>
         {status.isError ? (
@@ -40,13 +62,13 @@ export function MisaEsignDialog({ contractId, doc, onClose, onSigned }: { contra
         ) : !s.ready ? (
           <p className="rounded-md bg-muted px-3 py-2 text-sm">Doanh nghiệp chưa cấu hình hoặc đang tắt chữ ký số MISA eSign. Quản trị viên vào Cấu hình → Chữ ký số MISA eSign để nhập ClientID/ClientSecret.</p>
         ) : sessionId ? (
-          <SigningProgress sessionId={sessionId} onDone={onSigned} onRetry={() => setSessionId(null)} />
+          <SigningProgress sessionId={sessionId} onDone={onSigned} onRetry={() => setSessionId(null)} successText={doc ? undefined : 'Đã ký số – lượt ký của bạn đã được ghi nhận'} />
         ) : !s.account?.linked ? (
           <LinkAccount account={s.account} />
         ) : !s.account.certAlias ? (
           <ChooseCertificate />
         ) : (
-          <SignForm contractId={contractId} doc={doc} account={s.account} onStarted={setSessionId} onCancel={onClose} />
+          <SignForm contractId={contractId} doc={doc} signature={signature} account={s.account} onStarted={setSessionId} onCancel={onClose} />
         )}
       </DialogContent>
     </Dialog>
@@ -217,12 +239,14 @@ function ChooseCertificate({ onCancel }: { onCancel?: () => void }) {
 function SignForm({
   contractId,
   doc,
+  signature,
   account,
   onStarted,
   onCancel,
 }: {
   contractId: string;
-  doc: ContractDocument;
+  doc?: ContractDocument;
+  signature?: SignatureTarget;
   account: NonNullable<MisaStatus['account']>;
   onStarted: (id: string) => void;
   onCancel: () => void;
@@ -233,11 +257,15 @@ function SignForm({
   const [error, setError] = useState<string | null>(null);
   const start = useMutation({
     meta: { silent: true },
-    mutationFn: () =>
-      api<{ sessionId: string }>(`/esign/misa/contracts/${contractId}/documents/${doc.id}/sign`, {
+    mutationFn: async () => {
+      if (signature) await signature.prepare();
+      const path = doc ? `/esign/misa/contracts/${contractId}/documents/${doc.id}/sign` : `/esign/misa/contracts/${contractId}/signature/sign`;
+      return api<{ sessionId: string }>(path, {
         method: 'POST',
-        body: { page: opts.page ? Number(opts.page) : undefined, position: opts.position, reason: opts.reason || undefined },
-      }),
+        // Ký trong yêu cầu ký: luôn ở trang "Chữ ký số" cuối văn bản, góc dưới phải.
+        body: doc ? { page: opts.page ? Number(opts.page) : undefined, position: opts.position, reason: opts.reason || undefined } : { reason: opts.reason || undefined },
+      });
+    },
     onSuccess: (r) => onStarted(r.sessionId),
     onError: (e) => setError(errText(e)),
   });
@@ -263,6 +291,8 @@ function SignForm({
         </div>
       </div>
       <div className="grid gap-3 sm:grid-cols-2">
+        {doc && (
+          <>
         <div className="space-y-1.5">
           <Label htmlFor="misa-page">Trang đặt chữ ký</Label>
           <Input id="misa-page" inputMode="numeric" placeholder="Trang cuối" value={opts.page} onChange={(e) => setOpts({ ...opts, page: e.target.value.replace(/\D/g, '') })} />
@@ -279,6 +309,8 @@ function SignForm({
             </SelectContent>
           </Select>
         </div>
+          </>
+        )}
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor="misa-reason">Lý do ký</Label>
           <Input id="misa-reason" placeholder="Mặc định: Ký hợp đồng <mã hợp đồng>" maxLength={200} value={opts.reason} onChange={(e) => setOpts({ ...opts, reason: e.target.value })} />
@@ -298,7 +330,7 @@ function SignForm({
 }
 
 /** Chờ người ký xác nhận trên ứng dụng MISA eSign (hỏi trạng thái mỗi 3 giây). */
-function SigningProgress({ sessionId, onDone, onRetry }: { sessionId: string; onDone: () => void; onRetry: () => void }) {
+function SigningProgress({ sessionId, onDone, onRetry, successText }: { sessionId: string; onDone: () => void; onRetry: () => void; successText?: string }) {
   const session = useQuery({
     queryKey: ['esign', 'session', sessionId],
     queryFn: () => api<MisaSession>(`/esign/misa/sessions/${sessionId}`),
@@ -315,10 +347,10 @@ function SigningProgress({ sessionId, onDone, onRetry }: { sessionId: string; on
   useEffect(() => {
     if (st === 'SUCCESS' && !done.current) {
       done.current = true;
-      toast.success('Đã ký số thành công – bản đã ký được lưu thành phiên bản mới');
+      toast.success(successText ?? 'Đã ký số thành công – bản đã ký được lưu thành phiên bản mới');
       onDone();
     }
-  }, [st, onDone]);
+  }, [st, onDone, successText]);
 
   const failed = session.isError || st === 'FAILED' || st === 'EXPIRED';
   if (failed) {

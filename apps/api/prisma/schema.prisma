@@ -787,23 +787,25 @@ enum SigningOrder {
 
 // Một lượt gửi ký. Nội dung được đóng băng (contentSnapshot) và băm SHA-256 để làm bằng chứng toàn vẹn.
 model SignatureRequest {
-  id              String                 @id @default(uuid()) @db.Uuid
-  tenantId        String                 @db.Uuid
-  contractId      String                 @db.Uuid
+  id               String                 @id @default(uuid()) @db.Uuid
+  tenantId         String                 @db.Uuid
+  contractId       String                 @db.Uuid
   // Mã nhà cung cấp chữ ký (INTERNAL = chữ ký điện tử nội bộ: mật khẩu / OTP email).
-  provider        String                 @default("INTERNAL")
-  status          SignatureRequestStatus @default(IN_PROGRESS)
-  signingOrder    SigningOrder           @default(SEQUENTIAL)
-  message         String?
-  contentSnapshot String
-  documentHash    String
-  expiresAt       DateTime
-  createdById     String                 @db.Uuid
-  createdAt       DateTime               @default(now())
-  completedAt     DateTime?
-  contract        Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  createdBy       User                   @relation(fields: [createdById], references: [id])
-  signers         Signer[]
+  provider         String                 @default("INTERNAL")
+  status           SignatureRequestStatus @default(IN_PROGRESS)
+  signingOrder     SigningOrder           @default(SEQUENTIAL)
+  message          String?
+  contentSnapshot  String
+  documentHash     String
+  expiresAt        DateTime
+  createdById      String                 @db.Uuid
+  createdAt        DateTime               @default(now())
+  completedAt      DateTime?
+  /// Bản PDF đang/đã ký số (phiên bản mới nhất trong tab Tài liệu) khi có người ký MISA eSign.
+  signedDocumentId String?                @db.Uuid
+  contract         Contract               @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  createdBy        User                   @relation(fields: [createdById], references: [id])
+  signers          Signer[]
 
   @@index([tenantId, status])
   @@index([contractId])
@@ -820,6 +822,8 @@ enum SignerStatus {
 enum SignMethod {
   INTERNAL_PASSWORD
   EMAIL_OTP
+  /// Người ký nội bộ ký số bằng chứng thư MISA eSign lên bản PDF của yêu cầu ký (ký sau cùng).
+  MISA_ESIGN
 }
 
 model Signer {
@@ -847,6 +851,8 @@ model Signer {
   ip             String?
   userAgent      String?
   rejectReason   String?
+  /// Bằng chứng ký số: mã giao dịch MISA, chứng thư, SHA-256 bản PDF đã ký.
+  evidence       Json?
   createdAt      DateTime         @default(now())
   request        SignatureRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
   user           User?            @relation(fields: [userId], references: [id])
@@ -1042,6 +1048,8 @@ model EsignAccount {
 
 /// Một lượt ký số tài liệu: lưu dữ liệu băm để gắn chữ ký khi người ký xác nhận trên ứng dụng.
 model EsignSession {
+  /// Lượt ký số thuộc yêu cầu ký điện tử (null = ký số tài liệu lẻ trong tab Tài liệu).
+  signerId         String?  @db.Uuid
   id               String   @id @default(uuid()) @db.Uuid
   tenantId         String   @db.Uuid
   contractId       String   @db.Uuid
