@@ -266,7 +266,8 @@ export function ContractEditor({
 }) {
   const editor = useEditor({
     extensions: [
-      StarterKit.configure({ link: { openOnClick: false } }),
+      // Không tự gắn liên kết: biến như {{party_b.bank_account}} có phần trông như tên miền ("b.bank") sẽ bị cắt mất.
+      StarterKit.configure({ link: { openOnClick: false, autolink: false, linkOnPaste: false } }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       TableKit.configure({ table: false }),
       // Kéo viền phải của cột để đổi độ rộng; độ rộng lưu trong <colgroup> và áp dụng khi xem, in, xuất PDF.

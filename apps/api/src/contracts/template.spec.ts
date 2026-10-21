@@ -1,4 +1,4 @@
-import { buildTemplateValues, renderTemplate } from '@saha/shared';
+import { buildTemplateValues, extractVariables, normalizeVariableMarkup, renderTemplate } from '@saha/shared';
 
 describe('renderTemplate', () => {
   const values = buildTemplateValues({
@@ -63,5 +63,20 @@ describe('extractVariables', () => {
       'contract.code',
       'foo.bar',
     ]);
+  });
+});
+
+describe('normalizeVariableMarkup – biến bị trình soạn thảo chen thẻ', () => {
+  it('gỡ liên kết tự gắn trong biến (b.bank, a.name) và vẫn thay được giá trị', () => {
+    const broken = '<p>TK: {{party_<a target="_blank" rel="noopener noreferrer nofollow" href="http://b.bank">b.bank</a>_account}} – {{party_<a href="http://a.name">a.name</a>}}</p>';
+    expect(normalizeVariableMarkup(broken)).toBe('<p>TK: {{party_b.bank_account}} – {{party_a.name}}</p>');
+    const values = buildTemplateValues({ code: 'X', title: 't', value: '0', currency: 'VND', parties: [{ role: 'PARTY_A', name: 'KNC' }, { role: 'PARTY_B', name: 'SAHA', bankAccount: '921019999 MB' }] });
+    expect(renderTemplate(broken, values).html).toBe('<p>TK: 921019999 MB – KNC</p>');
+    expect(extractVariables(broken)).toEqual(['party_b.bank_account', 'party_a.name']);
+  });
+
+  it('không đụng tới liên kết thật hoặc dấu ngoặc không phải biến', () => {
+    const html = '<p>Xem <a href="https://saha.vn">saha.vn</a> và {{ <strong>ghi chú</strong> }}</p>';
+    expect(normalizeVariableMarkup(html)).toBe(html);
   });
 });

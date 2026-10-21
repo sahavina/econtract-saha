@@ -173,12 +173,25 @@ export interface RenderResult {
 }
 
 /**
+ * Gỡ thẻ chen vào giữa một biến {{…}}: trình soạn thảo có thể tự gắn liên kết cho phần trông như tên miền
+ * ("b.bank", "a.name" ⇒ <a href="http://b.bank">) hoặc tách định dạng giữa chừng, làm biến không được nhận ra.
+ */
+export function normalizeVariableMarkup(html: string): string {
+  return html.replace(/\{\{((?:[^{}]|<[^>]*>)*?)\}\}/g, (m, inner: string) => {
+    if (!inner.includes('<')) return m;
+    const text = inner.replace(/<[^>]*>/g, '');
+    return /^\s*[a-z_]+\.[a-z_]+\s*$/.test(text) ? `{{${text.trim()}}}` : m;
+  });
+}
+
+/**
  * Thay biến trong HTML đã được làm sạch. Giá trị được escape HTML.
  * Biến thiếu dữ liệu/không hỗ trợ được đánh dấu bằng <mark data-missing> để người dùng nhận biết.
  */
-export function renderTemplate(html: string, values: Record<string, string | null>): RenderResult {
+export function renderTemplate(source: string, values: Record<string, string | null>): RenderResult {
   const missing = new Set<string>();
   const unknown = new Set<string>();
+  const html = normalizeVariableMarkup(source);
   // Bảng hàng hóa đứng riêng một đoạn ⇒ thay cả đoạn (bảng không được nằm trong <p>).
   const blocks = html.replace(/<p[^>]*>\s*\{\{\s*([a-z_]+\.[a-z_]+)\s*\}\}\s*<\/p>/g, (m, key: string) => {
     const v = RAW_HTML_VARIABLES.has(key) ? values[key] : null;
@@ -201,7 +214,7 @@ export function renderTemplate(html: string, values: Record<string, string | nul
 
 /** Danh sách biến (không trùng, theo thứ tự xuất hiện) có trong nội dung. */
 export function extractVariables(html: string): string[] {
-  return [...new Set([...html.matchAll(VARIABLE_PATTERN)].map((m) => m[1]))];
+  return [...new Set([...normalizeVariableMarkup(html).matchAll(VARIABLE_PATTERN)].map((m) => m[1]))];
 }
 
 export const CLAUSE_CATEGORIES = [

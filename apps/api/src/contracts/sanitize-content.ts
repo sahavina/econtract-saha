@@ -1,3 +1,4 @@
+import { normalizeVariableMarkup } from '@saha/shared';
 import sanitizeHtml from 'sanitize-html';
 
 const ALIGN = { 'text-align': [/^(left|right|center|justify)$/] };
@@ -5,9 +6,10 @@ const ALIGN = { 'text-align': [/^(left|right|center|justify)$/] };
 /**
  * Làm sạch HTML nội dung hợp đồng (từ trình soạn thảo Tiptap) trước khi lưu.
  * Chỉ giữ thẻ/thuộc tính định dạng văn bản; loại bỏ script, sự kiện, iframe, style tùy ý.
+ * Biến {{…}} bị trình soạn thảo chen thẻ (tự gắn liên kết cho "b.bank", "a.name"…) được gỡ thẻ trước.
  */
 export function sanitizeContractHtml(html: string): string {
-  return sanitizeHtml(html, {
+  return sanitizeHtml(normalizeVariableMarkup(html), {
     allowedTags: [
       'h1',
       'h2',
