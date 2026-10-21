@@ -3,6 +3,9 @@
  * Luồng: đăng nhập tài khoản người ký (→ OTP nếu cần) → lấy chứng thư → băm PDF → gửi yêu cầu ký
  * (người ký xác nhận trên ứng dụng MISA eSign trong 120 giây) → kiểm tra trạng thái → gắn chữ ký vào PDF.
  */
+import { Logger } from '@nestjs/common';
+
+const logger = new Logger('MisaEsign');
 
 export interface MisaConfig {
   baseUrl: string;
@@ -71,6 +74,11 @@ const ERROR_TEXT: Record<string, string> = {
   'Auth:004': 'Thiếu thông tin xác thực MISA eSign',
   'Business:001': 'Gói MISA eSign đã hết hạn – liên hệ MISA để gia hạn',
   'Business:002': 'Đã hết số lượt ký của gói MISA eSign – liên hệ MISA để mua thêm',
+  // Hai mã dưới không có trong bảng mã lỗi công bố – ghi nhận thực tế ở bước two-factor-auth (2026-10).
+  e111: 'Mã OTP không đúng – kiểm tra lại mã và loại OTP (SMS/email hay ứng dụng MISA eSign)',
+  e2003:
+    'Tài khoản MISA eSign chưa được cấp quyền ký số từ xa cho ứng dụng tích hợp này (MISA báo: không có quyền truy cập tài nguyên). ' +
+    'Liên hệ MISA để kích hoạt tài nguyên RemoteSigning cho tài khoản và duyệt yêu cầu tích hợp eSign của ClientID.',
 };
 
 type Json = Record<string, unknown>;
@@ -111,7 +119,9 @@ export class MisaEsignClient {
       });
     } catch (e) {
       const name = (e as { name?: string }).name;
-      throw new MisaError(name === 'TimeoutError' ? 'MISA eSign không phản hồi (quá thời gian chờ)' : 'Không kết nối được tới MISA eSign');
+      throw new MisaError(
+        name === 'TimeoutError' ? 'MISA eSign không phản hồi (quá thời gian chờ)' : 'Không kết nối được tới MISA eSign',
+      );
     }
     const text = await res.text();
     let json: unknown = null;
@@ -131,6 +141,15 @@ export class MisaEsignClient {
         pick<string>(status, 'userMsg', 'message') ??
         pick<string>(json, 'devMsg', 'message') ??
         `MISA eSign báo lỗi HTTP ${res.status}`;
+      // Chẩn đoán: chỉ ghi đường dẫn, mã lỗi, thông điệp gốc của MISA – không ghi body (mật khẩu, OTP) hay token.
+      logger.warn(
+        `${method} ${path} → HTTP ${res.status}, errorCode=${code ?? '—'}: ${JSON.stringify({
+          status,
+          userMsg: pick(json, 'userMsg'),
+          devMsg: pick(json, 'devMsg'),
+          errorDescription: pick(json, 'errorDescription'),
+        }).slice(0, 600)}`,
+      );
       throw new MisaError(msg, code, res.status);
     }
     // Một số API bọc kết quả trong { status, data }, số khác trả thẳng.
@@ -181,7 +200,8 @@ export class MisaEsignClient {
     } catch (e) {
       if (!(e instanceof MisaError)) throw e;
       const code = String(e.code ?? '');
-      if (code === 'Auth:002' || code === 'Auth:003') return { ok: true, message: 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng' };
+      if (code === 'Auth:002' || code === 'Auth:003')
+        return { ok: true, message: 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng' };
       return { ok: false, message: e.message };
     }
   }
@@ -203,7 +223,13 @@ export class MisaEsignClient {
   }
 
   /** Bước 1: băm PDF (MISA dựng sẵn khung chữ ký hiển thị theo signatureInfo). */
-  async hashPdf(cert: MisaCertificate, documentId: string, pdfBase64: string, box: MisaSignatureBox, signatureName: string): Promise<MisaHashResult> {
+  async hashPdf(
+    cert: MisaCertificate,
+    documentId: string,
+    pdfBase64: string,
+    box: MisaSignatureBox,
+    signatureName: string,
+  ): Promise<MisaHashResult> {
     const d = await this.call('POST', '/esign/v1/documents/hash', {
       certificate: cert.certificate,
       certificateChain: cert.certificateChain,
@@ -247,13 +273,30 @@ export class MisaEsignClient {
   }
 
   /** Bước 2: gửi yêu cầu ký – người ký xác nhận trên ứng dụng MISA eSign (120 giây). */
-  async signHash(token: string, input: { userId: string; certAlias: string; documentId: string; digest: string; documentName: string; display: string }) {
-    const d = await this.call('POST', '/esign/v1/signing/hash', {
-      DataToBeDisplayed: input.display,
-      UserId: input.userId,
-      CertAlias: input.certAlias,
-      Documents: [{ DocumentId: input.documentId, FileToSign: input.digest, DocumentName: input.documentName.slice(0, 100) }],
-    }, token);
+  async signHash(
+    token: string,
+    input: {
+      userId: string;
+      certAlias: string;
+      documentId: string;
+      digest: string;
+      documentName: string;
+      display: string;
+    },
+  ) {
+    const d = await this.call(
+      'POST',
+      '/esign/v1/signing/hash',
+      {
+        DataToBeDisplayed: input.display,
+        UserId: input.userId,
+        CertAlias: input.certAlias,
+        Documents: [
+          { DocumentId: input.documentId, FileToSign: input.digest, DocumentName: input.documentName.slice(0, 100) },
+        ],
+      },
+      token,
+    );
     const transactionId = pick<string>(d, 'transactionId');
     if (!transactionId) throw new MisaError('MISA eSign không trả về mã giao dịch ký');
     return transactionId;
