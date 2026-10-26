@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Copy, FileX2, Pencil, RotateCcw, Trash2, Truck } from 'lucide-react';
+import { Archive, ArchiveRestore, Copy, FileX2, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -103,6 +103,11 @@ export default function ContractDetailPage() {
             )
           ) : (
             <>
+              <Button variant="outline" asChild>
+                <Link href={`/payment-requests?contract=${c.id}`}>
+                  <Receipt /> Đề nghị thanh toán
+                </Link>
+              </Button>
               {isOrder && (
                 <Button variant="outline" asChild>
                   <Link href={`/shipping-labels?order=${c.id}`}>
