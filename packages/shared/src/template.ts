@@ -39,6 +39,23 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
       { key: 'order.payment_terms', label: 'Điều kiện thanh toán' },
     ],
   },
+  {
+    // Lập từ trang Đề nghị thanh toán thì lấy theo nội dung đã nhập; lập hồ sơ từ mẫu thì suy ra từ dữ liệu hợp đồng/đơn hàng.
+    group: 'Đề nghị thanh toán',
+    items: [
+      { key: 'payment.number', label: 'Số đề nghị' },
+      { key: 'payment.date_text', label: 'Ngày lập (ngày … tháng … năm …)' },
+      { key: 'payment.recipient', label: 'Kính gửi' },
+      { key: 'payment.basis', label: 'Căn cứ' },
+      { key: 'payment.amount', label: 'Số tiền đề nghị' },
+      { key: 'payment.amount_words', label: 'Số tiền bằng chữ' },
+      { key: 'payment.beneficiary', label: 'Đơn vị thụ hưởng' },
+      { key: 'payment.account', label: 'Tài khoản – ngân hàng' },
+      { key: 'payment.account_holder', label: 'Chủ tài khoản' },
+      { key: 'payment.signer_position', label: 'Chức vụ người ký' },
+      { key: 'payment.signer_name', label: 'Họ tên người ký' },
+    ],
+  },
   ...(['party_a', 'party_b'] as const).map((p) => ({
     group: p === 'party_a' ? 'Bên A' : 'Bên B',
     items: [
@@ -57,7 +74,7 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
 export const TEMPLATE_VARIABLE_KEYS = new Set(TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => i.key)));
 
 const VARIABLE_LABELS = new Map(
-  TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => [i.key, g.group === 'Hợp đồng' || g.group === 'Đơn đặt hàng' ? i.label : `${g.group} – ${i.label}`] as const)),
+  TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => [i.key, g.group === 'Hợp đồng' || g.group === 'Đơn đặt hàng' || g.group === 'Đề nghị thanh toán' ? i.label : `${g.group} – ${i.label}`] as const)),
 );
 
 /** Tên tiếng Việt của biến cho người dùng: "contract.vat_rate" → "Thuế VAT (%)", "party_b.phone" → "Bên B – Điện thoại". */
@@ -110,6 +127,14 @@ export function formatDateVi(value: string | Date | null | undefined): string | 
   return `${pad(d.getUTCDate())}/${pad(d.getUTCMonth() + 1)}/${d.getUTCFullYear()}`;
 }
 
+/** "ngày 15 tháng 10 năm 2026" (theo UTC như formatDateVi). */
+export function dateTextVi(value: string | Date | null | undefined): string | null {
+  const d = formatDateVi(value);
+  if (!d) return null;
+  const [dd, mm, yyyy] = d.split('/');
+  return `ngày ${dd} tháng ${mm} năm ${yyyy}`;
+}
+
 export function formatNumberVi(value: string | number | null | undefined): string | null {
   if (value === null || value === undefined || value === '') return null;
   const [int, frac] = String(value).split('.');
@@ -157,6 +182,24 @@ export function buildTemplateValues(c: TemplateContract): Record<string, string 
     values[`${prefix}.email`] = p?.email || null;
     values[`${prefix}.bank_account`] = p?.bankAccount || null;
   }
+  // Đề nghị thanh toán: bên A là khách hàng, bên B là bên nhận tiền (theo mẫu đơn hàng SAHA).
+  const payable = totals ? totals.total : c.value;
+  const payableInt = String(Math.round(Number(payable) || 0));
+  const signDate = formatDateVi(c.expectedSignDate);
+  values['payment.number'] = c.code;
+  values['payment.date_text'] = dateTextVi(c.expectedSignDate);
+  values['payment.recipient'] = values['party_a.name'];
+  values['payment.basis'] =
+    values['party_a.name'] && values['party_b.name']
+      ? `Căn cứ vào ${c.items?.length ? 'đơn đặt hàng' : 'hợp đồng'} số ${c.code}${signDate ? ` ngày ${signDate}` : ''} giữa ${values['party_b.name']} và ${values['party_a.name']}.`
+      : null;
+  values['payment.amount'] = Number(payableInt) ? formatNumberVi(payableInt) : null;
+  values['payment.amount_words'] = Number(payableInt) && c.currency === 'VND' ? amountInWordsVnd(payableInt) : null;
+  values['payment.beneficiary'] = values['party_b.name'];
+  values['payment.account'] = values['party_b.bank_account'];
+  values['payment.account_holder'] = values['party_b.name'];
+  values['payment.signer_position'] = values['party_b.position'];
+  values['payment.signer_name'] = values['party_b.representative'];
   return values;
 }
 

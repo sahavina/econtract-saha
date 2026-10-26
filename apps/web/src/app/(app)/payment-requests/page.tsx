@@ -1,6 +1,6 @@
 'use client';
 
-import { formatDateVi, orderTotals } from '@saha/shared';
+import { buildTemplateValues, formatDateVi, orderTotals, renderTemplate } from '@saha/shared';
 import { useQuery } from '@tanstack/react-query';
 import { Download, FileText, Loader2, Printer } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
@@ -14,16 +14,24 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { api, type Paginated } from '@/lib/api';
 import { useCompanyProfile, type CompanyProfile } from '@/lib/company';
+import { contractPdfFile, downloadContractPdf } from '@/lib/contract-pdf';
 import {
   amountText,
   defaultRequestNumber,
   downloadPaymentRequestPdf,
   downloadPaymentRequestWord,
+  fileBase,
   openPaymentRequestPdf,
   paymentRequestHtml,
+  paymentValues,
   type PaymentRequest,
 } from '@/lib/payment-request';
-import type { ContractDetail, ContractListItem } from '@/lib/types';
+import type { ContractDetail, ContractListItem, TemplateDetail, TemplateListItem } from '@/lib/types';
+
+/** Mẫu dựng sẵn theo giấy đề nghị SAHA (không thuộc thư viện mẫu). */
+const BUILT_IN = '';
+const MISSING_MARK = /<mark data-missing="(?:empty|unknown)">\{\{[^<]*?\}\}<\/mark>/g;
+const isPaymentTemplate = (t: TemplateListItem) => /đề nghị thanh toán|DNTT/i.test(`${t.code} ${t.name}`);
 
 const today = () => {
   const d = new Date();
@@ -94,6 +102,17 @@ function RequestForm({ contractId }: { contractId: string }) {
   const [filledFrom, setFilledFrom] = useState<string | null>(null);
   const [profileApplied, setProfileApplied] = useState(false);
   const [busy, setBusy] = useState<'pdf' | 'print' | null>(null);
+  const [source, setSource] = useState<ContractDetail | null>(null);
+  const [templateId, setTemplateId] = useState(BUILT_IN);
+  const templates = useQuery({
+    queryKey: ['templates', 'payment-picker'],
+    queryFn: () => api<Paginated<TemplateListItem>>('/templates', { query: { status: 'ACTIVE', pageSize: 100 } }),
+  });
+  const template = useQuery({
+    queryKey: ['template', templateId],
+    queryFn: () => api<TemplateDetail>(`/templates/${templateId}`),
+    enabled: templateId !== BUILT_IN,
+  });
   const orders = useQuery({
     queryKey: ['orders', 'payment-picker'],
     queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { kind: 'ORDER', pageSize: 50 } }),
@@ -111,6 +130,7 @@ function RequestForm({ contractId }: { contractId: string }) {
   const set = (patch: Partial<PaymentRequest>) => setR((x) => ({ ...x, ...patch }));
   const apply = (c: ContractDetail) => {
     setR((x) => fromContract(c, company.data, x));
+    setSource(c);
     setFilledFrom(c.code);
   };
   // Mở từ một hồ sơ: điền khi dữ liệu về. Không có hồ sơ: lấy thông tin doanh nghiệp mình làm bên thụ hưởng.
@@ -126,10 +146,26 @@ function RequestForm({ contractId }: { contractId: string }) {
   const { words } = amountText(r);
   const valid = r.company.trim() && r.recipient.trim() && amountText(r).figure && r.beneficiary.trim();
 
+  // Mẫu từ thư viện: biến hợp đồng/đơn hàng lấy từ hồ sơ đã chọn, biến {{payment.*}} lấy theo nội dung đang nhập.
+  const tpl = templateId !== BUILT_IN ? template.data : undefined;
+  const rendered = tpl ? renderTemplate(tpl.contentHtml, { ...(source ? buildTemplateValues(source) : {}), ...paymentValues(r) }) : null;
+  const finalHtml = rendered ? rendered.html.replace(MISSING_MARK, '……') : null;
+  const templateOptions = [...(templates.data?.items ?? [])]
+    .sort((a, b) => Number(isPaymentTemplate(b)) - Number(isPaymentTemplate(a)))
+    .map((t) => ({ value: t.id, label: `${t.code} · ${t.name}` }));
+
   const run = async (kind: 'pdf' | 'print') => {
     setBusy(kind);
     try {
-      await (kind === 'pdf' ? downloadPaymentRequestPdf(r) : openPaymentRequestPdf(r));
+      if (finalHtml) {
+        const input = { fileName: fileBase(r), title: `Đề nghị thanh toán ${r.number}`, html: finalHtml };
+        if (kind === 'pdf') await downloadContractPdf(input);
+        else {
+          const url = URL.createObjectURL(await contractPdfFile(input));
+          window.open(url, '_blank', 'noopener');
+          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        }
+      } else await (kind === 'pdf' ? downloadPaymentRequestPdf(r) : openPaymentRequestPdf(r));
     } catch (e) {
       toast.error(`Không tạo được PDF: ${e instanceof Error ? e.message : 'lỗi không xác định'}`);
     } finally {
@@ -146,6 +182,15 @@ function RequestForm({ contractId }: { contractId: string }) {
             <CardDescription>{filledFrom ? `Đã điền từ ${filledFrom}. Có thể sửa lại mọi nội dung bên dưới.` : 'Chọn đơn đặt hàng hoặc hợp đồng để tự điền khách hàng, căn cứ và số tiền.'}</CardDescription>
           </CardHeader>
           <CardContent className="grid gap-3 sm:grid-cols-2">
+            <label className="block space-y-1.5 sm:col-span-2">
+              <span className="text-sm font-medium">Mẫu đề nghị</span>
+              <FilterSelect className="w-full" allLabel="Mẫu SAHA dựng sẵn" value={templateId || undefined} onChange={(id) => setTemplateId(id ?? BUILT_IN)} options={templateOptions} ariaLabel="Mẫu đề nghị" />
+              <span className="block text-xs text-muted-foreground">
+                {tpl
+                  ? `Mẫu ${tpl.code} v${tpl.version}: nội dung bên dưới điền vào các biến {{payment.*}}; biến hợp đồng/đơn hàng lấy từ hồ sơ đã chọn.`
+                  : 'Hoặc chọn mẫu đang sử dụng trong Mẫu hợp đồng (mẫu đề nghị thanh toán xếp đầu).'}
+              </span>
+            </label>
             <FilterSelect className="w-full" allLabel="Chọn đơn đặt hàng…" value={undefined} onChange={pick} options={options(orders.data?.items)} ariaLabel="Đơn đặt hàng" />
             <FilterSelect className="w-full" allLabel="Chọn hợp đồng…" value={undefined} onChange={pick} options={options(contracts.data?.items)} ariaLabel="Hợp đồng" />
           </CardContent>
@@ -209,7 +254,7 @@ function RequestForm({ contractId }: { contractId: string }) {
               <Button variant="outline" disabled={!valid || !!busy} onClick={() => run('pdf')}>
                 {busy === 'pdf' ? <Loader2 className="animate-spin" /> : <Download />} Tải PDF
               </Button>
-              <Button variant="outline" disabled={!valid} onClick={() => downloadPaymentRequestWord(r)}>
+              <Button variant="outline" disabled={!valid} onClick={() => downloadPaymentRequestWord(r, finalHtml ?? undefined)}>
                 <FileText /> Tải Word
               </Button>
               {!valid && <span className="self-center text-xs text-muted-foreground">Nhập công ty, kính gửi, số tiền và đơn vị thụ hưởng.</span>}
@@ -220,9 +265,18 @@ function RequestForm({ contractId }: { contractId: string }) {
 
       <div className="xl:sticky xl:top-20 xl:self-start">
         <p className="mb-2 text-sm text-muted-foreground">Xem trước</p>
+        {rendered ? (
+          <div className="a4-page">
+            {/* HTML mẫu đã được backend làm sạch; giá trị biến được escape khi render. */}
+            <div className="contract-content" dangerouslySetInnerHTML={{ __html: rendered.html }} />
+          </div>
+        ) : templateId !== BUILT_IN ? (
+          <p className="text-sm text-muted-foreground">Đang tải mẫu…</p>
+        ) : (
         <div className="rounded-md border bg-white p-[6%] text-[#111] shadow-sm" style={{ fontSize: 'clamp(11px, 1.05vw, 15px)' }}>
           <div dangerouslySetInnerHTML={{ __html: paymentRequestHtml(r).replace(/font-size:13pt/, 'font-size:1em').replace(/font-size:16pt/, 'font-size:1.25em').replace(/font-size:14pt/, 'font-size:1.08em') }} />
         </div>
+        )}
       </div>
     </div>
   );

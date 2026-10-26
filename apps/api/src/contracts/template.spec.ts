@@ -80,3 +80,29 @@ describe('normalizeVariableMarkup – biến bị trình soạn thảo chen th�
     expect(normalizeVariableMarkup(html)).toBe(html);
   });
 });
+
+describe('biến Đề nghị thanh toán (payment.*)', () => {
+  it('suy ra từ đơn hàng: số tiền gồm VAT, bằng chữ, bên thụ hưởng là bên B', () => {
+    const v = buildTemplateValues({
+      code: 'DDH-01',
+      title: 'Đơn',
+      value: '0',
+      currency: 'VND',
+      vatRate: '8',
+      expectedSignDate: '2026-10-15',
+      items: [{ name: 'Selleys RP7 350g', quantity: '2', unitPrice: '480000', deliveredQty: '0' }],
+      parties: [
+        { role: 'PARTY_A', name: 'KHÁCH HÀNG X' },
+        { role: 'PARTY_B', name: 'SAHA', bankAccount: '921019999 - MB', representative: 'Nguyễn Văn A', position: 'Giám đốc' },
+      ],
+    });
+    expect(v['payment.amount']).toBe('1.036.800');
+    expect(v['payment.amount_words']).toBe('Một triệu không trăm ba mươi sáu nghìn tám trăm đồng');
+    expect(v['payment.date_text']).toBe('ngày 15 tháng 10 năm 2026');
+    expect(v['payment.recipient']).toBe('KHÁCH HÀNG X');
+    expect(v['payment.basis']).toBe('Căn cứ vào đơn đặt hàng số DDH-01 ngày 15/10/2026 giữa SAHA và KHÁCH HÀNG X.');
+    expect(v['payment.account']).toBe('921019999 - MB');
+    expect(v['payment.signer_name']).toBe('Nguyễn Văn A');
+    expect(renderTemplate('<p>{{payment.amount}} đồng ({{payment.amount_words}})</p>', v).missing).toEqual([]);
+  });
+});

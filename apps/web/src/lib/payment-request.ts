@@ -37,6 +37,26 @@ export function amountText(r: PaymentRequest) {
   return { figure: n ? `${formatQtyVi(n)} đồng` : '', words: n ? amountInWordsVnd(n) : '' };
 }
 
+/** Giá trị biến {{payment.*}} khi lập từ trang Đề nghị thanh toán – ghi đè giá trị suy ra từ hợp đồng. */
+export function paymentValues(r: PaymentRequest): Record<string, string | null> {
+  const { figure, words } = amountText(r);
+  const [y, m, d] = r.date.split('-');
+  const v = (s: string) => s.trim() || null;
+  return {
+    'payment.number': v(r.number),
+    'payment.date_text': y && m && d ? `ngày ${d} tháng ${m} năm ${y}` : null,
+    'payment.recipient': v(r.recipient),
+    'payment.basis': v(r.basis),
+    'payment.amount': figure ? figure.replace(/ đồng$/, '') : null,
+    'payment.amount_words': v(words),
+    'payment.beneficiary': v(r.beneficiary),
+    'payment.account': v(r.account),
+    'payment.account_holder': v(r.accountHolder),
+    'payment.signer_position': v(r.signerPosition),
+    'payment.signer_name': v(r.signerName),
+  };
+}
+
 export function dateLine(r: PaymentRequest): string {
   const [y, m, d] = r.date.split('-');
   return `${r.place.trim() || 'Hà Nội'}, ngày ${d ?? '…'} tháng ${m ?? '…'} năm ${y ?? '…'}`;
@@ -152,7 +172,7 @@ async function createPdf(r: PaymentRequest) {
   return pdfMake.createPdf(doc);
 }
 
-const fileBase = (r: PaymentRequest) => `De nghi thanh toan - ${(r.recipient || r.number || 'SAHA').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60)}`;
+export const fileBase = (r: PaymentRequest) => `De nghi thanh toan - ${(r.recipient || r.number || 'SAHA').replace(/[\\/:*?"<>|]+/g, '_').slice(0, 60)}`;
 
 export async function downloadPaymentRequestPdf(r: PaymentRequest) {
   await (await createPdf(r)).download(`${fileBase(r)}.pdf`);
@@ -165,9 +185,9 @@ export async function openPaymentRequestPdf(r: PaymentRequest) {
 }
 
 /** Word mở được tệp HTML đặt đuôi .doc – giữ bố cục để người dùng chỉnh tiếp. */
-export function downloadPaymentRequestWord(r: PaymentRequest) {
+export function downloadPaymentRequestWord(r: PaymentRequest, bodyHtml = paymentRequestHtml(r)) {
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Đề nghị thanh toán</title>
-<style>@page{size:21cm 29.7cm;margin:1.8cm 1.8cm 1.8cm 2.5cm}body{font-family:'Times New Roman',serif;font-size:13pt}</style></head><body>${paymentRequestHtml(r)}</body></html>`;
+<style>@page{size:21cm 29.7cm;margin:1.8cm 1.8cm 1.8cm 2.5cm}body{font-family:'Times New Roman',serif;font-size:13pt}</style></head><body>${bodyHtml}</body></html>`;
   const url = URL.createObjectURL(new Blob(['﻿', html], { type: 'application/msword' }));
   const a = document.createElement('a');
   a.href = url;
