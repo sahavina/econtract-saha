@@ -31,7 +31,8 @@ import type { ContractDetail, ContractListItem, TemplateDetail, TemplateListItem
 /** Mẫu dựng sẵn theo giấy đề nghị SAHA (không thuộc thư viện mẫu). */
 const BUILT_IN = '';
 const MISSING_MARK = /<mark data-missing="(?:empty|unknown)">\{\{[^<]*?\}\}<\/mark>/g;
-const isPaymentTemplate = (t: TemplateListItem) => /đề nghị thanh toán|DNTT/i.test(`${t.code} ${t.name}`);
+/** Chỉ mẫu dành cho đề nghị thanh toán: mã có "DNTT" hoặc tên có "đề nghị thanh toán". */
+const isPaymentTemplate = (t: TemplateListItem) => /DNTT/i.test(t.code) || /đề nghị thanh toán/i.test(t.name);
 
 const today = () => {
   const d = new Date();
@@ -150,9 +151,7 @@ function RequestForm({ contractId }: { contractId: string }) {
   const tpl = templateId !== BUILT_IN ? template.data : undefined;
   const rendered = tpl ? renderTemplate(tpl.contentHtml, { ...(source ? buildTemplateValues(source) : {}), ...paymentValues(r) }) : null;
   const finalHtml = rendered ? rendered.html.replace(MISSING_MARK, '……') : null;
-  const templateOptions = [...(templates.data?.items ?? [])]
-    .sort((a, b) => Number(isPaymentTemplate(b)) - Number(isPaymentTemplate(a)))
-    .map((t) => ({ value: t.id, label: `${t.code} · ${t.name}` }));
+  const templateOptions = (templates.data?.items ?? []).filter(isPaymentTemplate).map((t) => ({ value: t.id, label: `${t.code} · ${t.name}` }));
 
   const run = async (kind: 'pdf' | 'print') => {
     setBusy(kind);
@@ -188,7 +187,7 @@ function RequestForm({ contractId }: { contractId: string }) {
               <span className="block text-xs text-muted-foreground">
                 {tpl
                   ? `Mẫu ${tpl.code} v${tpl.version}: nội dung bên dưới điền vào các biến {{payment.*}}; biến hợp đồng/đơn hàng lấy từ hồ sơ đã chọn.`
-                  : 'Hoặc chọn mẫu đang sử dụng trong Mẫu hợp đồng (mẫu đề nghị thanh toán xếp đầu).'}
+                  : 'Hoặc chọn mẫu đề nghị thanh toán đang sử dụng trong Mẫu hợp đồng (mã có “DNTT” hoặc tên có “đề nghị thanh toán”).'}
               </span>
             </label>
             <FilterSelect className="w-full" allLabel="Chọn đơn đặt hàng…" value={undefined} onChange={pick} options={options(orders.data?.items)} ariaLabel="Đơn đặt hàng" />
