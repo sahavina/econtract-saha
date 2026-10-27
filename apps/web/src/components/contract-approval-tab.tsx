@@ -7,7 +7,7 @@ import {
   type ApprovalDecision,
 } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Check, CircleDashed, Clock, Loader2, MessageSquareWarning, Send, Undo2, X } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, Check, CircleDashed, Clock, Loader2, MessageSquareWarning, Send, Undo2, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
@@ -19,7 +19,7 @@ import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { useNow } from '@/hooks/use-now';
-import { api } from '@/lib/api';
+import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -167,6 +167,70 @@ function SubmitPanel({ contract }: { contract: ContractDetail }) {
   );
 }
 
+/** Vai trò có quyền "Tự phê duyệt hợp đồng": duyệt ngay, không qua quy trình (vẫn kiểm tra đủ điều kiện như khi gửi duyệt). */
+function SelfApprovePanel({ contract, onConfirm }: { contract: ContractDetail; onConfirm: (state: ConfirmState) => void }) {
+  const qc = useQueryClient();
+  const [note, setNote] = useState('');
+  const [issues, setIssues] = useState<string[]>([]);
+  const approve = useMutation({
+    mutationFn: () => api(`/contracts/${contract.id}/approval/self-approve`, { method: 'POST', body: { note: note || undefined } }),
+    onSuccess: () => {
+      toast.success('Đã tự phê duyệt hợp đồng');
+      setIssues([]);
+      qc.invalidateQueries({ queryKey: ['contract', contract.id] });
+      qc.invalidateQueries({ queryKey: ['contracts'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (e) => {
+      const list = e instanceof ApiError && Array.isArray(e.body.issues) ? (e.body.issues as string[]) : [];
+      setIssues(list);
+      if (!list.length) toast.error(e.message);
+    },
+  });
+  return (
+    <Card className="border-emerald-500/50">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <BadgeCheck className="size-4 text-emerald-600" /> Tự phê duyệt
+        </CardTitle>
+        <CardDescription>Bạn có quyền duyệt ngay hợp đồng này mà không cần gửi qua quy trình phê duyệt. Việc tự phê duyệt được ghi vào lịch sử và nhật ký.</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        {issues.length > 0 && (
+          <div role="alert" className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <p className="mb-1 flex items-center gap-1.5 font-medium">
+              <AlertTriangle className="size-4" /> Cần hoàn thiện trước khi phê duyệt:
+            </p>
+            <ul className="list-disc pl-6">
+              {issues.map((i) => (
+                <li key={i}>{i}</li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <div className="space-y-1.5">
+          <Label htmlFor="self-approve-note">Ý kiến phê duyệt (tùy chọn)</Label>
+          <Textarea id="self-approve-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
+        </div>
+        <Button
+          className="bg-emerald-600 text-white hover:bg-emerald-700"
+          disabled={approve.isPending}
+          onClick={() =>
+            onConfirm({
+              title: `Tự phê duyệt hợp đồng ${contract.code}?`,
+              description: 'Hợp đồng chuyển ngay sang Đã phê duyệt, không qua quy trình phê duyệt.',
+              confirmLabel: 'Phê duyệt',
+              onConfirm: () => approve.mutate(),
+            })
+          }
+        >
+          {approve.isPending ? <Loader2 className="animate-spin" /> : <BadgeCheck />} Tự phê duyệt
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DecisionPanel({ contractId }: { contractId: string }) {
   const qc = useQueryClient();
   const [comment, setComment] = useState('');
@@ -242,6 +306,7 @@ export function ContractApprovalTab({ contract }: { contract: ContractDetail }) 
   const myTask = pending?.tasks.find((t) => t.approver.id === user?.id && t.status === 'PENDING' && t.stepOrder === pending.currentStep);
   const canSubmit =
     contract.status === 'DRAFT' && !contract.archivedAt && !contract.deletedAt && can('contract.update');
+  const canSelfApprove = !pending && contract.status === 'DRAFT' && !contract.archivedAt && !contract.deletedAt && can('contract.self_approve');
   const canCancel = !!pending && can('contract.update') && (pending.submittedBy.id === user?.id || contract.owner?.id === user?.id);
 
   return (
@@ -283,8 +348,9 @@ export function ContractApprovalTab({ contract }: { contract: ContractDetail }) 
         </Card>
       )}
 
+      {canSelfApprove && <SelfApprovePanel contract={contract} onConfirm={setConfirm} />}
       {!pending && canSubmit && <SubmitPanel contract={contract} />}
-      {!pending && !canSubmit && history.data.length === 0 && <EmptyState title="Hợp đồng chưa được gửi phê duyệt" />}
+      {!pending && !canSubmit && !canSelfApprove && history.data.length === 0 && <EmptyState title="Hợp đồng chưa được gửi phê duyệt" />}
 
       {past.length > 0 && (
         <div className="space-y-2">

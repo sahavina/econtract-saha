@@ -727,7 +727,8 @@ model ApprovalRequest {
   id            String                @id @default(uuid()) @db.Uuid
   tenantId      String                @db.Uuid
   contractId    String                @db.Uuid
-  workflowId    String                @db.Uuid
+  /// Trống khi người có quyền tự phê duyệt duyệt ngay (không qua quy trình).
+  workflowId    String?               @db.Uuid
   workflowName  String
   status        ApprovalRequestStatus @default(PENDING)
   currentStep   Int                   @default(1)
@@ -739,7 +740,7 @@ model ApprovalRequest {
   submittedAt   DateTime              @default(now())
   completedAt   DateTime?
   contract      Contract              @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  workflow      ApprovalWorkflow      @relation(fields: [workflowId], references: [id])
+  workflow      ApprovalWorkflow?     @relation(fields: [workflowId], references: [id])
   submittedBy   User                  @relation(fields: [submittedById], references: [id])
   tasks         ApprovalTask[]
 

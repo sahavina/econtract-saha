@@ -402,6 +402,85 @@ export class ApprovalsService {
     });
   }
 
+  /**
+   * Người có quyền "Tự phê duyệt hợp đồng" duyệt ngay hợp đồng Nháp, không qua quy trình.
+   * Vẫn kiểm tra đủ điều kiện như khi gửi duyệt; ghi một yêu cầu duyệt đã hoàn tất để lịch sử phê duyệt đầy đủ.
+   */
+  async selfApprove(user: AuthUser, contractId: string, input: SubmitInput) {
+    const contract = await this.contracts.get(user, contractId);
+    const issues = await this.validate(contract);
+    if (issues.length) throw new BadRequestException({ message: 'Chưa đủ điều kiện phê duyệt', issues });
+
+    return this.prisma.$transaction(async (tx) => {
+      const moved = await tx.contract.updateMany({
+        where: {
+          id: contractId,
+          tenantId: user.tenantId,
+          status: 'DRAFT',
+          approvalStatus: { in: [...SUBMITTABLE_APPROVAL] as never },
+        },
+        data: { status: 'APPROVED', approvalStatus: 'APPROVED' },
+      });
+      if (moved.count !== 1) throw new ConflictException('Hợp đồng vừa được thay đổi, vui lòng tải lại');
+
+      const now = new Date();
+      const stepName = 'Tự phê duyệt';
+      const step: ResolvedStep = { order: 1, name: stepName, mode: 'ANY', dueHours: null, approvers: [{ id: user.userId, fullName: user.fullName }] };
+      const request = await tx.approvalRequest.create({
+        data: {
+          tenantId: user.tenantId,
+          contractId,
+          workflowId: null,
+          workflowName: stepName,
+          status: 'APPROVED',
+          totalSteps: 1,
+          stepsSnapshot: [step] as unknown as Prisma.InputJsonValue,
+          submittedById: user.userId,
+          submitNote: input.note || null,
+          completedAt: now,
+          tasks: {
+            create: [
+              {
+                tenantId: user.tenantId,
+                stepOrder: 1,
+                stepName,
+                mode: 'ANY',
+                approverId: user.userId,
+                status: 'APPROVED',
+                comment: input.note || null,
+                decidedAt: now,
+              },
+            ],
+          },
+        },
+      });
+      await this.audit.log(
+        user,
+        {
+          action: 'contract.self_approve',
+          entityType: 'contract',
+          entityId: contractId,
+          data: { code: contract.code, note: input.note },
+        },
+        tx,
+      );
+      if (contract.ownerId && contract.ownerId !== user.userId) {
+        await this.notifications.notify(
+          user.tenantId,
+          [contract.ownerId],
+          {
+            type: 'approval.result',
+            title: `Hợp đồng ${contract.code} đã được phê duyệt`,
+            body: `${user.fullName} tự phê duyệt${input.note ? `: ${input.note}` : ''}`,
+            link: `/contracts/${contractId}?tab=approval`,
+          },
+          tx,
+        );
+      }
+      return request;
+    });
+  }
+
   // ───────────────────────── Tra cứu ─────────────────────────
 
   async history(user: AuthUser, contractId: string) {

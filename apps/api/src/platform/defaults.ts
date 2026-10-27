@@ -70,6 +70,7 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
     permissions: [
       P.DASHBOARD_VIEW,
       P.CONTRACT_VIEW_ALL,
+      P.CONTRACT_SELF_APPROVE,
       P.CONTRACT_EXPORT,
       P.PARTNER_VIEW,
       P.TEMPLATE_VIEW,

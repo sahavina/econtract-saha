@@ -48,6 +48,17 @@ export class ApprovalsController {
     return this.approvals.submit(user, id, body);
   }
 
+  /** Duyệt ngay không qua quy trình – chỉ vai trò có quyền "Tự phê duyệt hợp đồng". */
+  @Post('contracts/:id/approval/self-approve')
+  @RequirePermissions(PERMISSIONS.CONTRACT_SELF_APPROVE)
+  selfApprove(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(submitSchema)) body: SubmitInput,
+  ) {
+    return this.approvals.selfApprove(user, id, body);
+  }
+
   /** Quyền thực tế được kiểm tra theo nhiệm vụ được giao cho người dùng. */
   @Post('contracts/:id/approval/decide')
   @HttpCode(200)
