@@ -403,11 +403,13 @@ export class ApprovalsService {
   }
 
   /**
-   * Người có quyền "Tự phê duyệt hợp đồng" duyệt ngay hợp đồng Nháp, không qua quy trình.
-   * Vẫn kiểm tra đủ điều kiện như khi gửi duyệt; ghi một yêu cầu duyệt đã hoàn tất để lịch sử phê duyệt đầy đủ.
+   * Người có quyền "Tự phê duyệt hợp đồng" duyệt ngay, không qua (hoặc không chờ hết) quy trình:
+   * - Hợp đồng Nháp: kiểm tra đủ điều kiện như khi gửi duyệt, ghi một yêu cầu duyệt đã hoàn tất.
+   * - Hợp đồng đang chờ phê duyệt: hoàn tất yêu cầu đang chờ, các bước còn lại được bỏ qua.
    */
   async selfApprove(user: AuthUser, contractId: string, input: SubmitInput) {
     const contract = await this.contracts.get(user, contractId);
+    if (contract.status === 'PENDING_APPROVAL') return this.approveNow(user, contract, input);
     const issues = await this.validate(contract);
     if (issues.length) throw new BadRequestException({ message: 'Chưa đủ điều kiện phê duyệt', issues });
 
@@ -477,6 +479,75 @@ export class ApprovalsService {
           tx,
         );
       }
+      return request;
+    });
+  }
+
+  /** Duyệt ngay yêu cầu đang chờ: nhiệm vụ của chính người duyệt (nếu có) ⇒ Đã duyệt, các nhiệm vụ còn lại ⇒ Bỏ qua. */
+  private async approveNow(user: AuthUser, contract: Contract, input: SubmitInput) {
+    return this.prisma.$transaction(async (tx) => {
+      const request = await tx.approvalRequest.findFirst({
+        where: { contractId: contract.id, tenantId: user.tenantId, status: 'PENDING' },
+        orderBy: { submittedAt: 'desc' },
+      });
+      if (!request) throw new BadRequestException('Hợp đồng không có yêu cầu phê duyệt đang chờ');
+      const now = new Date();
+      const comment = input.note || null;
+      const own = await tx.approvalTask.updateMany({
+        where: { requestId: request.id, approverId: user.userId, status: { in: ['PENDING', 'WAITING'] } },
+        data: { status: 'APPROVED', comment, decidedAt: now },
+      });
+      if (own.count === 0) {
+        await tx.approvalTask.create({
+          data: {
+            tenantId: user.tenantId,
+            requestId: request.id,
+            stepOrder: request.currentStep,
+            stepName: 'Phê duyệt ngay',
+            mode: 'ANY',
+            approverId: user.userId,
+            status: 'APPROVED',
+            comment,
+            decidedAt: now,
+          },
+        });
+      }
+      const skipped = await tx.approvalTask.findMany({
+        where: { requestId: request.id, status: { in: ['PENDING', 'WAITING'] } },
+        select: { approverId: true },
+      });
+      await tx.approvalTask.updateMany({
+        where: { requestId: request.id, status: { in: ['PENDING', 'WAITING'] } },
+        data: { status: 'SKIPPED' },
+      });
+      const closed = await tx.approvalRequest.updateMany({
+        where: { id: request.id, status: 'PENDING' },
+        data: { status: 'APPROVED', completedAt: now },
+      });
+      if (closed.count !== 1) throw new ConflictException('Yêu cầu phê duyệt vừa được xử lý, vui lòng tải lại');
+      await tx.contract.update({ where: { id: contract.id }, data: { status: 'APPROVED', approvalStatus: 'APPROVED' } });
+
+      await this.audit.log(
+        user,
+        {
+          action: 'contract.approve_now',
+          entityType: 'contract',
+          entityId: contract.id,
+          data: { code: contract.code, workflow: request.workflowName, step: `${request.currentStep}/${request.totalSteps}`, note: input.note },
+        },
+        tx,
+      );
+      await this.notifications.notify(
+        user.tenantId,
+        [...new Set([request.submittedById, contract.ownerId, ...skipped.map((t) => t.approverId)])].filter((id): id is string => !!id && id !== user.userId),
+        {
+          type: 'approval.result',
+          title: `Hợp đồng ${contract.code} đã được phê duyệt`,
+          body: `${user.fullName} phê duyệt ngay (bỏ qua các bước còn lại)${input.note ? `: ${input.note}` : ''}`,
+          link: `/contracts/${contract.id}?tab=approval`,
+        },
+        tx,
+      );
       return request;
     });
   }

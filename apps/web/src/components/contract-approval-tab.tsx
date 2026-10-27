@@ -167,15 +167,20 @@ function SubmitPanel({ contract }: { contract: ContractDetail }) {
   );
 }
 
-/** Vai trò có quyền "Tự phê duyệt hợp đồng": duyệt ngay, không qua quy trình (vẫn kiểm tra đủ điều kiện như khi gửi duyệt). */
+/**
+ * Vai trò có quyền "Tự phê duyệt hợp đồng": duyệt ngay hợp đồng Nháp (không qua quy trình, vẫn kiểm tra đủ điều kiện)
+ * hoặc hợp đồng đang chờ phê duyệt (các bước còn lại được bỏ qua).
+ */
 function SelfApprovePanel({ contract, onConfirm }: { contract: ContractDetail; onConfirm: (state: ConfirmState) => void }) {
   const qc = useQueryClient();
+  const inWorkflow = contract.status === 'PENDING_APPROVAL';
+  const label = inWorkflow ? 'Phê duyệt ngay' : 'Tự phê duyệt';
   const [note, setNote] = useState('');
   const [issues, setIssues] = useState<string[]>([]);
   const approve = useMutation({
     mutationFn: () => api(`/contracts/${contract.id}/approval/self-approve`, { method: 'POST', body: { note: note || undefined } }),
     onSuccess: () => {
-      toast.success('Đã tự phê duyệt hợp đồng');
+      toast.success('Hợp đồng đã được phê duyệt');
       setIssues([]);
       qc.invalidateQueries({ queryKey: ['contract', contract.id] });
       qc.invalidateQueries({ queryKey: ['contracts'] });
@@ -191,9 +196,14 @@ function SelfApprovePanel({ contract, onConfirm }: { contract: ContractDetail; o
     <Card className="border-emerald-500/50">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <BadgeCheck className="size-4 text-emerald-600" /> Tự phê duyệt
+          <BadgeCheck className="size-4 text-emerald-600" /> {label}
         </CardTitle>
-        <CardDescription>Bạn có quyền duyệt ngay hợp đồng này mà không cần gửi qua quy trình phê duyệt. Việc tự phê duyệt được ghi vào lịch sử và nhật ký.</CardDescription>
+        <CardDescription>
+          {inWorkflow
+            ? 'Bạn có quyền phê duyệt ngay mà không chờ hết các bước của quy trình; các bước còn lại được bỏ qua và người gửi, người duyệt được thông báo.'
+            : 'Bạn có quyền duyệt ngay hợp đồng này mà không cần gửi qua quy trình phê duyệt.'}{' '}
+          Việc phê duyệt được ghi vào lịch sử và nhật ký.
+        </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
         {issues.length > 0 && (
@@ -217,14 +227,16 @@ function SelfApprovePanel({ contract, onConfirm }: { contract: ContractDetail; o
           disabled={approve.isPending}
           onClick={() =>
             onConfirm({
-              title: `Tự phê duyệt hợp đồng ${contract.code}?`,
-              description: 'Hợp đồng chuyển ngay sang Đã phê duyệt, không qua quy trình phê duyệt.',
+              title: `${label} hợp đồng ${contract.code}?`,
+              description: inWorkflow
+                ? 'Hợp đồng chuyển ngay sang Đã phê duyệt; các bước phê duyệt còn lại được bỏ qua.'
+                : 'Hợp đồng chuyển ngay sang Đã phê duyệt, không qua quy trình phê duyệt.',
               confirmLabel: 'Phê duyệt',
               onConfirm: () => approve.mutate(),
             })
           }
         >
-          {approve.isPending ? <Loader2 className="animate-spin" /> : <BadgeCheck />} Tự phê duyệt
+          {approve.isPending ? <Loader2 className="animate-spin" /> : <BadgeCheck />} {label}
         </Button>
       </CardContent>
     </Card>
@@ -306,7 +318,12 @@ export function ContractApprovalTab({ contract }: { contract: ContractDetail }) 
   const myTask = pending?.tasks.find((t) => t.approver.id === user?.id && t.status === 'PENDING' && t.stepOrder === pending.currentStep);
   const canSubmit =
     contract.status === 'DRAFT' && !contract.archivedAt && !contract.deletedAt && can('contract.update');
-  const canSelfApprove = !pending && contract.status === 'DRAFT' && !contract.archivedAt && !contract.deletedAt && can('contract.self_approve');
+  // Nháp chưa gửi, hoặc đang chờ phê duyệt (duyệt ngay, bỏ qua các bước còn lại).
+  const canSelfApprove =
+    can('contract.self_approve') &&
+    !contract.archivedAt &&
+    !contract.deletedAt &&
+    ((contract.status === 'DRAFT' && !pending) || (contract.status === 'PENDING_APPROVAL' && !!pending));
   const canCancel = !!pending && can('contract.update') && (pending.submittedBy.id === user?.id || contract.owner?.id === user?.id);
 
   return (
