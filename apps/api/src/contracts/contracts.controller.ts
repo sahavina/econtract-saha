@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CONTRACT_STATUS_LABELS, PERMISSIONS } from '@saha/shared';
+import { CONTRACT_CATEGORY_SHORT, CONTRACT_STATUS_LABELS, PERMISSIONS } from '@saha/shared';
 import type { Response } from 'express';
 import type { AuthUser } from '../common/auth-user.js';
 import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../common/decorators.js';
@@ -66,6 +66,7 @@ export class ContractsController {
     const header = [
       'Mã hợp đồng',
       'Tên hợp đồng',
+      'Phân loại',
       'Loại',
       'Đối tác',
       'Giá trị',
@@ -82,6 +83,7 @@ export class ContractsController {
       [
         r.code,
         r.title,
+        r.category ? CONTRACT_CATEGORY_SHORT[r.category] : '',
         r.contractType?.name,
         r.parties[0]?.name,
         r.value.toString(),

@@ -352,6 +352,14 @@ model PartnerContact {
 // ───────────────────────────── Hợp đồng ─────────────────────────────
 
 /// Hợp đồng thường hay đơn đặt hàng (đơn dùng chung mẫu, phê duyệt, ký với hợp đồng).
+/// Phân loại hợp đồng theo đối tượng (lọc danh sách: khách hàng / nhà cung cấp / lao động).
+enum ContractCategory {
+  CUSTOMER
+  SUPPLIER
+  LABOR
+  OTHER
+}
+
 enum ContractKind {
   CONTRACT
   ORDER
@@ -417,6 +425,7 @@ model Contract {
   code              String
   title             String
   kind              ContractKind         @default(CONTRACT)
+  category          ContractCategory?
   /// Đơn đặt hàng thuộc hợp đồng nguyên tắc nào.
   parentContractId  String?              @db.Uuid
   parentContract    Contract?            @relation("ContractOrders", fields: [parentContractId], references: [id], onDelete: SetNull)
@@ -473,6 +482,7 @@ model Contract {
 
   @@unique([tenantId, code])
   @@index([tenantId, kind])
+  @@index([tenantId, category])
   @@index([parentContractId])
   @@index([tenantId, status])
   @@index([tenantId, expiryDate])

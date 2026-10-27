@@ -22,8 +22,8 @@ function isActive(href: string, pathname: string, search: URLSearchParams) {
   const [path, qs] = href.split('?');
   if (path !== pathname) return false;
   const want = new URLSearchParams(qs ?? '');
-  // Mục không có query chỉ active khi URL không có view/type/from.
-  if (!qs) return !search.get('view') && !search.get('type') && !search.get('from');
+  // Mục không có query chỉ active khi URL không có view/type/from/category.
+  if (!qs) return !search.get('view') && !search.get('type') && !search.get('from') && !search.get('category');
   return [...want.entries()].every(([k, v]) => search.get(k) === v);
 }
 

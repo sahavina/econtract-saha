@@ -2,6 +2,8 @@
 
 import {
   buildTemplateValues,
+  CONTRACT_CATEGORIES,
+  CONTRACT_CATEGORY_LABELS,
   DEFAULT_ORDER_HTML,
   type DocBlock,
   extractContractFields,
@@ -99,6 +101,7 @@ const schema = z
     templateId: z.string(),
     title: z.string().trim().min(1, 'Vui lòng nhập tên hợp đồng').max(500),
     contractTypeId: z.string(),
+    category: z.string(),
     group: z.string(),
     description: z.string(),
     value: z.string().regex(/^\d{1,18}(\.\d{1,2})?$/, 'Giá trị không hợp lệ'),
@@ -148,7 +151,7 @@ const decimalInput = (v: string) => String(Number(v));
 function toForm(c?: ContractDetail, parentContractId = ''): FormValues {
   if (!c) {
     return {
-      code: '', templateId: '', title: '', contractTypeId: '', group: '', description: '', value: '0', currency: 'VND', vatRate: '',
+      code: '', templateId: '', title: '', contractTypeId: '', category: '', group: '', description: '', value: '0', currency: 'VND', vatRate: '',
       expectedSignDate: '', effectiveDate: '', expiryDate: '', departmentId: '', ownerId: '', confidentiality: 'INTERNAL',
       tags: '', note: '', parties: [emptyParty('PARTY_A'), emptyParty('PARTY_B')],
       parentContractId, deliveryDate: '', deliveryAddress: '', paymentTerms: '', items: [],
@@ -171,6 +174,7 @@ function toForm(c?: ContractDetail, parentContractId = ''): FormValues {
     templateId: c.template?.id ?? '',
     title: c.title,
     contractTypeId: c.contractTypeId ?? '',
+    category: c.category ?? '',
     group: c.group ?? '',
     description: c.description ?? '',
     value: String(Number(c.value)),
@@ -227,6 +231,8 @@ function toPayload(v: FormValues, isEdit: boolean, kind: ContractKind) {
     ...order,
     title: v.title,
     contractTypeId: nul(v.contractTypeId),
+    // Đơn đặt hàng luôn là hợp đồng khách hàng (máy chủ tự gán khi tạo).
+    ...(kind !== 'ORDER' && { category: nul(v.category) }),
     group: nul(v.group),
     description: nul(v.description),
     value: v.value,
@@ -808,6 +814,24 @@ export function ContractForm({
               )}
             />
           </Field>
+          {!isOrder && (
+            <Field label="Phân loại hợp đồng">
+              <Controller
+                control={control}
+                name="category"
+                render={({ field }) => (
+                  <FilterSelect
+                    className="w-full"
+                    allLabel="— Tự nhận theo đối tác —"
+                    value={field.value || undefined}
+                    onChange={(v) => field.onChange(v ?? '')}
+                    options={CONTRACT_CATEGORIES.map((c) => ({ value: c, label: CONTRACT_CATEGORY_LABELS[c] }))}
+                    ariaLabel="Phân loại hợp đồng"
+                  />
+                )}
+              />
+            </Field>
+          )}
           {!isOrder && (
             <Field label="Nhóm hợp đồng">
               <Input {...register('group')} />

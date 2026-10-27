@@ -1,4 +1,4 @@
-import { CONTRACT_STATUSES } from '@saha/shared';
+import { CONTRACT_CATEGORIES, CONTRACT_STATUSES } from '@saha/shared';
 import { z } from 'zod';
 import { optionalString, paginationSchema } from '../common/pagination.js';
 
@@ -52,6 +52,8 @@ const contractBase = z.object({
   code: z.preprocess(emptyToNull, z.string().trim().max(60).nullable().optional()),
   title: z.string().trim().min(1, 'Vui lòng nhập tên hợp đồng').max(500),
   contractTypeId: nullableUuid,
+  // Để trống khi tạo ⇒ máy chủ tự suy từ loại hợp đồng/đối tác.
+  category: z.preprocess(emptyToNull, z.enum(CONTRACT_CATEGORIES).nullable().optional()),
   group: nullableText(100),
   description: nullableText(5000),
   value: money,
@@ -135,6 +137,8 @@ export const contractQuerySchema = paginationSchema.extend({
   q: optionalString,
   status: z.preprocess((v) => (v === '' ? undefined : v), z.enum(CONTRACT_STATUSES).optional()),
   contractTypeId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
+  /** NONE = chưa phân loại. */
+  category: z.preprocess((v) => (v === '' ? undefined : v), z.enum([...CONTRACT_CATEGORIES, 'NONE']).optional()),
   departmentId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
   ownerId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
   partnerId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),

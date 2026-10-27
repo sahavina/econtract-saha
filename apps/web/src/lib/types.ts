@@ -1,4 +1,4 @@
-import type { ContractStatus, PartnerType, Permission } from '@saha/shared';
+import type { ContractCategory, ContractStatus, PartnerType, Permission } from '@saha/shared';
 
 export interface Me {
   id: string;
@@ -42,6 +42,7 @@ export interface ContractListItem {
   code: string;
   title: string;
   kind: ContractKind;
+  category: ContractCategory | null;
   vatRate: string | null;
   deliveryDate: string | null;
   parentContract: { id: string; code: string } | null;

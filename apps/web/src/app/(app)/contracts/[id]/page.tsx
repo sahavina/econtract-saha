@@ -1,5 +1,6 @@
 'use client';
 
+import { CONTRACT_CATEGORY_LABELS } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, Copy, FileX2, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
@@ -199,7 +200,10 @@ export default function ContractDetailPage() {
                     )}
                   </Info>
                 ) : (
-                  <Info label="Nhóm hợp đồng">{c.group}</Info>
+                  <>
+                    <Info label="Phân loại">{c.category ? CONTRACT_CATEGORY_LABELS[c.category] : 'Chưa phân loại'}</Info>
+                    <Info label="Nhóm hợp đồng">{c.group}</Info>
+                  </>
                 )}
                 <Info label="Phòng ban">{c.department?.name}</Info>
                 <Info label="Người phụ trách">{c.owner?.fullName}</Info>

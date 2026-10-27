@@ -1,6 +1,6 @@
 'use client';
 
-import { CONTRACT_STATUS_LABELS, CONTRACT_STATUSES, type ContractStatus } from '@saha/shared';
+import { CONTRACT_CATEGORIES, CONTRACT_CATEGORY_LABELS, CONTRACT_CATEGORY_SHORT, type ContractCategory, CONTRACT_STATUS_LABELS, CONTRACT_STATUSES, type ContractStatus } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type ColumnDef,
@@ -35,6 +35,7 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -103,6 +104,7 @@ export default function ContractsPage() {
     q: params.get('q') ?? undefined,
     status: params.get('status') ?? undefined,
     contractTypeId: params.get('contractTypeId') ?? undefined,
+    category: params.get('category') ?? undefined,
     departmentId: params.get('departmentId') ?? undefined,
     sort: params.get('sort') ?? 'createdAt',
     order: (params.get('order') ?? 'desc') as 'asc' | 'desc',
@@ -298,6 +300,7 @@ export default function ContractsPage() {
       },
       { id: 'code', header: 'Mã hợp đồng', enableHiding: false, cell: ({ row }) => <Link href={`/contracts/${row.original.id}`} className="font-medium whitespace-nowrap text-primary hover:underline">{row.original.code}</Link> },
       { id: 'title', header: 'Tên hợp đồng', enableHiding: false, cell: ({ row }) => <span className="line-clamp-2 min-w-48">{row.original.title}</span> },
+      { id: 'category', header: 'Phân loại', cell: ({ row }) => (row.original.category ? <Badge variant="outline" className="whitespace-nowrap">{CONTRACT_CATEGORY_SHORT[row.original.category]}</Badge> : <span className="text-muted-foreground">—</span>) },
       { id: 'type', header: 'Loại hợp đồng', cell: ({ row }) => row.original.contractType?.name ?? '—' },
       { id: 'partner', header: 'Đối tác', cell: ({ row }) => row.original.parties[0]?.name ?? '—' },
       { id: 'value', header: 'Giá trị', cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{formatMoney(row.original.value, row.original.currency)}</span> },
@@ -347,7 +350,11 @@ export default function ContractsPage() {
   });
 
   const selectedIds = Object.keys(rowSelection).filter((k) => rowSelection[k]);
-  const viewLabel = VIEWS.find((v) => v.value === view)?.label ?? 'Hợp đồng';
+  const viewName = VIEWS.find((v) => v.value === view)?.label ?? 'Hợp đồng';
+  // Lọc theo phân loại ⇒ tiêu đề nêu rõ loại hợp đồng (vd "Hợp đồng nhà cung cấp", "Hợp đồng nhà cung cấp · Hợp đồng nháp").
+  const categoryName =
+    query.category === 'NONE' ? 'Hợp đồng chưa phân loại' : query.category ? CONTRACT_CATEGORY_LABELS[query.category as ContractCategory] : undefined;
+  const viewLabel = categoryName ? (view === 'all' ? categoryName : `${categoryName} · ${viewName}`) : viewName;
   const data = list.data;
 
   return (
@@ -377,6 +384,7 @@ export default function ContractsPage() {
         <FilterSelect allLabel="Tất cả hợp đồng" className="w-48" value={view === 'all' ? undefined : view} onChange={(v) => setParams({ view: v })} options={VIEWS.filter((v) => v.value !== 'all').map((v) => ({ value: v.value, label: v.label }))} ariaLabel="Nhóm hợp đồng" />
         <Input className="w-64" placeholder="Tìm mã, tên, đối tác, tag…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm kiếm" />
         <FilterSelect allLabel="Mọi trạng thái" value={query.status} onChange={(v) => setParams({ status: v })} options={CONTRACT_STATUSES.map((s) => ({ value: s, label: CONTRACT_STATUS_LABELS[s] }))} />
+        <FilterSelect allLabel="Mọi phân loại hợp đồng" className="w-56" value={query.category} onChange={(v) => setParams({ category: v })} options={[...CONTRACT_CATEGORIES.map((c) => ({ value: c, label: CONTRACT_CATEGORY_LABELS[c] })), { value: 'NONE', label: 'Hợp đồng chưa phân loại' }]} ariaLabel="Phân loại hợp đồng" />
         <FilterSelect allLabel="Mọi loại HĐ" value={query.contractTypeId} onChange={(v) => setParams({ contractTypeId: v })} options={(lookups.data?.contractTypes ?? []).map((t) => ({ value: t.id, label: t.name }))} />
         <FilterSelect allLabel="Mọi phòng ban" value={query.departmentId} onChange={(v) => setParams({ departmentId: v })} options={(lookups.data?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} />
         <div className="ml-auto flex items-center gap-2">

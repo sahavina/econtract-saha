@@ -70,6 +70,9 @@ export const NAV: NavGroup[] = [
     label: 'Quản lý hợp đồng',
     items: [
       { title: 'Tất cả hợp đồng', icon: FileText, href: '/contracts', permissions: VIEW_CONTRACT },
+      { title: 'HĐ khách hàng', icon: Handshake, href: '/contracts?category=CUSTOMER', permissions: VIEW_CONTRACT },
+      { title: 'HĐ nhà cung cấp', icon: Building2, href: '/contracts?category=SUPPLIER', permissions: VIEW_CONTRACT },
+      { title: 'HĐ lao động', icon: Users, href: '/contracts?category=LABOR', permissions: VIEW_CONTRACT },
       { title: 'Hợp đồng của tôi', icon: FileText, href: '/contracts?view=mine', permissions: VIEW_CONTRACT },
       { title: 'Hợp đồng nháp', icon: FilePen, href: '/contracts?view=draft', permissions: VIEW_CONTRACT },
       { title: 'Chờ phê duyệt', icon: Hourglass, href: '/contracts?view=pending_approval', permissions: VIEW_CONTRACT },

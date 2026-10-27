@@ -6,7 +6,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { DEFAULT_ORDER_HTML, deliveredValue, EXPIRING_SOON_DAYS, fromScaled, itemAmount, orderFulfillment, orderTotals, PERMISSIONS, toScaled } from '@saha/shared';
+import { DEFAULT_ORDER_HTML, deliveredValue, EXPIRING_SOON_DAYS, fromScaled, inferContractCategory, itemAmount, orderFulfillment, orderTotals, PERMISSIONS, toScaled } from '@saha/shared';
 import { Prisma } from '../generated/prisma/client.js';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
@@ -50,6 +50,7 @@ const listSelect = {
   code: true,
   title: true,
   kind: true,
+  category: true,
   vatRate: true,
   deliveryDate: true,
   parentContract: { select: { id: true, code: true } },
@@ -147,6 +148,7 @@ export class ContractsService {
     if (q.parentContractId) and.push({ parentContractId: q.parentContractId });
     if (q.status) and.push({ status: q.status });
     if (q.contractTypeId) and.push({ contractTypeId: q.contractTypeId });
+    if (q.category) and.push({ category: q.category === 'NONE' ? null : q.category });
     if (q.departmentId) and.push({ departmentId: q.departmentId });
     if (q.ownerId) and.push({ ownerId: q.ownerId });
     if (q.partnerId) and.push({ parties: { some: { partnerId: q.partnerId } } });
@@ -245,6 +247,7 @@ export class ContractsService {
               }),
               tenantId: user.tenantId,
               kind,
+              category: input.category ?? (await this.inferCategory(tx, kind, refs.type?.name, parties)),
               code,
               title: input.title,
               createdById: user.userId,
@@ -660,6 +663,7 @@ export class ContractsService {
   private mapScalars(input: Omit<ContractUpdate, 'code'>) {
     return {
       contractTypeId: input.contractTypeId,
+      category: input.category,
       group: input.group,
       description: input.description,
       value: input.value,
@@ -752,6 +756,14 @@ export class ContractsService {
     }
     const money = (n: bigint) => fromScaled(n, 2);
     return { count: rows.length, signed, value: money(value), deliveredValue: money(delivered), remainingValue: money(value - delivered), byFulfillment };
+  }
+
+  /** Phân loại khi người dùng để trống: theo loại đơn/loại hợp đồng, rồi theo phân loại đối tác đã liên kết trong danh mục. */
+  private async inferCategory(tx: Prisma.TransactionClient, kind: string, typeName: string | undefined, parties: { partnerId?: string | null; isInternal: boolean }[]) {
+    const ids = parties.filter((p) => !p.isInternal && p.partnerId).map((p) => p.partnerId!);
+    const partners = ids.length ? await tx.partner.findMany({ where: { id: { in: ids } }, select: { id: true, type: true } }) : [];
+    const typeOf = new Map(partners.map((p) => [p.id, p.type]));
+    return inferContractCategory({ kind, typeName, partyTypes: ids.map((id) => typeOf.get(id)) });
   }
 
   private mapParty(p: PartyInput, index: number) {
