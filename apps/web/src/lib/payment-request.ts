@@ -187,11 +187,14 @@ export async function openPaymentRequestPdf(r: PaymentRequest) {
 /**
  * Kiểu cho file Word: Times New Roman cho mọi phần tử và các kiểu chuẩn của Word (Normal, Table) –
  * Word không cho ô bảng thừa hưởng font của body nên phải khai báo riêng, nếu không bảng sẽ về font mặc định (Calibri).
+ * Đoạn văn từ mẫu không có lề riêng ⇒ đặt lề nhỏ (Word mặc định cách đoạn ~14pt); bảng rộng hết trang.
  */
 const WORD_STYLES = `@page{size:21cm 29.7cm;margin:1.8cm 1.8cm 1.8cm 2.5cm}
 body,div,p,span,b,strong,i,em,u,li,ol,ul,table,tr,td,th,h1,h2,h3,h4,h5,h6,p.MsoNormal,li.MsoNormal,div.MsoNormal,table.MsoNormalTable{font-family:"Times New Roman",serif;mso-ascii-font-family:"Times New Roman";mso-hansi-font-family:"Times New Roman";mso-bidi-font-family:"Times New Roman";mso-fareast-font-family:"Times New Roman"}
 body,p,td,th,li{font-size:13pt}
-table{border-collapse:collapse}
+p{margin:0 0 6pt;line-height:1.35}
+td p,th p{margin:0 0 2pt}
+table{border-collapse:collapse;width:100%}
 td,th{border:1px solid #000;padding:2pt 4pt;vertical-align:top}
 table.borderless td,table.borderless th{border:none}`;
 
