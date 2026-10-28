@@ -184,10 +184,21 @@ export async function openPaymentRequestPdf(r: PaymentRequest) {
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
 }
 
+/**
+ * Kiểu cho file Word: Times New Roman cho mọi phần tử và các kiểu chuẩn của Word (Normal, Table) –
+ * Word không cho ô bảng thừa hưởng font của body nên phải khai báo riêng, nếu không bảng sẽ về font mặc định (Calibri).
+ */
+const WORD_STYLES = `@page{size:21cm 29.7cm;margin:1.8cm 1.8cm 1.8cm 2.5cm}
+body,div,p,span,b,strong,i,em,u,li,ol,ul,table,tr,td,th,h1,h2,h3,h4,h5,h6,p.MsoNormal,li.MsoNormal,div.MsoNormal,table.MsoNormalTable{font-family:"Times New Roman",serif;mso-ascii-font-family:"Times New Roman";mso-hansi-font-family:"Times New Roman";mso-bidi-font-family:"Times New Roman";mso-fareast-font-family:"Times New Roman"}
+body,p,td,th,li{font-size:13pt}
+table{border-collapse:collapse}
+td,th{border:1px solid #000;padding:2pt 4pt;vertical-align:top}
+table.borderless td,table.borderless th{border:none}`;
+
 /** Word mở được tệp HTML đặt đuôi .doc – giữ bố cục để người dùng chỉnh tiếp. */
 export function downloadPaymentRequestWord(r: PaymentRequest, bodyHtml = paymentRequestHtml(r)) {
-  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><title>Đề nghị thanh toán</title>
-<style>@page{size:21cm 29.7cm;margin:1.8cm 1.8cm 1.8cm 2.5cm}body{font-family:'Times New Roman',serif;font-size:13pt}</style></head><body>${bodyHtml}</body></html>`;
+  const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><meta name="ProgId" content="Word.Document"><title>Đề nghị thanh toán</title>
+<style>${WORD_STYLES}</style></head><body lang="VI">${bodyHtml}</body></html>`;
   const url = URL.createObjectURL(new Blob(['﻿', html], { type: 'application/msword' }));
   const a = document.createElement('a');
   a.href = url;
