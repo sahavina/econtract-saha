@@ -21,6 +21,7 @@ export const PERMISSIONS = {
   PARTNER_MANAGE: 'partner.manage',
 
   PRODUCT_MANAGE: 'product.manage',
+  DELIVERY_MANAGE: 'delivery.manage',
 
   TEMPLATE_VIEW: 'template.view',
   TEMPLATE_MANAGE: 'template.manage',
@@ -56,6 +57,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'partner.view': 'Xem đối tác',
   'partner.manage': 'Quản lý đối tác',
   'product.manage': 'Quản lý danh mục sản phẩm (đơn đặt hàng)',
+  'delivery.manage': 'Lập phiếu xuất kho, phiếu gửi hàng',
   'template.view': 'Xem mẫu hợp đồng, điều khoản',
   'template.manage': 'Quản lý mẫu hợp đồng, điều khoản',
   'clause.approve': 'Phê duyệt điều khoản',

@@ -192,6 +192,8 @@ model User {
   sessions            Session[]
   ownedContracts      Contract[]                @relation("ContractOwner")
   createdContracts    Contract[]                @relation("ContractCreator")
+  stockIssues         StockIssue[]
+  shippingNotes       ShippingNote[]
   uploadedDocuments   ContractDocument[]
   createdTemplates    ContractTemplate[]        @relation("TemplateCreator")
   templateVersions    ContractTemplateVersion[]
@@ -434,6 +436,8 @@ model Contract {
   deliveryAddress   String?
   paymentTerms      String?
   items             ContractItem[]
+  stockIssues       StockIssue[]
+  shippingNotes     ShippingNote[]
   contractTypeId    String?              @db.Uuid
   group             String?
   description       String?
@@ -1163,6 +1167,7 @@ model Product {
   updatedAt   DateTime       @updatedAt
   tenant      Tenant         @relation(fields: [tenantId], references: [id])
   items       ContractItem[]
+  issueItems  StockIssueItem[]
 
   @@unique([tenantId, code])
 }
@@ -1187,4 +1192,116 @@ model ContractItem {
 
   @@index([contractId])
   @@index([tenantId, productId])
+}
+
+// ───────────────────────────── Kho & giao hàng ─────────────────────────────
+
+enum StockIssueStatus {
+  ISSUED
+  CANCELLED
+}
+
+/// Phiếu xuất kho (mẫu 02-VT). Gắn đơn đặt hàng ⇒ cộng số lượng thực xuất vào "đã giao" của dòng hàng; hủy phiếu ⇒ trừ lại.
+model StockIssue {
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @db.Uuid
+  code             String
+  issueDate        DateTime         @db.Date
+  orderId          String?          @db.Uuid
+  receiverName     String
+  receiverUnit     String?
+  receiverAddress  String?
+  reason           String?
+  warehouse        String?
+  warehouseAddress String?
+  debitAccount     String?
+  creditAccount    String?
+  attachments      String?
+  note             String?
+  status           StockIssueStatus @default(ISSUED)
+  totalAmount      Decimal          @default(0) @db.Decimal(20, 2)
+  cancelledAt      DateTime?
+  cancelReason     String?
+  createdById      String           @db.Uuid
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  order            Contract?        @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdBy        User             @relation(fields: [createdById], references: [id])
+  items            StockIssueItem[]
+  shippingNotes    ShippingNote[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, issueDate])
+  @@index([orderId])
+}
+
+model StockIssueItem {
+  id           String     @id @default(uuid()) @db.Uuid
+  stockIssueId String     @db.Uuid
+  sortOrder    Int        @default(0)
+  productId    String?    @db.Uuid
+  /// Dòng hàng của đơn (không ràng buộc khóa ngoại vì sửa đơn tạo lại dòng hàng).
+  orderItemId  String?    @db.Uuid
+  code         String?
+  name         String
+  unit         String?
+  requestedQty Decimal    @db.Decimal(18, 3)
+  quantity     Decimal    @db.Decimal(18, 3)
+  unitPrice    Decimal    @default(0) @db.Decimal(20, 2)
+  amount       Decimal    @default(0) @db.Decimal(20, 2)
+  stockIssue   StockIssue @relation(fields: [stockIssueId], references: [id], onDelete: Cascade)
+  product      Product?   @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([stockIssueId])
+}
+
+enum ShippingNoteStatus {
+  DRAFT
+  SENT
+  DELIVERED
+  CANCELLED
+}
+
+/// Phiếu gửi hàng (dán thùng gửi chành xe) đã lưu: nội dung phiếu + theo dõi chành xe.
+model ShippingNote {
+  id            String             @id @default(uuid()) @db.Uuid
+  tenantId      String             @db.Uuid
+  code          String
+  sendDate      DateTime           @db.Date
+  stockIssueId  String?            @db.Uuid
+  orderId       String?            @db.Uuid
+  fromContact   String?
+  fromPhone     String?
+  fromCompany   String?
+  fromAddress   String?
+  warning       String?
+  toCompany     String
+  toContact     String?
+  toAddress     String
+  toPhones      String?
+  footNote      String?
+  boxes         Int                @default(1)
+  showBoxNumber Boolean            @default(true)
+  layout        String             @default("A4")
+  carrier       String?
+  carrierPhone  String?
+  vehicle       String?
+  trackingNo    String?
+  freight       Decimal?           @db.Decimal(20, 2)
+  freightPayer  String?
+  status        ShippingNoteStatus @default(DRAFT)
+  sentAt        DateTime?
+  deliveredAt   DateTime?
+  note          String?
+  createdById   String             @db.Uuid
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+  stockIssue    StockIssue?        @relation(fields: [stockIssueId], references: [id], onDelete: SetNull)
+  order         Contract?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdBy     User               @relation(fields: [createdById], references: [id])
+
+  @@unique([tenantId, code])
+  @@index([tenantId, sendDate])
+  @@index([tenantId, status])
+  @@index([orderId])
 }

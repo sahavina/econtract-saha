@@ -664,3 +664,89 @@ export interface OrderSummary {
   remainingValue: string;
   byFulfillment: { NONE: number; PARTIAL: number; DONE: number };
 }
+
+// ───────── Kho & giao hàng ─────────
+
+export type StockIssueStatus = 'ISSUED' | 'CANCELLED';
+
+export interface StockIssueListItem {
+  id: string;
+  code: string;
+  issueDate: string;
+  receiverName: string;
+  receiverUnit: string | null;
+  reason: string | null;
+  warehouse: string | null;
+  status: StockIssueStatus;
+  totalAmount: string;
+  createdAt: string;
+  order: { id: string; code: string } | null;
+  createdBy: { id: string; fullName: string };
+  _count: { items: number; shippingNotes: number };
+}
+
+export interface StockIssueItem {
+  id: string;
+  productId: string | null;
+  orderItemId: string | null;
+  code: string | null;
+  name: string;
+  unit: string | null;
+  requestedQty: string;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+}
+
+export interface StockIssueDetail extends Omit<StockIssueListItem, 'order' | '_count'> {
+  orderId: string | null;
+  receiverAddress: string | null;
+  warehouseAddress: string | null;
+  debitAccount: string | null;
+  creditAccount: string | null;
+  attachments: string | null;
+  note: string | null;
+  cancelledAt: string | null;
+  cancelReason: string | null;
+  items: StockIssueItem[];
+  order: { id: string; code: string; title: string } | null;
+  shippingNotes: { id: string; code: string; status: import('@saha/shared').ShippingNoteStatus; sendDate: string }[];
+}
+
+export interface ShippingNoteListItem {
+  id: string;
+  code: string;
+  sendDate: string;
+  toCompany: string;
+  toAddress: string;
+  toPhones: string | null;
+  boxes: number;
+  carrier: string | null;
+  vehicle: string | null;
+  trackingNo: string | null;
+  freight: string | null;
+  status: import('@saha/shared').ShippingNoteStatus;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  createdAt: string;
+  order: { id: string; code: string } | null;
+  stockIssue: { id: string; code: string } | null;
+  createdBy: { id: string; fullName: string };
+}
+
+export interface ShippingNoteDetail extends ShippingNoteListItem {
+  orderId: string | null;
+  stockIssueId: string | null;
+  fromContact: string | null;
+  fromPhone: string | null;
+  fromCompany: string | null;
+  fromAddress: string | null;
+  warning: string | null;
+  toContact: string | null;
+  footNote: string | null;
+  showBoxNumber: boolean;
+  layout: 'A4' | 'A5x2';
+  carrierPhone: string | null;
+  freightPayer: import('@saha/shared').FreightPayer | null;
+  note: string | null;
+}

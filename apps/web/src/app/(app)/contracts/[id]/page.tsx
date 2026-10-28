@@ -2,7 +2,7 @@
 
 import { CONTRACT_CATEGORY_LABELS } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Copy, FileX2, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
+import { Archive, ArchiveRestore, Copy, FileX2, PackageMinus, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -14,6 +14,7 @@ import { ContractDocumentsTab } from '@/components/contract-documents-tab';
 import { ContractFeedbackTab, useContractFeedback } from '@/components/contract-feedback-tab';
 import { ContractLifecycleTab } from '@/components/contract-lifecycle-tab';
 import { ContractOrdersTab, OrderItemsTab } from '@/components/contract-orders';
+import { OrderDeliveries } from '@/components/order-deliveries';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
@@ -109,9 +110,16 @@ export default function ContractDetailPage() {
                   <Receipt /> Đề nghị thanh toán
                 </Link>
               </Button>
+              {isOrder && can('delivery.manage') && (
+                <Button variant="outline" asChild>
+                  <Link href={`/stock-issues/new?order=${c.id}`}>
+                    <PackageMinus /> Lập phiếu xuất kho
+                  </Link>
+                </Button>
+              )}
               {isOrder && (
                 <Button variant="outline" asChild>
-                  <Link href={`/shipping-labels?order=${c.id}`}>
+                  <Link href={`/shipping-labels/new?order=${c.id}`}>
                     <Truck /> In phiếu gửi hàng
                   </Link>
                 </Button>
@@ -247,6 +255,7 @@ export default function ContractDetailPage() {
           <TabsContent value="items" className="mt-4">
             {/* key: dữ liệu giao hàng đổi (sau khi lưu) thì khởi tạo lại ô nhập. */}
             <OrderItemsTab key={c.items.map((i) => `${i.id}:${i.deliveredQty}`).join('|')} order={c} />
+            <OrderDeliveries orderId={c.id} />
           </TabsContent>
         )}
         {!isOrder && (

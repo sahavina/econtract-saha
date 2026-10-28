@@ -7,3 +7,4 @@ export * from './contract-code.js';
 export * from './contract-extract.js';
 export * from './order.js';
 export * from './order-extract.js';
+export * from './delivery.js';

@@ -23,6 +23,7 @@ import { LifecycleModule } from './lifecycle/lifecycle.module.js';
 import { MailModule } from './mail/mail.module.js';
 import { NotificationsModule } from './notifications/notifications.module.js';
 import { PartnersModule } from './partners/partners.module.js';
+import { DeliveriesModule } from './deliveries/deliveries.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { PlatformModule } from './platform/platform.module.js';
 import { PrismaModule } from './prisma/prisma.module.js';
@@ -46,6 +47,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     AuthModule,
     PartnersModule,
     ProductsModule,
+    DeliveriesModule,
     ContractsModule,
     ContractShareModule,
     DashboardModule,
