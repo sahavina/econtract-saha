@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { TEMPLATE_STATUS_LABELS } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Eye, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -14,6 +14,7 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { TemplateStatusBadge } from '@/components/status-badge';
+import { TemplatePreviewDialog } from '@/components/template-preview-dialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -120,6 +121,7 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
   const [contractTypeId, setContractTypeId] = useState<string | undefined>();
   const [creating, setCreating] = useState(false);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [previewId, setPreviewId] = useState<string | null>(null);
   const manage = can('template.manage');
   const remove = useMutation({
     mutationFn: (t: TemplateListItem) => api<undefined>(`/templates/${t.id}`, { method: 'DELETE' }),
@@ -178,19 +180,19 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
                 <TableHead>Phòng ban được dùng</TableHead>
                 <TableHead className="text-right">Đã dùng</TableHead>
                 <TableHead>Cập nhật</TableHead>
-                {manage && <TableHead className="text-right">Thao tác</TableHead>}
+                <TableHead className="text-right">Thao tác</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {list.isPending ? (
                 <TableRow>
-                  <TableCell colSpan={manage ? 9 : 8}>
+                  <TableCell colSpan={9}>
                     <Skeleton className="h-24" />
                   </TableCell>
                 </TableRow>
               ) : !list.data.items.length ? (
                 <TableRow>
-                  <TableCell colSpan={manage ? 9 : 8} className="p-4">
+                  <TableCell colSpan={9} className="p-4">
                     <EmptyState title={`Chưa có ${text.noun}`} />
                   </TableCell>
                 </TableRow>
@@ -211,9 +213,13 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
                     <TableCell className="text-sm">{t.departmentIds.length ? t.departmentIds.map(deptName).join(', ') : 'Tất cả'}</TableCell>
                     <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
                     <TableCell className="whitespace-nowrap">{formatDateTime(t.updatedAt)}</TableCell>
+                    <TableCell>
+                      <div className="flex justify-end gap-1">
+                        <Button variant="ghost" size="icon-sm" aria-label={`Xem trước mẫu ${t.code}`} title="Xem trước với dữ liệu mẫu" onClick={() => setPreviewId(t.id)}>
+                          <Eye />
+                        </Button>
                     {manage && (
-                      <TableCell>
-                        <div className="flex justify-end gap-1">
+                        <>
                           {t.status !== 'ARCHIVED' && (
                             <Button variant="ghost" size="icon-sm" asChild aria-label={`Sửa mẫu ${t.code}`} title="Sửa nội dung, thông tin mẫu">
                               <Link href={`/templates/${t.id}`}>
@@ -240,9 +246,10 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
                           >
                             <Trash2 />
                           </Button>
-                        </div>
-                      </TableCell>
+                        </>
                     )}
+                      </div>
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -251,6 +258,7 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
         </div>
       )}
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+      {previewId && <TemplatePreviewDialog templateId={previewId} kind={kind} open onClose={() => setPreviewId(null)} />}
       <CreateTemplateDialog open={creating} onClose={() => setCreating(false)} kind={kind} contractTypeId={kind === 'ORDER' ? kindTypes[0]?.id : undefined} />
     </>
   );

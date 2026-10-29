@@ -25,6 +25,7 @@ import { formatDateTime } from '@/lib/format';
 import { useLookups } from '@/lib/queries';
 import type { TemplateDetail } from '@/lib/types';
 import { templateDeleteNote } from '@/components/template-list';
+import { TemplatePreviewDialog } from '@/components/template-preview-dialog';
 
 interface Draft {
   name: string;
@@ -81,6 +82,7 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
   const [draft, setDraft] = useState<Draft>(() => toDraft(template));
   const [saved, setSaved] = useState<Draft>(() => toDraft(template));
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const [previewing, setPreviewing] = useState(false);
   const [viewVersion, setViewVersion] = useState<number | null>(null);
 
   const editable = can('template.manage') && template.status !== 'ARCHIVED';
@@ -154,7 +156,11 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
         }
         description={`${template.code} · Phiên bản v${template.version} · ${template._count.contracts} hợp đồng đã dùng`}
         actions={
-          can('template.manage') && (
+          <>
+            <Button variant="outline" onClick={() => setPreviewing(true)}>
+              <Eye /> Xem trước
+            </Button>
+            {can('template.manage') && (
             <>
               {editable && (
                 <Button onClick={onSave} disabled={!dirty || save.isPending}>
@@ -191,7 +197,8 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
                 <Trash2 /> Xóa
               </Button>
             </>
-          )
+            )}
+          </>
         }
       />
 
@@ -313,6 +320,8 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
 
       <VersionDialog templateId={template.id} version={viewVersion} onClose={() => setViewVersion(null)} />
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+      {/* Xem trước nội dung đang soạn (kể cả chưa lưu) với dữ liệu mẫu hoặc một hồ sơ có sẵn. */}
+      {previewing && <TemplatePreviewDialog templateId={template.id} html={draft.contentHtml} kind={isOrderTemplate ? 'ORDER' : 'CONTRACT'} open onClose={() => setPreviewing(false)} />}
     </>
   );
 }
