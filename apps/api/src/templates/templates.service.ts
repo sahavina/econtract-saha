@@ -54,6 +54,8 @@ export class TemplatesService {
         this.scope(user, q.usable),
         q.status ? { status: q.status } : {},
         q.contractTypeId ? { contractTypeId: q.contractTypeId } : {},
+        q.kind === 'ORDER' ? { contractType: { kind: 'ORDER' } } : {},
+        q.kind === 'CONTRACT' ? { OR: [{ contractTypeId: null }, { contractType: { kind: 'CONTRACT' } }] } : {},
         q.q
           ? {
               OR: [{ name: { contains: q.q, mode: 'insensitive' } }, { code: { contains: q.q, mode: 'insensitive' } }],

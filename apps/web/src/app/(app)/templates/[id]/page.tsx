@@ -137,7 +137,13 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
   return (
     <>
       <PageHeader
-        crumbs={[{ label: 'Mẫu hợp đồng', href: '/templates' }, { label: template.code }]}
+        crumbs={[
+          // Mẫu gắn loại "Đơn đặt hàng" thuộc danh sách Mẫu đơn đặt hàng.
+          lookups.data?.contractTypes.find((t) => t.id === template.contractTypeId)?.kind === 'ORDER'
+            ? { label: 'Mẫu đơn đặt hàng', href: '/order-templates' }
+            : { label: 'Mẫu hợp đồng', href: '/templates' },
+          { label: template.code },
+        ]}
         title={
           <span className="flex flex-wrap items-center gap-2">
             {template.name} <TemplateStatusBadge status={template.status} />

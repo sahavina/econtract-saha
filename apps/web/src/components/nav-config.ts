@@ -95,6 +95,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Tất cả đơn hàng', icon: ShoppingCart, href: '/orders', permissions: VIEW_CONTRACT },
       { title: 'Tạo đơn đặt hàng', icon: PackagePlus, href: '/orders/new', permissions: [PERMISSIONS.CONTRACT_CREATE] },
+      { title: 'Mẫu đơn đặt hàng', icon: ScrollText, href: '/order-templates', permissions: [PERMISSIONS.TEMPLATE_VIEW] },
       { title: 'Tạo đơn từ file', icon: FileUp, href: '/orders/new?from=file', permissions: [PERMISSIONS.CONTRACT_CREATE] },
       { title: 'Đề nghị thanh toán', icon: Receipt, href: '/payment-requests', permissions: VIEW_CONTRACT },
       { title: 'Phiếu xuất kho', icon: PackageMinus, href: '/stock-issues', permissions: [PERMISSIONS.DELIVERY_MANAGE, PERMISSIONS.CONTRACT_VIEW_ALL] },

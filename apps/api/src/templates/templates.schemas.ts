@@ -29,6 +29,8 @@ export const templateQuerySchema = paginationSchema.extend({
   q: optionalString,
   status: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['DRAFT', 'ACTIVE', 'ARCHIVED']).optional()),
   contractTypeId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
+  /** ORDER = mẫu đơn đặt hàng (loại hợp đồng dùng cho đơn); CONTRACT = mẫu hợp đồng (kể cả mẫu chưa gắn loại). */
+  kind: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['CONTRACT', 'ORDER']).optional()),
   /** Chỉ mẫu đang sử dụng mà người dùng hiện tại được phép dùng (cho form tạo hợp đồng). */
   usable: z.preprocess((v) => v === 'true' || v === true, z.boolean()),
 });
