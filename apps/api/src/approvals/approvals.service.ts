@@ -143,14 +143,18 @@ export class ApprovalsService {
         approvers: others,
       };
       if (others.length) result.push(base);
-      else if (approvers.length && step.approverType === 'DEPARTMENT_MANAGER') {
-        // Người gửi chính là trưởng phòng ⇒ bỏ qua bước trưởng phòng.
-        result.push({ ...base, skipped: 'Người gửi là trưởng phòng phụ trách' });
-      } else {
+      else if (approvers.length) {
+        // Người gửi là người duyệt duy nhất của bước (vd trưởng phòng, người kiểm tra) ⇒ coi như đã kiểm tra, bỏ qua bước;
+        // người gửi vẫn không tự duyệt được bước nào có người duyệt khác.
         result.push({
           ...base,
-          error: approvers.length ? 'Người gửi không được tự phê duyệt.' : 'Không có người duyệt đang hoạt động.',
+          skipped:
+            step.approverType === 'DEPARTMENT_MANAGER'
+              ? 'Người gửi là trưởng phòng phụ trách'
+              : `Người gửi (${user.fullName}) là người duyệt duy nhất của bước`,
         });
+      } else {
+        result.push({ ...base, error: 'Không có người duyệt đang hoạt động.' });
       }
     }
     return result;
@@ -427,7 +431,13 @@ export class ApprovalsService {
 
       const now = new Date();
       const stepName = 'Tự phê duyệt';
-      const step: ResolvedStep = { order: 1, name: stepName, mode: 'ANY', dueHours: null, approvers: [{ id: user.userId, fullName: user.fullName }] };
+      const step: ResolvedStep = {
+        order: 1,
+        name: stepName,
+        mode: 'ANY',
+        dueHours: null,
+        approvers: [{ id: user.userId, fullName: user.fullName }],
+      };
       const request = await tx.approvalRequest.create({
         data: {
           tenantId: user.tenantId,
@@ -525,7 +535,10 @@ export class ApprovalsService {
         data: { status: 'APPROVED', completedAt: now },
       });
       if (closed.count !== 1) throw new ConflictException('Yêu cầu phê duyệt vừa được xử lý, vui lòng tải lại');
-      await tx.contract.update({ where: { id: contract.id }, data: { status: 'APPROVED', approvalStatus: 'APPROVED' } });
+      await tx.contract.update({
+        where: { id: contract.id },
+        data: { status: 'APPROVED', approvalStatus: 'APPROVED' },
+      });
 
       await this.audit.log(
         user,
@@ -533,13 +546,20 @@ export class ApprovalsService {
           action: 'contract.approve_now',
           entityType: 'contract',
           entityId: contract.id,
-          data: { code: contract.code, workflow: request.workflowName, step: `${request.currentStep}/${request.totalSteps}`, note: input.note },
+          data: {
+            code: contract.code,
+            workflow: request.workflowName,
+            step: `${request.currentStep}/${request.totalSteps}`,
+            note: input.note,
+          },
         },
         tx,
       );
       await this.notifications.notify(
         user.tenantId,
-        [...new Set([request.submittedById, contract.ownerId, ...skipped.map((t) => t.approverId)])].filter((id): id is string => !!id && id !== user.userId),
+        [...new Set([request.submittedById, contract.ownerId, ...skipped.map((t) => t.approverId)])].filter(
+          (id): id is string => !!id && id !== user.userId,
+        ),
         {
           type: 'approval.result',
           title: `Hợp đồng ${contract.code} đã được phê duyệt`,
