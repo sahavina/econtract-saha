@@ -131,9 +131,18 @@
     @apply font-sans;
   }
 }
+/* Tinos: font tương đương Times New Roman (cùng số đo chữ), dùng khi máy không có Times New Roman
+   và để bản in trình duyệt khớp với PDF xuất từ ứng dụng (pdfmake cũng dùng Tinos). */
+@font-face { font-family: 'Tinos'; src: url('/fonts/tinos/Tinos-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Tinos'; src: url('/fonts/tinos/Tinos-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Tinos'; src: url('/fonts/tinos/Tinos-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Tinos'; src: url('/fonts/tinos/Tinos-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+
 /* ───────── Nội dung hợp đồng (trình soạn thảo, xem trước A4, bản in) ───────── */
 @layer components {
   .contract-content {
+    /* Văn bản hợp đồng dùng font Times New Roman như bản Word/PDF, không theo font giao diện. */
+    font-family: 'Times New Roman', 'Tinos', serif;
     font-size: 0.95rem;
     line-height: 1.65;
   }

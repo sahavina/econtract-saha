@@ -4,6 +4,7 @@ import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { type DocSigner, ROLE_LABELS } from '@/components/signed-document';
 import { formatDateTime } from '@/lib/format';
 import { fitTables } from '@/lib/pdf-tables';
+import { setupPdfFonts } from '@/lib/pdf-fonts';
 
 /**
  * Tạo PDF hợp đồng ngay trong trình duyệt (chữ thật, chọn/tìm kiếm được) và tải về,
@@ -14,8 +15,6 @@ import { fitTables } from '@/lib/pdf-tables';
 const MM = 72 / 25.4;
 const MARGIN = 20 * MM;
 
-/** Font Tinos (cùng kích thước chữ với Times New Roman, đủ dấu tiếng Việt) phục vụ từ /public/fonts. */
-const fontUrl = (file: string) => `${window.location.origin}/fonts/tinos/${file}`;
 
 /** Bảng có độ rộng cột (px) trong <colgroup> ⇒ ghi tỉ lệ % vào data-pdfmake để PDF giữ đúng tỉ lệ như trên màn hình. */
 function withColumnPercents(html: string): string {
@@ -122,16 +121,7 @@ async function createContractPdf({ title, html, signed, digitalSigners }: Omit<C
     import('pdfmake/build/pdfmake'),
     import('html-to-pdfmake'),
   ]);
-  // Chỉ cho phép tải font/ảnh từ chính ứng dụng (ảnh chữ ký là data URL, không cần mạng).
-  pdfMake.setUrlAccessPolicy((url: string) => url.startsWith(`${window.location.origin}/`));
-  pdfMake.setFonts({
-    Tinos: {
-      normal: fontUrl('Tinos-Regular.ttf'),
-      bold: fontUrl('Tinos-Bold.ttf'),
-      italics: fontUrl('Tinos-Italic.ttf'),
-      bolditalics: fontUrl('Tinos-BoldItalic.ttf'),
-    },
-  });
+  const font = await setupPdfFonts(pdfMake);
 
   // Ô highlight biến thiếu dữ liệu chỉ có ý nghĩa trên màn hình.
   // Dấu câu toàn chiều rộng (vd "：" trong file Word gõ bằng bộ gõ Trung/Nhật) không có trong font Tinos ⇒ đổi về ký tự thường.
@@ -161,7 +151,7 @@ async function createContractPdf({ title, html, signed, digitalSigners }: Omit<C
     info: { title, creator: 'SAHA eContract' },
     pageSize: 'A4',
     pageMargins: [MARGIN, MARGIN, MARGIN, MARGIN],
-    defaultStyle: { font: 'Tinos', fontSize: 12, lineHeight: 1.25 },
+    defaultStyle: { font, fontSize: 12, lineHeight: 1.25 },
     footer: (current, total) => ({ text: `${current}/${total}`, alignment: 'center', fontSize: 8, color: '#888888', margin: [0, 20, 0, 0] }),
     content: [...body, ...(signed ? signedSection(signed.documentHash, signed.signers) : []), ...(digitalSigners?.length ? digitalPage(digitalSigners) : [])],
   };

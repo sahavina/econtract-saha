@@ -2,6 +2,7 @@
 
 import { amountInWordsVnd, formatQtyVi } from '@saha/shared';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
+import { setupPdfFonts } from '@/lib/pdf-fonts';
 
 /** Giấy đề nghị thanh toán gửi khách hàng (theo mẫu SAHA): kính gửi, căn cứ, số tiền, tài khoản thụ hưởng. */
 export interface PaymentRequest {
@@ -98,7 +99,6 @@ ${p('Trân trọng cảm ơn!')}
 </div>`;
 }
 
-const fontUrl = (file: string) => `${window.location.origin}/fonts/tinos/${file}`;
 const MM = 72 / 25.4;
 
 function pdfContent(r: PaymentRequest): Content[] {
@@ -158,15 +158,12 @@ function pdfContent(r: PaymentRequest): Content[] {
 
 async function createPdf(r: PaymentRequest) {
   const { default: pdfMake } = await import('pdfmake/build/pdfmake');
-  pdfMake.setUrlAccessPolicy((url: string) => url.startsWith(`${window.location.origin}/`));
-  pdfMake.setFonts({
-    Tinos: { normal: fontUrl('Tinos-Regular.ttf'), bold: fontUrl('Tinos-Bold.ttf'), italics: fontUrl('Tinos-Italic.ttf'), bolditalics: fontUrl('Tinos-BoldItalic.ttf') },
-  });
+  const font = await setupPdfFonts(pdfMake);
   const doc: TDocumentDefinitions = {
     info: { title: `Đề nghị thanh toán ${r.number}`, creator: 'SAHA eContract' },
     pageSize: 'A4',
     pageMargins: [25 * MM, 18 * MM, 18 * MM, 18 * MM],
-    defaultStyle: { font: 'Tinos', fontSize: 13, lineHeight: 1.3 },
+    defaultStyle: { font, fontSize: 13, lineHeight: 1.3 },
     content: pdfContent(r),
   };
   return pdfMake.createPdf(doc);

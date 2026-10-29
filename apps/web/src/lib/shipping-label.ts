@@ -1,6 +1,7 @@
 'use client';
 
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
+import { setupPdfFonts } from '@/lib/pdf-fonts';
 
 /** Phiếu gửi hàng dán thùng (gửi chành xe): người gửi, lưu ý, người nhận, điện thoại, ghi chú. */
 export interface ShippingLabel {
@@ -18,7 +19,6 @@ export interface ShippingLabel {
 export const DEFAULT_WARNING = 'HÀNG DỄ VỠ - XIN NHẸ TAY';
 export const DEFAULT_NOTE = '(ĐIỆN THOẠI TRƯỚC KHI GIAO HÀNG)';
 
-const fontUrl = (file: string) => `${window.location.origin}/fonts/tinos/${file}`;
 const MM = 72 / 25.4;
 
 /** Dòng "FROM: Chị Trinh – TPHCM – 0902 38 05 38": nhãn gạch chân, số điện thoại to hơn. */
@@ -66,10 +66,7 @@ function labelContent(l: ShippingLabel, s: number, box: number, width: number): 
 
 async function createPdf(l: ShippingLabel) {
   const { default: pdfMake } = await import('pdfmake/build/pdfmake');
-  pdfMake.setUrlAccessPolicy((url: string) => url.startsWith(`${window.location.origin}/`));
-  pdfMake.setFonts({
-    Tinos: { normal: fontUrl('Tinos-Regular.ttf'), bold: fontUrl('Tinos-Bold.ttf'), italics: fontUrl('Tinos-Italic.ttf'), bolditalics: fontUrl('Tinos-BoldItalic.ttf') },
-  });
+  const font = await setupPdfFonts(pdfMake);
   const boxes = Math.max(1, Math.min(200, Math.floor(l.boxes) || 1));
   const content: Content[] = [];
   if (l.layout === 'A4') {
@@ -98,7 +95,7 @@ async function createPdf(l: ShippingLabel) {
     pageSize: 'A4',
     pageOrientation: l.layout === 'A4' ? 'landscape' : 'portrait',
     pageMargins: l.layout === 'A4' ? [18 * MM, 15 * MM, 18 * MM, 15 * MM] : [12 * MM, 10 * MM, 12 * MM, 10 * MM],
-    defaultStyle: { font: 'Tinos', lineHeight: 1.15 },
+    defaultStyle: { font, lineHeight: 1.15 },
     content,
   };
   return pdfMake.createPdf(doc);

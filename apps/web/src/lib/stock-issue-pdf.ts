@@ -3,6 +3,7 @@
 import { amountInWordsVnd, formatQtyVi } from '@saha/shared';
 import type { Content, TableCell, TDocumentDefinitions } from 'pdfmake/interfaces';
 import type { StockIssueDetail } from '@/lib/types';
+import { setupPdfFonts } from '@/lib/pdf-fonts';
 
 /** Phiếu xuất kho theo Mẫu số 02 - VT (Thông tư 200/2014/TT-BTC). */
 export interface StockIssueCompany {
@@ -10,7 +11,6 @@ export interface StockIssueCompany {
   address?: string | null;
 }
 
-const fontUrl = (file: string) => `${window.location.origin}/fonts/tinos/${file}`;
 const MM = 72 / 25.4;
 const money = (v: string | number) => formatQtyVi(String(Math.round(Number(v) || 0)));
 const qty = (v: string) => formatQtyVi(v);
@@ -152,15 +152,12 @@ function content(issue: StockIssueDetail, company: StockIssueCompany): Content[]
 
 async function createPdf(issue: StockIssueDetail, company: StockIssueCompany) {
   const { default: pdfMake } = await import('pdfmake/build/pdfmake');
-  pdfMake.setUrlAccessPolicy((url: string) => url.startsWith(`${window.location.origin}/`));
-  pdfMake.setFonts({
-    Tinos: { normal: fontUrl('Tinos-Regular.ttf'), bold: fontUrl('Tinos-Bold.ttf'), italics: fontUrl('Tinos-Italic.ttf'), bolditalics: fontUrl('Tinos-BoldItalic.ttf') },
-  });
+  const font = await setupPdfFonts(pdfMake);
   const doc: TDocumentDefinitions = {
     info: { title: `Phiếu xuất kho ${issue.code}`, creator: 'SAHA eContract' },
     pageSize: 'A4',
     pageMargins: [15 * MM, 12 * MM, 12 * MM, 12 * MM],
-    defaultStyle: { font: 'Tinos', fontSize: 11.5, lineHeight: 1.2 },
+    defaultStyle: { font, fontSize: 11.5, lineHeight: 1.2 },
     ...(issue.status === 'CANCELLED' && {
       watermark: { text: 'ĐÃ HỦY', color: '#cc0000', opacity: 0.18, bold: true },
     }),
