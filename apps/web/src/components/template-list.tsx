@@ -3,13 +3,14 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { TEMPLATE_STATUS_LABELS } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Plus } from 'lucide-react';
+import { Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { TemplateStatusBadge } from '@/components/status-badge';
@@ -46,6 +47,13 @@ const KIND_TEXT = {
     placeholder: 'VD: MAU-DDH-02',
   },
 } as const;
+
+/** Lời nhắc khi xóa mẫu: hồ sơ đã lập giữ nguyên nội dung (đã sao chép lúc lập). */
+export function templateDeleteNote(used: number) {
+  return used
+    ? `Mẫu đã dùng cho ${used} hợp đồng/đơn hàng – các hồ sơ này giữ nguyên nội dung. Mẫu sẽ không còn được chọn khi lập mới.`
+    : 'Mẫu sẽ không còn được chọn khi lập hợp đồng/đơn hàng mới.';
+}
 
 const createSchema = z.object({
   code: z.string().trim().min(1, 'Nhập mã mẫu').max(50),
@@ -111,6 +119,15 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
   const [status, setStatus] = useState<string | undefined>();
   const [contractTypeId, setContractTypeId] = useState<string | undefined>();
   const [creating, setCreating] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  const manage = can('template.manage');
+  const remove = useMutation({
+    mutationFn: (t: TemplateListItem) => api<undefined>(`/templates/${t.id}`, { method: 'DELETE' }),
+    onSuccess: (_r, t) => {
+      toast.success(`Đã xóa mẫu ${t.code}`);
+      qc.invalidateQueries({ queryKey: ['templates'] });
+    },
+  });
 
   useEffect(() => {
     const t = setTimeout(() => setQ(search.trim()), 300);
@@ -133,7 +150,7 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
         description={text.description}
         crumbs={[...text.crumbs]}
         actions={
-          can('template.manage') && (
+          manage && (
             <Button onClick={() => setCreating(true)}>
               <Plus /> Tạo mẫu
             </Button>
@@ -161,18 +178,19 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
                 <TableHead>Phòng ban được dùng</TableHead>
                 <TableHead className="text-right">Đã dùng</TableHead>
                 <TableHead>Cập nhật</TableHead>
+                {manage && <TableHead className="text-right">Thao tác</TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
               {list.isPending ? (
                 <TableRow>
-                  <TableCell colSpan={8}>
+                  <TableCell colSpan={manage ? 9 : 8}>
                     <Skeleton className="h-24" />
                   </TableCell>
                 </TableRow>
               ) : !list.data.items.length ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="p-4">
+                  <TableCell colSpan={manage ? 9 : 8} className="p-4">
                     <EmptyState title={`Chưa có ${text.noun}`} />
                   </TableCell>
                 </TableRow>
@@ -193,6 +211,38 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
                     <TableCell className="text-sm">{t.departmentIds.length ? t.departmentIds.map(deptName).join(', ') : 'Tất cả'}</TableCell>
                     <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
                     <TableCell className="whitespace-nowrap">{formatDateTime(t.updatedAt)}</TableCell>
+                    {manage && (
+                      <TableCell>
+                        <div className="flex justify-end gap-1">
+                          {t.status !== 'ARCHIVED' && (
+                            <Button variant="ghost" size="icon-sm" asChild aria-label={`Sửa mẫu ${t.code}`} title="Sửa nội dung, thông tin mẫu">
+                              <Link href={`/templates/${t.id}`}>
+                                <Pencil />
+                              </Link>
+                            </Button>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="icon-sm"
+                            className="text-destructive"
+                            aria-label={`Xóa mẫu ${t.code}`}
+                            title="Xóa mẫu"
+                            disabled={remove.isPending}
+                            onClick={() =>
+                              setConfirm({
+                                title: `Xóa mẫu ${t.code}?`,
+                                description: templateDeleteNote(t._count.contracts),
+                                destructive: true,
+                                confirmLabel: 'Xóa',
+                                onConfirm: () => remove.mutateAsync(t).then(() => undefined),
+                              })
+                            }
+                          >
+                            <Trash2 />
+                          </Button>
+                        </div>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
@@ -200,6 +250,7 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
           </Table>
         </div>
       )}
+      <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
       <CreateTemplateDialog open={creating} onClose={() => setCreating(false)} kind={kind} contractTypeId={kind === 'ORDER' ? kindTypes[0]?.id : undefined} />
     </>
   );

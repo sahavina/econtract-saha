@@ -207,14 +207,14 @@ export class TemplatesService {
     });
   }
 
+  /** Xóa mềm (kể cả mẫu đang sử dụng): mẫu không còn được chọn; hợp đồng/đơn đã lập giữ nguyên nội dung của mình. */
   async remove(user: AuthUser, id: string) {
     const current = await this.get(user, id);
-    if (current.status === 'ACTIVE') throw new BadRequestException('Hãy lưu trữ mẫu trước khi xóa');
     await this.prisma.$transaction(async (tx) => {
       await tx.contractTemplate.update({ where: { id }, data: { deletedAt: new Date() } });
       await this.audit.log(
         user,
-        { action: 'template.delete', entityType: 'template', entityId: id, data: { code: current.code } },
+        { action: 'template.delete', entityType: 'template', entityId: id, data: { code: current.code, status: current.status, used: current._count.contracts } },
         tx,
       );
     });

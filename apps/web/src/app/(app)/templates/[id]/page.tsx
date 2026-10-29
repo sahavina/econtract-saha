@@ -24,6 +24,7 @@ import { useAuth } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import { useLookups } from '@/lib/queries';
 import type { TemplateDetail } from '@/lib/types';
+import { templateDeleteNote } from '@/components/template-list';
 
 interface Draft {
   name: string;
@@ -109,6 +110,9 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
     },
   });
 
+  // Mẫu gắn loại "Đơn đặt hàng" thuộc danh sách Mẫu đơn đặt hàng.
+  const isOrderTemplate = lookups.data?.contractTypes.find((t) => t.id === template.contractTypeId)?.kind === 'ORDER';
+
   const action = useMutation({
     mutationFn: (op: 'activate' | 'archive' | 'delete') =>
       op === 'delete'
@@ -118,7 +122,7 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
       refresh();
       if (op === 'delete') {
         toast.success('Đã xóa mẫu');
-        router.push('/templates');
+        router.push(isOrderTemplate ? '/order-templates' : '/templates');
       } else toast.success(op === 'activate' ? 'Mẫu đã được kích hoạt' : 'Đã lưu trữ mẫu');
     },
   });
@@ -138,8 +142,7 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
     <>
       <PageHeader
         crumbs={[
-          // Mẫu gắn loại "Đơn đặt hàng" thuộc danh sách Mẫu đơn đặt hàng.
-          lookups.data?.contractTypes.find((t) => t.id === template.contractTypeId)?.kind === 'ORDER'
+          isOrderTemplate
             ? { label: 'Mẫu đơn đặt hàng', href: '/order-templates' }
             : { label: 'Mẫu hợp đồng', href: '/templates' },
           { label: template.code },
@@ -173,14 +176,20 @@ function TemplateEditor({ template }: { template: TemplateDetail }) {
                   <Archive /> Lưu trữ
                 </Button>
               )}
-              {template.status !== 'ACTIVE' && (
-                <Button
-                  variant="destructive"
-                  onClick={() => setConfirm({ title: `Xóa mẫu ${template.code}?`, destructive: true, confirmLabel: 'Xóa', onConfirm: () => action.mutateAsync('delete').then(() => undefined) })}
-                >
-                  <Trash2 /> Xóa
-                </Button>
-              )}
+              <Button
+                variant="destructive"
+                onClick={() =>
+                  setConfirm({
+                    title: `Xóa mẫu ${template.code}?`,
+                    description: templateDeleteNote(template._count.contracts),
+                    destructive: true,
+                    confirmLabel: 'Xóa',
+                    onConfirm: () => action.mutateAsync('delete').then(() => undefined),
+                  })
+                }
+              >
+                <Trash2 /> Xóa
+              </Button>
             </>
           )
         }
