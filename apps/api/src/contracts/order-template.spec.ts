@@ -37,7 +37,8 @@ describe('đơn đặt hàng – tính tiền và nội dung', () => {
       parentContract: { code: '0501/2026/HĐNT/APOLLO-SAHA', signedDate: '2026-01-05' },
     });
     const html = renderTemplate('<p>{{order.items_table}}</p><p>{{order.total}} – {{order.total_words}} – {{order.parent_code}}</p>', values).html;
-    expect(html.startsWith('<table>')).toBe(true);
+    expect(html.startsWith('<table><colgroup>')).toBe(true);
+    expect(html).toContain('<col style="width: 212px">');
     expect(html).toContain('Keo &lt;b&gt;A&lt;/b&gt;');
     expect(html).toContain('2.160.000 – Hai triệu một trăm sáu mươi nghìn đồng – 0501/2026/HĐNT/APOLLO-SAHA');
   });

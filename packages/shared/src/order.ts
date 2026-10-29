@@ -168,6 +168,9 @@ export function formatQtyVi(value: NumLike | null | undefined): string {
  * Bảng hàng hóa dạng HTML (giá trị đã escape) để thay biến {{order.items_table}}.
  * Chỉ dùng thẻ/thuộc tính nằm trong danh sách cho phép của bộ làm sạch nội dung.
  */
+/** Độ rộng cột bảng hàng hóa (px, tổng 640 ≈ khổ A4 trừ lề): cột tên hàng rộng nhất; PDF quy đổi sang phần trăm. */
+const ITEMS_TABLE_COLGROUP = `<colgroup>${[48, 75, 212, 60, 65, 85, 95].map((w) => `<col style="width: ${w}px">`).join('')}</colgroup>`;
+
 export function orderItemsTableHtml(items: OrderItemLike[], vatRate?: NumLike | null): string | null {
   if (!items.length) return null;
   const t = orderTotals(items, vatRate);
@@ -193,7 +196,7 @@ export function orderItemsTableHtml(items: OrderItemLike[], vatRate?: NumLike | 
     ...(t.vatAmount !== null ? [sum(`Thuế GTGT (${formatQtyVi(vatRate)}%)`, t.vatAmount), sum('Tổng cộng thanh toán', t.total)] : []),
   ].join('');
   return (
-    `<table><tbody><tr>${['STT', 'Mã hàng', 'Tên hàng hóa', 'ĐVT', 'Số lượng', 'Đơn giá', 'Thành tiền'].map(th).join('')}</tr>` +
+    `<table>${ITEMS_TABLE_COLGROUP}<tbody><tr>${['STT', 'Mã hàng', 'Tên hàng hóa', 'ĐVT', 'Số lượng', 'Đơn giá', 'Thành tiền'].map(th).join('')}</tr>` +
     `${rows}${footer}</tbody></table>`
   );
 }
