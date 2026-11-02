@@ -85,6 +85,8 @@ export type LiquidateInput = z.infer<typeof liquidateSchema>;
 export const lifecycleListSchema = z.object({
   kind: z.enum(['appendices', 'obligations', 'payments', 'acceptances']),
   view: z.enum(['all', 'open', 'overdue', 'mine', 'due_soon', 'done']).default('all'),
+  /** Chỉ hồ sơ có đối tác này là một bên (trang chi tiết đối tác). */
+  partnerId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
 });
 export type LifecycleListQuery = z.infer<typeof lifecycleListSchema>;
 

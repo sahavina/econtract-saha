@@ -63,6 +63,8 @@ export type StockIssueCancel = z.infer<typeof stockIssueCancelSchema>;
 export const stockIssueQuerySchema = paginationSchema.extend({
   q: optionalString,
   orderId: optionalUuid,
+  /** Phiếu gắn đơn đặt hàng của đối tác này. */
+  partnerId: optionalUuid,
   status: z.preprocess((v) => (v === '' ? undefined : v), z.enum(['ISSUED', 'CANCELLED']).optional()),
   from: optionalDate,
   to: optionalDate,
@@ -112,6 +114,8 @@ export const shippingNoteQuerySchema = paginationSchema.extend({
   q: optionalString,
   status: z.preprocess((v) => (v === '' ? undefined : v), z.enum(SHIPPING_NOTE_STATUSES).optional()),
   orderId: optionalUuid,
+  /** Phiếu gắn đơn đặt hàng của đối tác này. */
+  partnerId: optionalUuid,
   stockIssueId: optionalUuid,
   from: optionalDate,
   to: optionalDate,

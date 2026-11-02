@@ -78,6 +78,7 @@ export class DeliveriesService {
     const where: Prisma.StockIssueWhereInput = {
       tenantId: user.tenantId,
       ...(q.orderId && { orderId: q.orderId }),
+      ...(q.partnerId && { order: { parties: { some: { partnerId: q.partnerId } } } }),
       ...(q.status && { status: q.status }),
       ...((q.from || q.to) && { issueDate: { ...(q.from && { gte: new Date(q.from) }), ...(q.to && { lte: new Date(q.to) }) } }),
       ...(q.q && {
@@ -265,6 +266,7 @@ export class DeliveriesService {
       tenantId: user.tenantId,
       ...(q.status && { status: q.status }),
       ...(q.orderId && { orderId: q.orderId }),
+      ...(q.partnerId && { order: { parties: { some: { partnerId: q.partnerId } } } }),
       ...(q.stockIssueId && { stockIssueId: q.stockIssueId }),
       ...((q.from || q.to) && { sendDate: { ...(q.from && { gte: new Date(q.from) }), ...(q.to && { lte: new Date(q.to) }) } }),
       ...(q.q && {

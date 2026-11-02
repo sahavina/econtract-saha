@@ -1,5 +1,6 @@
 import {
   appendixCreateSchema,
+  lifecycleListSchema,
   liquidateSchema,
   obligationUpdateSchema,
   paymentCreateSchema,
@@ -21,6 +22,13 @@ describe('lifecycle schemas', () => {
     expect(paymentCreateSchema.safeParse({ title: 'Đợt 1', amount: '0' }).success).toBe(false);
     expect(paymentCreateSchema.safeParse({ title: 'Đợt 1', amount: '-5' }).success).toBe(false);
     expect(recordPaymentSchema.safeParse({ amount: '1000000.50', paidDate: '2026-10-17' }).success).toBe(true);
+  });
+
+  it('list filter by partner: empty means no filter, non-UUID is rejected', () => {
+    const id = '38b8b719-3dc6-4af2-9e08-889a471e5bc9';
+    expect(lifecycleListSchema.parse({ kind: 'payments', partnerId: id }).partnerId).toBe(id);
+    expect(lifecycleListSchema.parse({ kind: 'payments', partnerId: '' }).partnerId).toBeUndefined();
+    expect(lifecycleListSchema.safeParse({ kind: 'payments', partnerId: 'abc' }).success).toBe(false);
   });
 
   it('partial obligation update injects no defaults; liquidation needs a note', () => {

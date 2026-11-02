@@ -470,7 +470,9 @@ export class LifecycleService {
   // ───────────────────────── Danh sách liên hợp đồng & lịch ─────────────────────────
 
   async list(user: AuthUser, q: LifecycleListQuery) {
-    const contract = { AND: [this.contracts.scopeWhere(user), { deletedAt: null }] };
+    const contract = {
+      AND: [this.contracts.scopeWhere(user), { deletedAt: null }, ...(q.partnerId ? [{ parties: { some: { partnerId: q.partnerId } } }] : [])],
+    };
     const t = today();
     const soon = new Date(t.getTime() + 7 * DAY);
     const contractSelect = { select: { id: true, code: true, title: true } };

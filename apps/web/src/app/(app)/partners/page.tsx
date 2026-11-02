@@ -4,6 +4,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { PARTNER_TYPE_LABELS, PARTNER_TYPES, type PartnerType } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ChevronLeft, ChevronRight, CloudDownload, Link2, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { Controller, useForm } from 'react-hook-form';
@@ -279,10 +280,19 @@ export default function PartnersPage() {
                 </TableRow>
               ) : (
                 data.items.map((p) => (
-                  <TableRow key={p.id}>
+                  <TableRow
+                    key={p.id}
+                    className="cursor-pointer"
+                    onClick={() => {
+                      // Đang bôi đen để sao chép (MST, tên…) thì không mở trang.
+                      if (!window.getSelection()?.toString()) router.push(`/partners/${p.id}`);
+                    }}
+                  >
                     <TableCell className="font-medium">{p.code}</TableCell>
                     <TableCell>
-                      {p.name}
+                      <Link href={`/partners/${p.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                        {p.name}
+                      </Link>
                       {isOdooPartner(p) && <Badge variant="outline" className="ml-1.5 text-[10px]">Odoo</Badge>}
                     </TableCell>
                     <TableCell><Badge variant="secondary">{PARTNER_TYPE_LABELS[p.type]}</Badge></TableCell>
@@ -290,7 +300,7 @@ export default function PartnersPage() {
                     <TableCell>{p.representative ? `${p.representative}${p.position ? ` (${p.position})` : ''}` : '—'}</TableCell>
                     <TableCell className="text-xs">{[p.email, p.phone].filter(Boolean).join(' · ') || '—'}</TableCell>
                     <TableCell className="text-right tabular-nums">{p._count?.contractParties ?? 0}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
+                    <TableCell className="text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                       {can('partner.manage') && (
                         <>
                           <Button variant="ghost" size="icon-sm" aria-label="Sửa" onClick={() => setDialog({ partner: p })}><Pencil /></Button>

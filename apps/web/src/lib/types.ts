@@ -137,6 +137,19 @@ export interface Partner {
   _count?: { contractParties: number };
 }
 
+export interface PartnerContact {
+  id: string;
+  fullName: string;
+  position: string | null;
+  email: string | null;
+  phone: string | null;
+  isPrimary: boolean;
+}
+
+export interface PartnerDetail extends Partner {
+  contacts: PartnerContact[];
+}
+
 export interface TimelineEntry {
   id: string;
   action: string;
@@ -489,6 +502,11 @@ export interface Payment {
   status: 'PLANNED' | 'PARTIAL' | 'PAID' | 'CANCELLED';
   note: string | null;
   overdue: boolean;
+}
+
+/** Đợt thanh toán trong danh sách `/lifecycle?kind=payments` (không kèm cờ overdue). */
+export interface PaymentListItem extends Omit<Payment, 'overdue'> {
+  contract: { id: string; code: string; title: string; currency: string };
 }
 
 export interface Acceptance {
