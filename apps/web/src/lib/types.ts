@@ -770,3 +770,28 @@ export interface ShippingNoteDetail extends ShippingNoteListItem {
   freightPayer: import('@saha/shared').FreightPayer | null;
   note: string | null;
 }
+
+export interface PaymentRequestListItem {
+  id: string;
+  number: string;
+  date: string;
+  recipient: string;
+  basis: string | null;
+  amount: string;
+  status: import('@saha/shared').PaymentRequestStatus;
+  createdAt: string;
+  contract: { id: string; code: string; kind: ContractKind } | null;
+  createdBy: { id: string; fullName: string };
+}
+
+export interface PaymentRequestDetail extends PaymentRequestListItem {
+  place: string | null;
+  company: string;
+  beneficiary: string;
+  account: string | null;
+  accountHolder: string | null;
+  signerPosition: string | null;
+  signerName: string | null;
+  contractId: string | null;
+  templateId: string | null;
+}

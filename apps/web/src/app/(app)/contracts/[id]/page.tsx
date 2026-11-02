@@ -106,7 +106,7 @@ export default function ContractDetailPage() {
           ) : (
             <>
               <Button variant="outline" asChild>
-                <Link href={`/payment-requests?contract=${c.id}`}>
+                <Link href={`/payment-requests/new?contract=${c.id}`}>
                   <Receipt /> Đề nghị thanh toán
                 </Link>
               </Button>

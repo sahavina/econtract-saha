@@ -1,292 +1,129 @@
 'use client';
 
-import { buildTemplateValues, formatDateVi, orderTotals, renderTemplate } from '@saha/shared';
-import { useQuery } from '@tanstack/react-query';
-import { Download, FileText, Loader2, Printer } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { PAYMENT_REQUEST_STATUS_LABELS, PAYMENT_REQUEST_STATUSES, type PaymentRequestStatus } from '@saha/shared';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Receipt } from 'lucide-react';
+import Link from 'next/link';
 import { useState } from 'react';
-import { toast } from 'sonner';
 import { FilterSelect } from '@/components/filter-select';
-import { PageHeader } from '@/components/page-header';
+import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
-import { useCompanyProfile, type CompanyProfile } from '@/lib/company';
-import { contractPdfFile, downloadContractPdf } from '@/lib/contract-pdf';
-import {
-  amountText,
-  defaultRequestNumber,
-  downloadPaymentRequestPdf,
-  downloadPaymentRequestWord,
-  fileBase,
-  openPaymentRequestPdf,
-  paymentRequestHtml,
-  paymentValues,
-  type PaymentRequest,
-} from '@/lib/payment-request';
-import type { ContractDetail, ContractListItem, TemplateDetail, TemplateListItem } from '@/lib/types';
+import { useAuth } from '@/lib/auth';
+import { formatDate, formatMoney } from '@/lib/format';
+import type { PaymentRequestListItem } from '@/lib/types';
 
-/** Mẫu dựng sẵn theo giấy đề nghị SAHA (không thuộc thư viện mẫu). */
-const BUILT_IN = '';
-const MISSING_MARK = /<mark data-missing="(?:empty|unknown)">\{\{[^<]*?\}\}<\/mark>/g;
-/** Chỉ mẫu dành cho đề nghị thanh toán: mã có "DNTT" hoặc tên có "đề nghị thanh toán". */
-const isPaymentTemplate = (t: TemplateListItem) => /DNTT/i.test(t.code) || /đề nghị thanh toán/i.test(t.name);
-
-const today = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+const STATUS_VARIANT: Record<PaymentRequestStatus, 'outline' | 'secondary' | 'default' | 'destructive'> = {
+  DRAFT: 'outline',
+  SENT: 'secondary',
+  PAID: 'default',
+  CANCELLED: 'destructive',
 };
 
-const EMPTY: PaymentRequest = {
-  company: '',
-  number: defaultRequestNumber(today()),
-  place: 'Hà Nội',
-  date: today(),
-  recipient: '',
-  basis: '',
-  amount: '',
-  beneficiary: '',
-  account: '',
-  accountHolder: '',
-  signerPosition: '',
-  signerName: '',
-};
-
-/** Giấy đề nghị thanh toán: điền từ đơn đặt hàng/hợp đồng, sửa lại rồi in PDF hoặc tải Word. */
+/** Danh sách đề nghị thanh toán đã lưu: tìm theo số, khách hàng, hồ sơ; lọc trạng thái và ngày. */
 export default function PaymentRequestsPage() {
-  const contractId = useSearchParams().get('contract') ?? '';
+  const { can } = useAuth();
+  const canManage = can('payment_request.manage');
+  const [q, setQ] = useState('');
+  const [status, setStatus] = useState<string | undefined>();
+  const [from, setFrom] = useState('');
+  const [to, setTo] = useState('');
+  const [page, setPage] = useState(1);
+  const requests = useQuery({
+    queryKey: ['payment-requests', q, status, from, to, page],
+    queryFn: () => api<Paginated<PaymentRequestListItem>>('/payment-requests', { query: { q, status, from, to, page, pageSize: 20 } }),
+    placeholderData: keepPreviousData,
+  });
+  const reset = <T,>(fn: (v: T) => void) => (v: T) => {
+    fn(v);
+    setPage(1);
+  };
+
   return (
     <>
       <PageHeader
         title="Đề nghị thanh toán"
-        description="Lập giấy đề nghị thanh toán gửi khách hàng: tự điền từ đơn đặt hàng hoặc hợp đồng, sửa nội dung rồi in PDF hoặc tải Word."
+        description="Giấy đề nghị thanh toán đã lưu: in lại, theo dõi đã gửi khách hay đã thanh toán."
         crumbs={[{ label: 'Đơn đặt hàng', href: '/orders' }, { label: 'Đề nghị thanh toán' }]}
-      />
-      {/* key: mở từ hồ sơ khác thì điền lại từ đầu. */}
-      <RequestForm key={contractId} contractId={contractId} />
-    </>
-  );
-}
-
-/** Giá trị cần thanh toán: đơn hàng = tổng gồm VAT theo các dòng hàng; hợp đồng = giá trị hợp đồng. Bỏ phần lẻ đồng. */
-function payableAmount(c: ContractDetail): string {
-  const value = c.kind === 'ORDER' && c.items.length ? orderTotals(c.items, c.vatRate).total : c.value;
-  return String(Math.round(Number(value) || 0) || '');
-}
-
-function fromContract(c: ContractDetail, profile: CompanyProfile | undefined, x: PaymentRequest): PaymentRequest {
-  const own = c.parties.find((p) => p.isInternal);
-  const customer = c.parties.find((p) => !p.isInternal) ?? c.parties[0];
-  const company = own?.name || profile?.name || x.company;
-  const isOrder = c.kind === 'ORDER';
-  const date = formatDateVi(isOrder ? c.expectedSignDate : (c.signedDate ?? c.expectedSignDate));
-  const doc = isOrder ? `đơn đặt hàng số ${c.code}${date ? ` ngày ${date}` : ''}` : `hợp đồng số ${c.code}${date ? ` ký ngày ${date}` : ''}`;
-  return {
-    ...x,
-    company,
-    recipient: customer?.name ?? '',
-    basis: `Căn cứ vào ${doc} giữa ${company} và ${customer?.name ?? '…'}.`,
-    amount: payableAmount(c),
-    beneficiary: company,
-    account: own?.bankAccount || profile?.bankAccount || x.account,
-    accountHolder: company,
-    signerPosition: own?.position || profile?.position || x.signerPosition,
-    signerName: own?.representative || profile?.representative || x.signerName,
-  };
-}
-
-function RequestForm({ contractId }: { contractId: string }) {
-  const company = useCompanyProfile();
-  const [r, setR] = useState<PaymentRequest>(EMPTY);
-  const [filledFrom, setFilledFrom] = useState<string | null>(null);
-  const [profileApplied, setProfileApplied] = useState(false);
-  const [busy, setBusy] = useState<'pdf' | 'print' | null>(null);
-  const [source, setSource] = useState<ContractDetail | null>(null);
-  const [templateId, setTemplateId] = useState(BUILT_IN);
-  const templates = useQuery({
-    queryKey: ['templates', 'payment-picker'],
-    queryFn: () => api<Paginated<TemplateListItem>>('/templates', { query: { status: 'ACTIVE', pageSize: 100 } }),
-  });
-  const template = useQuery({
-    queryKey: ['template', templateId],
-    queryFn: () => api<TemplateDetail>(`/templates/${templateId}`),
-    enabled: templateId !== BUILT_IN,
-  });
-  const orders = useQuery({
-    queryKey: ['orders', 'payment-picker'],
-    queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { kind: 'ORDER', pageSize: 50 } }),
-  });
-  const contracts = useQuery({
-    queryKey: ['contracts', 'payment-picker'],
-    queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { pageSize: 50 } }),
-  });
-  const contract = useQuery({
-    queryKey: ['contract', contractId],
-    queryFn: () => api<ContractDetail>(`/contracts/${contractId}`),
-    enabled: !!contractId,
-  });
-
-  const set = (patch: Partial<PaymentRequest>) => setR((x) => ({ ...x, ...patch }));
-  const apply = (c: ContractDetail) => {
-    setR((x) => fromContract(c, company.data, x));
-    setSource(c);
-    setFilledFrom(c.code);
-  };
-  // Mở từ một hồ sơ: điền khi dữ liệu về. Không có hồ sơ: lấy thông tin doanh nghiệp mình làm bên thụ hưởng.
-  if (contract.data && company.isFetched && filledFrom === null) apply(contract.data);
-  if (!contractId && company.data && !profileApplied) {
-    const p = company.data;
-    setProfileApplied(true);
-    setR((x) => ({ ...x, company: p.name, beneficiary: p.name, accountHolder: p.name, account: p.bankAccount ?? '', signerPosition: p.position ?? '', signerName: p.representative ?? '' }));
-  }
-
-  const pick = (id?: string) => id && api<ContractDetail>(`/contracts/${id}`).then(apply).catch((e: Error) => toast.error(e.message));
-  const options = (list?: ContractListItem[]) => (list ?? []).map((c) => ({ value: c.id, label: `${c.code} · ${c.parties.find((p) => p.name)?.name ?? c.title}` }));
-  const { words } = amountText(r);
-  const valid = r.company.trim() && r.recipient.trim() && amountText(r).figure && r.beneficiary.trim();
-
-  // Mẫu từ thư viện: biến hợp đồng/đơn hàng lấy từ hồ sơ đã chọn, biến {{payment.*}} lấy theo nội dung đang nhập.
-  const tpl = templateId !== BUILT_IN ? template.data : undefined;
-  const rendered = tpl ? renderTemplate(tpl.contentHtml, { ...(source ? buildTemplateValues(source) : {}), ...paymentValues(r) }) : null;
-  const finalHtml = rendered ? rendered.html.replace(MISSING_MARK, '……') : null;
-  const templateOptions = (templates.data?.items ?? []).filter(isPaymentTemplate).map((t) => ({ value: t.id, label: `${t.code} · ${t.name}` }));
-
-  const run = async (kind: 'pdf' | 'print') => {
-    setBusy(kind);
-    try {
-      if (finalHtml) {
-        const input = { fileName: fileBase(r), title: `Đề nghị thanh toán ${r.number}`, html: finalHtml };
-        if (kind === 'pdf') await downloadContractPdf(input);
-        else {
-          const url = URL.createObjectURL(await contractPdfFile(input));
-          window.open(url, '_blank', 'noopener');
-          setTimeout(() => URL.revokeObjectURL(url), 60_000);
+        actions={
+          <Button asChild>
+            <Link href="/payment-requests/new">
+              <Receipt /> Lập đề nghị thanh toán
+            </Link>
+          </Button>
         }
-      } else await (kind === 'pdf' ? downloadPaymentRequestPdf(r) : openPaymentRequestPdf(r));
-    } catch (e) {
-      toast.error(`Không tạo được PDF: ${e instanceof Error ? e.message : 'lỗi không xác định'}`);
-    } finally {
-      setBusy(null);
-    }
-  };
-
-  return (
-    <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
-      <div className="space-y-4">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Lấy dữ liệu từ</CardTitle>
-            <CardDescription>{filledFrom ? `Đã điền từ ${filledFrom}. Có thể sửa lại mọi nội dung bên dưới.` : 'Chọn đơn đặt hàng hoặc hợp đồng để tự điền khách hàng, căn cứ và số tiền.'}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            <label className="block space-y-1.5 sm:col-span-2">
-              <span className="text-sm font-medium">Mẫu đề nghị</span>
-              <FilterSelect className="w-full" allLabel="Mẫu SAHA dựng sẵn" value={templateId || undefined} onChange={(id) => setTemplateId(id ?? BUILT_IN)} options={templateOptions} ariaLabel="Mẫu đề nghị" />
-              <span className="block text-xs text-muted-foreground">
-                {tpl
-                  ? `Mẫu ${tpl.code} v${tpl.version}: nội dung bên dưới điền vào các biến {{payment.*}}; biến hợp đồng/đơn hàng lấy từ hồ sơ đã chọn.`
-                  : 'Hoặc chọn mẫu đề nghị thanh toán đang sử dụng trong Mẫu hợp đồng (mã có “DNTT” hoặc tên có “đề nghị thanh toán”).'}
-              </span>
-            </label>
-            <FilterSelect className="w-full" allLabel="Chọn đơn đặt hàng…" value={undefined} onChange={pick} options={options(orders.data?.items)} ariaLabel="Đơn đặt hàng" />
-            <FilterSelect className="w-full" allLabel="Chọn hợp đồng…" value={undefined} onChange={pick} options={options(contracts.data?.items)} ariaLabel="Hợp đồng" />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Nội dung đề nghị</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            <Field label="Công ty đề nghị *" className="sm:col-span-2">
-              <Input value={r.company} onChange={(e) => set({ company: e.target.value })} />
-            </Field>
-            <Field label="Số">
-              <Input value={r.number} onChange={(e) => set({ number: e.target.value })} />
-            </Field>
-            <div className="grid grid-cols-[1fr_1.2fr] gap-2">
-              <Field label="Nơi lập">
-                <Input value={r.place} onChange={(e) => set({ place: e.target.value })} />
-              </Field>
-              <Field label="Ngày">
-                <Input type="date" value={r.date} onChange={(e) => set({ date: e.target.value, number: r.number === defaultRequestNumber(r.date) ? defaultRequestNumber(e.target.value) : r.number })} />
-              </Field>
-            </div>
-            <Field label="Kính gửi *" className="sm:col-span-2">
-              <Input value={r.recipient} onChange={(e) => set({ recipient: e.target.value })} />
-            </Field>
-            <Field label="Căn cứ" className="sm:col-span-2">
-              <Textarea rows={3} value={r.basis} onChange={(e) => set({ basis: e.target.value })} placeholder="Căn cứ vào báo giá … ngày … giữa … và …" />
-            </Field>
-            <Field label="Số tiền (đồng) *" className="sm:col-span-2" hint={words || 'Số tiền bằng chữ tự đọc theo số đã nhập.'}>
-              <Input inputMode="numeric" value={amountText(r).figure.replace(/ đồng$/, '')} onChange={(e) => set({ amount: e.target.value.replace(/\D/g, '') })} />
-            </Field>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Tài khoản thụ hưởng và người ký</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-3 sm:grid-cols-2">
-            <Field label="Đơn vị thụ hưởng *" className="sm:col-span-2">
-              <Input value={r.beneficiary} onChange={(e) => set({ beneficiary: e.target.value })} />
-            </Field>
-            <Field label="Tài khoản – ngân hàng" className="sm:col-span-2" hint="VD: 921019999 - Ngân hàng MB - chi nhánh Thanh Xuân">
-              <Input value={r.account} onChange={(e) => set({ account: e.target.value })} />
-            </Field>
-            <Field label="Chủ tài khoản" className="sm:col-span-2">
-              <Input value={r.accountHolder} onChange={(e) => set({ accountHolder: e.target.value })} />
-            </Field>
-            <Field label="Chức vụ người ký">
-              <Input value={r.signerPosition} onChange={(e) => set({ signerPosition: e.target.value })} placeholder="Giám đốc" />
-            </Field>
-            <Field label="Họ tên người ký">
-              <Input value={r.signerName} onChange={(e) => set({ signerName: e.target.value })} />
-            </Field>
-            <div className="flex flex-wrap gap-2 sm:col-span-2">
-              <Button disabled={!valid || !!busy} onClick={() => run('print')}>
-                {busy === 'print' ? <Loader2 className="animate-spin" /> : <Printer />} Mở PDF để in
-              </Button>
-              <Button variant="outline" disabled={!valid || !!busy} onClick={() => run('pdf')}>
-                {busy === 'pdf' ? <Loader2 className="animate-spin" /> : <Download />} Tải PDF
-              </Button>
-              <Button variant="outline" disabled={!valid} onClick={() => downloadPaymentRequestWord(r, finalHtml ?? undefined)}>
-                <FileText /> Tải Word
-              </Button>
-              {!valid && <span className="self-center text-xs text-muted-foreground">Nhập công ty, kính gửi, số tiền và đơn vị thụ hưởng.</span>}
-            </div>
-          </CardContent>
-        </Card>
+      />
+      <div className="mb-4 flex flex-wrap items-center gap-2">
+        <Input className="w-72" placeholder="Tìm số đề nghị, kính gửi, căn cứ, số hồ sơ…" value={q} onChange={(e) => reset(setQ)(e.target.value)} aria-label="Tìm đề nghị thanh toán" />
+        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={reset(setStatus)} options={PAYMENT_REQUEST_STATUSES.map((s) => ({ value: s, label: PAYMENT_REQUEST_STATUS_LABELS[s] }))} />
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          Từ <Input type="date" className="w-40" value={from} onChange={(e) => reset(setFrom)(e.target.value)} aria-label="Từ ngày" />
+        </label>
+        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          đến <Input type="date" className="w-40" value={to} onChange={(e) => reset(setTo)(e.target.value)} aria-label="Đến ngày" />
+        </label>
       </div>
-
-      <div className="xl:sticky xl:top-20 xl:self-start">
-        <p className="mb-2 text-sm text-muted-foreground">Xem trước</p>
-        {rendered ? (
-          <div className="a4-page">
-            {/* HTML mẫu đã được backend làm sạch; giá trị biến được escape khi render. */}
-            <div className="contract-content" dangerouslySetInnerHTML={{ __html: rendered.html }} />
+      {requests.isError ? (
+        <ErrorState error={requests.error} onRetry={() => requests.refetch()} />
+      ) : !requests.data ? (
+        <Skeleton className="h-64" />
+      ) : requests.data.items.length === 0 ? (
+        <EmptyState title="Chưa có đề nghị thanh toán đã lưu" description={canManage ? 'Bấm “Lập đề nghị thanh toán”, hoặc lập từ một đơn đặt hàng / hợp đồng rồi bấm “Lưu đề nghị”.' : undefined} />
+      ) : (
+        <>
+          <div className="rounded-lg border">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Số đề nghị</TableHead>
+                  <TableHead>Ngày</TableHead>
+                  <TableHead>Kính gửi</TableHead>
+                  <TableHead className="text-right">Số tiền</TableHead>
+                  <TableHead>Đơn / hợp đồng</TableHead>
+                  <TableHead>Người lập</TableHead>
+                  <TableHead>Trạng thái</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {requests.data.items.map((r) => (
+                  <TableRow key={r.id}>
+                    <TableCell>
+                      <Link href={`/payment-requests/${r.id}`} className="font-medium whitespace-nowrap text-primary hover:underline">
+                        {r.number}
+                      </Link>
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{formatDate(r.date)}</TableCell>
+                    <TableCell>
+                      <div className="font-medium">{r.recipient}</div>
+                      {r.basis && <div className="line-clamp-1 max-w-96 text-xs text-muted-foreground">{r.basis}</div>}
+                    </TableCell>
+                    <TableCell className="text-right whitespace-nowrap tabular-nums">{formatMoney(r.amount)}</TableCell>
+                    <TableCell className="whitespace-nowrap text-sm">
+                      {r.contract ? (
+                        <Link href={`/contracts/${r.contract.id}`} className="hover:underline">
+                          {r.contract.code}
+                        </Link>
+                      ) : (
+                        '—'
+                      )}
+                    </TableCell>
+                    <TableCell className="whitespace-nowrap">{r.createdBy.fullName}</TableCell>
+                    <TableCell>
+                      <Badge variant={STATUS_VARIANT[r.status]}>{PAYMENT_REQUEST_STATUS_LABELS[r.status]}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
           </div>
-        ) : templateId !== BUILT_IN ? (
-          <p className="text-sm text-muted-foreground">Đang tải mẫu…</p>
-        ) : (
-        <div className="rounded-md border bg-white p-[6%] text-[#111] shadow-sm" style={{ fontSize: 'clamp(11px, 1.05vw, 15px)' }}>
-          <div dangerouslySetInnerHTML={{ __html: paymentRequestHtml(r).replace(/font-size:13pt/, 'font-size:1em').replace(/font-size:16pt/, 'font-size:1.25em').replace(/font-size:14pt/, 'font-size:1.08em') }} />
-        </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-function Field({ label, hint, className, children }: { label: string; hint?: string; className?: string; children: React.ReactNode }) {
-  return (
-    <label className={`block space-y-1.5 ${className ?? ''}`}>
-      <span className="text-sm font-medium">{label}</span>
-      {children}
-      {hint && <span className="block text-xs text-muted-foreground">{hint}</span>}
-    </label>
+          <Pager page={requests.data.page} totalPages={requests.data.totalPages} total={requests.data.total} unit="đề nghị" onPage={setPage} />
+        </>
+      )}
+    </>
   );
 }

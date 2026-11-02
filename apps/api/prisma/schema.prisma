@@ -194,6 +194,7 @@ model User {
   createdContracts    Contract[]                @relation("ContractCreator")
   stockIssues         StockIssue[]
   shippingNotes       ShippingNote[]
+  paymentRequests     PaymentRequest[]
   uploadedDocuments   ContractDocument[]
   createdTemplates    ContractTemplate[]        @relation("TemplateCreator")
   templateVersions    ContractTemplateVersion[]
@@ -438,6 +439,7 @@ model Contract {
   items             ContractItem[]
   stockIssues       StockIssue[]
   shippingNotes     ShippingNote[]
+  paymentRequests   PaymentRequest[]
   contractTypeId    String?              @db.Uuid
   group             String?
   description       String?
@@ -613,6 +615,7 @@ model ContractTemplate {
   createdBy         User                      @relation("TemplateCreator", fields: [createdById], references: [id])
   versions          ContractTemplateVersion[]
   contracts         Contract[]
+  paymentRequests PaymentRequest[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -1304,4 +1307,42 @@ model ShippingNote {
   @@index([tenantId, sendDate])
   @@index([tenantId, status])
   @@index([orderId])
+}
+
+enum PaymentRequestStatus {
+  DRAFT
+  SENT
+  PAID
+  CANCELLED
+}
+
+/// Giấy đề nghị thanh toán gửi khách hàng đã lưu: nội dung giấy + theo dõi trạng thái.
+model PaymentRequest {
+  id             String               @id @default(uuid()) @db.Uuid
+  tenantId       String               @db.Uuid
+  number         String
+  date           DateTime             @db.Date
+  place          String?
+  company        String
+  recipient      String
+  basis          String?
+  amount         Decimal              @db.Decimal(20, 2)
+  beneficiary    String
+  account        String?
+  accountHolder  String?
+  signerPosition String?
+  signerName     String?
+  contractId     String?              @db.Uuid
+  templateId     String?              @db.Uuid
+  status         PaymentRequestStatus @default(DRAFT)
+  createdById    String               @db.Uuid
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+  contract       Contract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
+  template       ContractTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  createdBy      User                 @relation(fields: [createdById], references: [id])
+
+  @@index([tenantId, date])
+  @@index([tenantId, status])
+  @@index([contractId])
 }

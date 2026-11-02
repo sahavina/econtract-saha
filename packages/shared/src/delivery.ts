@@ -19,3 +19,13 @@ export const FREIGHT_PAYER_LABELS = {
   RECEIVER: 'Người nhận trả',
 } as const;
 export type FreightPayer = keyof typeof FREIGHT_PAYER_LABELS;
+
+/** Đề nghị thanh toán gửi khách hàng. */
+export const PAYMENT_REQUEST_STATUSES = ['DRAFT', 'SENT', 'PAID', 'CANCELLED'] as const;
+export type PaymentRequestStatus = (typeof PAYMENT_REQUEST_STATUSES)[number];
+export const PAYMENT_REQUEST_STATUS_LABELS: Record<PaymentRequestStatus, string> = {
+  DRAFT: 'Chưa gửi',
+  SENT: 'Đã gửi',
+  PAID: 'Đã thanh toán',
+  CANCELLED: 'Đã hủy',
+};
