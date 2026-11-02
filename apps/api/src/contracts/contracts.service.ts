@@ -67,6 +67,7 @@ const listSelect = {
   archivedAt: true,
   deletedAt: true,
   tags: true,
+  _count: { select: { documents: { where: { deletedAt: null } } } },
   contractType: { select: { id: true, code: true, name: true } },
   department: { select: { id: true, name: true } },
   owner: { select: { id: true, fullName: true } },

@@ -63,6 +63,8 @@ export interface ContractListItem {
   department: { id: string; name: string } | null;
   owner: { id: string; fullName: string } | null;
   parties: { name: string; partnerId: string | null }[];
+  /** Số tài liệu đính kèm (danh sách hợp đồng/đơn). */
+  _count?: { documents: number };
 }
 
 export interface ContractParty {
@@ -84,7 +86,7 @@ export interface ContractParty {
   bankAccount: string | null;
 }
 
-export interface ContractDetail extends Omit<ContractListItem, 'parties' | 'items' | 'parentContract'> {
+export interface ContractDetail extends Omit<ContractListItem, 'parties' | 'items' | 'parentContract' | '_count'> {
   items: OrderItem[];
   parentContract: { id: string; code: string; title: string; signedDate: string | null } | null;
   parentContractId: string | null;
