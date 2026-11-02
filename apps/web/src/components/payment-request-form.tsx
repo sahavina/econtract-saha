@@ -6,6 +6,7 @@ import { Download, FileText, Loader2, Printer, Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { ContractSearchSelect } from '@/components/contract-search-select';
 import { FilterSelect } from '@/components/filter-select';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -28,7 +29,7 @@ import {
   paymentValues,
   type PaymentRequest,
 } from '@/lib/payment-request';
-import type { ContractDetail, ContractListItem, PaymentRequestDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
+import type { ContractDetail, PaymentRequestDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
 
 /** Mẫu dựng sẵn theo giấy đề nghị SAHA (không thuộc thư viện mẫu). */
 const BUILT_IN = '';
@@ -122,14 +123,6 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
     queryFn: () => api<TemplateDetail>(`/templates/${templateId}`),
     enabled: templateId !== BUILT_IN,
   });
-  const orders = useQuery({
-    queryKey: ['orders', 'payment-picker'],
-    queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { kind: 'ORDER', pageSize: 50 } }),
-  });
-  const contracts = useQuery({
-    queryKey: ['contracts', 'payment-picker'],
-    queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { pageSize: 50 } }),
-  });
   const contract = useQuery({
     queryKey: ['contract', linkedId],
     queryFn: () => api<ContractDetail>(`/contracts/${linkedId}`),
@@ -151,8 +144,7 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
     setR((x) => ({ ...x, company: p.name, beneficiary: p.name, accountHolder: p.name, account: p.bankAccount ?? '', signerPosition: p.position ?? '', signerName: p.representative ?? '' }));
   }
 
-  const pick = (id?: string) => id && api<ContractDetail>(`/contracts/${id}`).then(apply).catch((e: Error) => toast.error(e.message));
-  const options = (list?: ContractListItem[]) => (list ?? []).map((c) => ({ value: c.id, label: `${c.code} · ${c.parties.find((p) => p.name)?.name ?? c.title}` }));
+  const pick = (id: string) => api<ContractDetail>(`/contracts/${id}`).then(apply).catch((e: Error) => toast.error(e.message));
   const { words } = amountText(r);
   const valid = r.company.trim() && r.recipient.trim() && amountText(r).figure && r.beneficiary.trim();
 
@@ -215,8 +207,8 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
                   : 'Hoặc chọn mẫu đề nghị thanh toán đang sử dụng trong Mẫu hợp đồng (mã có “DNTT” hoặc tên có “đề nghị thanh toán”).'}
               </span>
             </label>
-            <FilterSelect className="w-full" allLabel="Chọn đơn đặt hàng…" value={undefined} onChange={pick} options={options(orders.data?.items)} ariaLabel="Đơn đặt hàng" />
-            <FilterSelect className="w-full" allLabel="Chọn hợp đồng…" value={undefined} onChange={pick} options={options(contracts.data?.items)} ariaLabel="Hợp đồng" />
+            <ContractSearchSelect kind="ORDER" placeholder="Chọn đơn đặt hàng…" selected={source?.kind === 'ORDER' ? source.code : undefined} onPick={pick} />
+            <ContractSearchSelect kind="CONTRACT" placeholder="Chọn hợp đồng…" selected={source?.kind === 'CONTRACT' ? source.code : undefined} onPick={pick} />
           </CardContent>
         </Card>
 
