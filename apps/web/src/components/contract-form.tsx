@@ -30,9 +30,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
-import { useCompanyProfile } from '@/lib/company';
+import { type CompanyProfile, useCompanyProfile } from '@/lib/company';
 import { convertDocToDocx, readDocx } from '@/lib/docx';
 import { readPdfText } from '@/lib/pdf-text';
 import { readXlsx } from '@/lib/xlsx';
@@ -145,6 +146,36 @@ const emptyParty = (role: FormValues['parties'][number]['role']): FormValues['pa
   bankAccount: '',
   partnerType: '',
 });
+
+const presetParties = (p: Partner, c?: CompanyProfile): FormValues['parties'] => [
+  {
+    ...emptyParty('PARTY_A'),
+    partnerId: p.id,
+    entityType: p.entityType,
+    name: p.name,
+    taxCode: p.taxCode ?? '',
+    address: p.address ?? '',
+    email: p.email ?? '',
+    phone: p.phone ?? '',
+    representative: p.representative ?? '',
+    position: p.position ?? '',
+    partnerType: partyTypeOf(p.type),
+  },
+  c
+    ? {
+        ...emptyParty('PARTY_B'),
+        isInternal: true,
+        name: c.name,
+        taxCode: c.taxCode ?? '',
+        address: c.address ?? '',
+        email: c.email ?? '',
+        phone: c.phone ?? '',
+        representative: c.representative ?? '',
+        position: c.position ?? '',
+        bankAccount: c.bankAccount ?? '',
+      }
+    : emptyParty('PARTY_B'),
+];
 
 const decimalInput = (v: string) => String(Number(v));
 
@@ -357,11 +388,26 @@ function ContractFilesPicker({
   );
 }
 
+/** Form tạo mới; có `partnerId` (mở từ trang đối tác) thì tải đối tác trước để điền sẵn các bên. */
+export function PartnerContractForm({ partnerId, ...props }: { partnerId: string; fromFile?: boolean; kind?: ContractKind; parentId?: string }) {
+  const partner = useQuery({
+    queryKey: ['partners', 'detail', partnerId],
+    queryFn: () => api<Partner>(`/partners/${encodeURIComponent(partnerId)}`),
+    enabled: !!partnerId,
+    retry: false,
+  });
+  const company = useCompanyProfile(!!partnerId);
+  if (partnerId && (partner.isPending || company.isPending)) return <Skeleton className="h-96" />;
+  return <ContractForm {...props} presetPartner={partner.data} presetCompany={company.data} />;
+}
+
 export function ContractForm({
   contract,
   fromFile = false,
   kind: kindProp = 'CONTRACT',
   parentId = '',
+  presetPartner,
+  presetCompany,
 }: {
   contract?: ContractDetail;
   fromFile?: boolean;
@@ -369,6 +415,9 @@ export function ContractForm({
   kind?: ContractKind;
   /** Đơn lập từ trang hợp đồng nguyên tắc. */
   parentId?: string;
+  /** Hồ sơ lập từ trang đối tác: đối tác là Bên A, doanh nghiệp mình là Bên B. */
+  presetPartner?: Partner;
+  presetCompany?: CompanyProfile;
 }) {
   const isEdit = !!contract;
   const kind: ContractKind = contract?.kind ?? kindProp;
@@ -386,7 +435,17 @@ export function ContractForm({
     queryFn: () => api<Paginated<Partner>>('/partners', { query: { q: partnerSearch, pageSize: 50 } }),
   });
 
-  const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: toForm(contract, parentId) });
+  // Đối tác đặt sẵn có thể nằm ngoài 50 dòng đầu của danh sách chọn.
+  const pickerItems = partners.data?.items ?? [];
+  const partnerOptions = (presetPartner && !pickerItems.some((p) => p.id === presetPartner.id) ? [presetPartner, ...pickerItems] : pickerItems).map((p) => ({
+    value: p.id,
+    label: `${p.code} · ${p.name}`,
+  }));
+
+  const form = useForm<FormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { ...toForm(contract, parentId), ...(presetPartner && { parties: presetParties(presetPartner, presetCompany) }) },
+  });
   const { register, control, formState, setError, setValue } = form;
   const errors = formState.errors;
   const parties = useFieldArray({ control, name: 'parties' });
@@ -630,6 +689,19 @@ export function ContractForm({
     if (x.vatRate !== undefined && !form.getValues('vatRate')) {
       setValue('vatRate', String(x.vatRate));
       filled.push('VAT');
+    }
+    // Mở từ trang đối tác: đối tác đặt sẵn ở Bên A, nhưng file có thể ghi đối tác ở bên khác ⇒ đổi vai trò theo file.
+    if (presetPartner && x.parties.length) {
+      const tax = presetPartner.taxCode?.replace(/\s/g, '');
+      const inFile = x.parties.find((q) => (tax && q.taxCode?.replace(/\s/g, '') === tax) || (q.name && foldVi(q.name) === foldVi(presetPartner.name)));
+      const current = form.getValues('parties').findIndex((q) => q.partnerId === presetPartner.id);
+      if (!inFile) {
+        toast.warning(`Không thấy ${presetPartner.name} trong các bên ghi ở ${file.name}`, { description: 'Kiểm tra lại đây có đúng là file của đối tác này không.', duration: 8000 });
+      } else if (current >= 0 && form.getValues(`parties.${current}.role`) !== inFile.role) {
+        const other = form.getValues('parties').findIndex((q) => q.role === inFile.role);
+        if (other >= 0) setValue(`parties.${other}.role`, form.getValues(`parties.${current}.role`));
+        setValue(`parties.${current}.role`, inFile.role);
+      }
     }
     let partiesFilled = 0;
     for (const p of x.parties) {
@@ -950,7 +1022,7 @@ export function ContractForm({
                     control={control}
                     name={`parties.${i}.partnerId`}
                     render={({ field }) => (
-                      <FilterSelect className="w-72" allLabel="— Nhập thủ công —" value={field.value} onChange={(v) => applyPartner(i, v)} options={(partners.data?.items ?? []).map((p) => ({ value: p.id, label: `${p.code} · ${p.name}` }))} ariaLabel="Chọn đối tác" />
+                      <FilterSelect className="w-72" allLabel="— Nhập thủ công —" value={field.value} onChange={(v) => applyPartner(i, v)} options={partnerOptions} ariaLabel="Chọn đối tác" />
                     )}
                   />
                   {odooReady(odoo.data) && (

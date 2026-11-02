@@ -3,7 +3,7 @@
 import { FilePen, FileUp } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ContractForm } from '@/components/contract-form';
+import { PartnerContractForm } from '@/components/contract-form';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
@@ -13,7 +13,8 @@ export default function NewOrderPage() {
   const params = useSearchParams();
   const parent = params.get('parent') ?? '';
   const fromFile = params.get('from') === 'file';
-  const keep = parent ? `parent=${parent}` : '';
+  const partner = params.get('partner') ?? '';
+  const keep = [parent && `parent=${parent}`, partner && `partner=${partner}`].filter(Boolean).join('&');
   return (
     <>
       <PageHeader
@@ -39,8 +40,8 @@ export default function NewOrderPage() {
         }
       />
       {can('contract.create') ? (
-        // key: đổi chế độ/hợp đồng nguyên tắc thì dựng lại form.
-        <ContractForm key={`${parent}-${fromFile}`} kind="ORDER" parentId={parent} fromFile={fromFile} />
+        // key: đổi chế độ/hợp đồng nguyên tắc/đối tác thì dựng lại form.
+        <PartnerContractForm key={`${parent}-${partner}-${fromFile}`} kind="ORDER" parentId={parent} partnerId={partner} fromFile={fromFile} />
       ) : (
         <p className="text-sm text-muted-foreground">Bạn không có quyền tạo đơn đặt hàng.</p>
       )}

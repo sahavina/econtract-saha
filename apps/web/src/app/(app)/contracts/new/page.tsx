@@ -3,14 +3,16 @@
 import { FilePen, FileUp } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { ContractForm } from '@/components/contract-form';
+import { PartnerContractForm } from '@/components/contract-form';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 
 export default function NewContractPage() {
   const { can } = useAuth();
-  const fromFile = useSearchParams().get('from') === 'file';
+  const params = useSearchParams();
+  const fromFile = params.get('from') === 'file';
+  const partner = params.get('partner') ?? '';
   return (
     <>
       <PageHeader
@@ -24,11 +26,11 @@ export default function NewContractPage() {
         actions={
           <Button variant="outline" asChild>
             {fromFile ? (
-              <Link href="/contracts/new">
+              <Link href={`/contracts/new${partner ? `?partner=${partner}` : ''}`}>
                 <FilePen /> Soạn trong hệ thống
               </Link>
             ) : (
-              <Link href="/contracts/new?from=file">
+              <Link href={`/contracts/new?from=file${partner ? `&partner=${partner}` : ''}`}>
                 <FileUp /> Tạo từ file
               </Link>
             )}
@@ -36,8 +38,8 @@ export default function NewContractPage() {
         }
       />
       {can('contract.create') ? (
-        // key: đổi chế độ thì dựng lại form, không giữ tệp/giá trị của chế độ trước.
-        <ContractForm key={fromFile ? 'file' : 'compose'} fromFile={fromFile} />
+        // key: đổi chế độ/đối tác thì dựng lại form, không giữ tệp/giá trị của chế độ trước.
+        <PartnerContractForm key={`${partner}-${fromFile}`} partnerId={partner} fromFile={fromFile} />
       ) : (
         <p className="text-sm text-muted-foreground">Bạn không có quyền tạo hợp đồng.</p>
       )}

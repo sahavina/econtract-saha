@@ -2,7 +2,7 @@
 
 import { fromScaled, ORDER_FULFILLMENT_LABELS, PARTNER_TYPE_LABELS, SHIPPING_NOTE_STATUS_LABELS, STOCK_ISSUE_STATUS_LABELS, toScaled } from '@saha/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, FileUp, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -55,6 +55,20 @@ function Pager({ data, onPage }: { data: Paginated<unknown>; onPage: (page: numb
       <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={data.page <= 1} onClick={() => onPage(data.page - 1)}><ChevronLeft /></Button>
       Trang {data.page}/{data.totalPages}
       <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={data.page >= data.totalPages} onClick={() => onPage(data.page + 1)}><ChevronRight /></Button>
+    </div>
+  );
+}
+
+/** Tạo hồ sơ ngay từ trang đối tác: soạn trong hệ thống, hoặc tải file lên để tự điền và đính kèm. */
+function CreateActions({ base, partnerId, label }: { base: string; partnerId: string; label: string }) {
+  return (
+    <div className="flex flex-wrap justify-center gap-2">
+      <Button size="sm" asChild>
+        <Link href={`${base}?partner=${partnerId}`}><Plus /> {label}</Link>
+      </Button>
+      <Button size="sm" variant="outline" asChild>
+        <Link href={`${base}?from=file&partner=${partnerId}`}><FileUp /> Tạo từ file đính kèm</Link>
+      </Button>
     </div>
   );
 }
@@ -136,6 +150,8 @@ export default function PartnerDetailPage() {
   const issueCount = issues.data?.total;
   const noteCount = notes.data?.total;
   const deliveryCount = issueCount === undefined || noteCount === undefined ? '…' : issueCount + noteCount;
+  const contractActions = can('contract.create') ? <CreateActions base="/contracts/new" partnerId={p.id} label="Tạo hợp đồng" /> : undefined;
+  const orderActions = can('contract.create') ? <CreateActions base="/orders/new" partnerId={p.id} label="Tạo đơn đặt hàng" /> : undefined;
 
   return (
     <>
@@ -248,9 +264,10 @@ export default function PartnerDetailPage() {
                 ) : !contracts.data ? (
                   <Skeleton className="h-40" />
                 ) : !contracts.data.items.length ? (
-                  <EmptyState title="Chưa có hợp đồng" description="Đối tác này chưa là một bên trong hợp đồng nào." />
+                  <EmptyState title="Chưa có hợp đồng" description="Đối tác này chưa là một bên trong hợp đồng nào." action={contractActions} />
                 ) : (
                   <>
+                    {contractActions && <div className="mb-3 flex justify-end">{contractActions}</div>}
                     <div className="rounded-lg border">
                       <Table>
                         <TableHeader>
@@ -293,9 +310,10 @@ export default function PartnerDetailPage() {
                 ) : !orders.data ? (
                   <Skeleton className="h-40" />
                 ) : !orders.data.items.length ? (
-                  <EmptyState title="Chưa có đơn đặt hàng" description="Chưa có đơn đặt hàng nào của đối tác này trong hệ thống hợp đồng." />
+                  <EmptyState title="Chưa có đơn đặt hàng" description="Chưa có đơn đặt hàng nào của đối tác này trong hệ thống hợp đồng." action={orderActions} />
                 ) : (
                   <>
+                    {orderActions && <div className="mb-3 flex justify-end">{orderActions}</div>}
                     <div className="rounded-lg border">
                       <Table>
                         <TableHeader>
