@@ -6,6 +6,7 @@ import { ChevronLeft, ChevronRight, ExternalLink } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
+import { ContractDownloadButton } from '@/components/contract-download-button';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -259,6 +260,7 @@ export default function PartnerDetailPage() {
                             <TableHead>Hết hạn</TableHead>
                             <TableHead className="text-right">Giá trị</TableHead>
                             <TableHead>Trạng thái</TableHead>
+                            <TableHead className="text-right">Tải</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -273,6 +275,7 @@ export default function PartnerDetailPage() {
                               <TableCell className="whitespace-nowrap">{formatDate(c.expiryDate)}</TableCell>
                               <TableCell className="text-right whitespace-nowrap tabular-nums">{formatMoney(c.value, c.currency)}</TableCell>
                               <TableCell><ContractStatusBadge status={c.status} /></TableCell>
+                              <TableCell className="text-right"><ContractDownloadButton id={c.id} code={c.code} /></TableCell>
                             </TableRow>
                           ))}
                         </TableBody>
@@ -302,6 +305,7 @@ export default function PartnerDetailPage() {
                             <TableHead className="text-right">Giá trị</TableHead>
                             <TableHead>Giao hàng</TableHead>
                             <TableHead>Trạng thái</TableHead>
+                            <TableHead className="text-right">Tải</TableHead>
                           </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -325,6 +329,7 @@ export default function PartnerDetailPage() {
                                   </span>
                                 </TableCell>
                                 <TableCell><ContractStatusBadge status={o.status} /></TableCell>
+                                <TableCell className="text-right"><ContractDownloadButton id={o.id} code={o.code} /></TableCell>
                               </TableRow>
                             );
                           })}
