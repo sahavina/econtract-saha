@@ -3,6 +3,34 @@ import { type DocBlock, extractContractFields, parseVietnameseNumber } from '@sa
 const p = (text: string): DocBlock => ({ type: 'p', text });
 
 describe('extractContractFields', () => {
+  it('reads a PDF layout: name on its own line, label pairs on one line separated by tabs, totals as text', () => {
+    const x = extractContractFields([
+      p('HỢP ĐỒNG DỊCH VỤ QUẢNG CÁO'),
+      p('1. Bên sử dụng dịch vụ (gọi tắt là Bên A)'),
+      p('CÔNG TY TNHH THƯƠNG MẠI DỊCH VỤ TRỰC TUYẾN SAHA'),
+      p('Điện thoại : 0396345468\tMã số thuế : 0110690109'),
+      p('Đại diện : Ông Nguyễn Đức Chung\tChức vụ : Giám đốc'),
+      p('2 . Bên cung cấp dịch vụ (gọi tắt là Bên B)'),
+      p('CÔNG TY CỔ PHẦN CÔNG NGHỆ VÀ THÔNG TIN DOANH NGHIỆP VIỆT'),
+      p('Tên tài khoản ngân hàng: Công ty Cổ phần Công nghệ và Thông tin Doanh Nghiệp Việt'),
+      p('ĐIỀU 1: NỘI DUNG HỢP ĐỒNG'),
+      p('Thuế GTGT\t8%\t480,000'),
+      p('TỔNG CỘNG\t6,480,000'),
+    ]);
+    expect(x.parties[0]).toMatchObject({
+      role: 'PARTY_A',
+      side: 'BUY',
+      name: 'CÔNG TY TNHH THƯƠNG MẠI DỊCH VỤ TRỰC TUYẾN SAHA',
+      phone: '0396345468',
+      taxCode: '0110690109',
+      representative: 'Nguyễn Đức Chung',
+      position: 'Giám đốc',
+    });
+    expect(x.parties[1]).toMatchObject({ role: 'PARTY_B', side: 'SELL', name: 'CÔNG TY CỔ PHẦN CÔNG NGHỆ VÀ THÔNG TIN DOANH NGHIỆP VIỆT' });
+    expect(x.value).toBe('6480000');
+    expect(x.vatRate).toBe(8);
+  });
+
   it('reads the SAHA sales contract layout (party tables, price table)', () => {
     const x = extractContractFields([
       { type: 'table', rows: [['', 'CỘNG HOÀ XÃ HỘI CHỦ NGHĨA VIỆT NAM\nHà Nội, ngày 15 tháng 10 năm 2026']] },

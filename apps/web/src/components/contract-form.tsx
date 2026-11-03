@@ -628,7 +628,7 @@ export function ContractForm({
   };
 
   /**
-   * Điền sẵn form từ file Word (.docx; .doc được máy chủ chuyển sang .docx): chỉ điền ô còn trống, không ghi đè thông tin đã nhập.
+   * Điền sẵn form từ file Word (.docx; .doc được máy chủ chuyển sang .docx) hoặc PDF có lớp chữ: chỉ điền ô còn trống, không ghi đè thông tin đã nhập.
    * Bên có MST trùng doanh nghiệp mình ⇒ đánh dấu "Bên nội bộ"; trùng đối tác trong danh mục ⇒ liên kết đối tác.
    */
   const applyDocx = async (file: File) => {
@@ -651,9 +651,11 @@ export function ContractForm({
       doc = await readXlsx(file).catch(() => null);
     } else if (/\.pdf$/i.test(file.name)) {
       const id = toast.loading(`Đang đọc ${file.name}…`);
-      doc = await readPdfText(file).catch(() => null);
+      const pdf = await readPdfText(file).catch(() => null);
       toast.dismiss(id);
-      if (!doc) return toast.info(`${file.name} là PDF dạng ảnh scan – chưa tự đọc được. Tệp vẫn được đính kèm; hãy nhập thông tin và hàng hóa thủ công.`, { duration: 10_000 });
+      if (!pdf) return toast.info(`${file.name} là PDF dạng ảnh scan – chưa tự đọc được. Tệp vẫn được đính kèm; hãy nhập thông tin${isOrder ? ' và hàng hóa' : ''} thủ công.`, { duration: 10_000 });
+      // Đơn hàng dựng nội dung từ dòng hàng; hợp đồng lấy chữ trong PDF làm nội dung.
+      doc = isOrder ? { blocks: pdf.blocks } : pdf;
     } else if (/\.(png|jpe?g)$/i.test(file.name)) {
       return toast.info(`${file.name} là ảnh – chưa tự đọc được. Tệp vẫn được đính kèm; hãy nhập thông tin và hàng hóa thủ công.`, { duration: 10_000 });
     }
@@ -770,9 +772,9 @@ export function ContractForm({
         if (added[0] && !form.getValues('title').trim()) {
           setValue('title', added[0].name.replace(/\.[^.]+$/, '').slice(0, 500), { shouldValidate: true });
         }
-        // File Word: đọc nội dung để điền sẵn thông tin chung và các bên.
-        // Đơn đặt hàng còn đọc được Excel, PDF có lớp chữ (ảnh/PDF scan chỉ đính kèm).
-        const readable = isOrder ? /\.(docx?|xlsx|pdf|png|jpe?g)$/i : /\.docx?$/i;
+        // File Word, PDF có lớp chữ: đọc nội dung để điền sẵn thông tin chung và các bên.
+        // Đơn đặt hàng còn đọc được Excel (ảnh/PDF scan chỉ đính kèm).
+        const readable = isOrder ? /\.(docx?|xlsx|pdf|png|jpe?g)$/i : /\.(docx?|pdf)$/i;
         const source = added.find((x) => /\.docx?$/i.test(x.name)) ?? added.find((x) => readable.test(x.name));
         if (source && !isEdit) void applyDocx(source);
       }}
@@ -784,8 +786,9 @@ export function ContractForm({
       <CardHeader>
         <CardTitle>Nội dung hợp đồng (từ {imported.name})</CardTitle>
         <CardDescription>
-          Nội dung file Word được chép vào hợp đồng để xem, in/xuất PDF và ký; sau khi lưu có thể sửa tiếp ở tab “Nội dung hợp đồng”. Hình ảnh và đánh số tự động của
-          Word không được chép.
+          {/\.pdf$/i.test(imported.name)
+            ? 'Chữ trong PDF được chép vào hợp đồng để xem, in/xuất PDF và ký; hãy đối chiếu với bản gốc vì bảng biểu thành các dòng chữ, hình ảnh không được chép. Sau khi lưu có thể sửa tiếp ở tab “Nội dung hợp đồng”.'
+            : 'Nội dung file Word được chép vào hợp đồng để xem, in/xuất PDF và ký; sau khi lưu có thể sửa tiếp ở tab “Nội dung hợp đồng”. Hình ảnh và đánh số tự động của Word không được chép.'}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

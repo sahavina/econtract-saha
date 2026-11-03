@@ -62,6 +62,8 @@ const LABELS: [RegExp, PartyField][] = [
 export function fieldOf(label: string): PartyField | null {
   const f = foldVi(label).replace(/[:：]$/, '').trim();
   if (!f || f.length > 40) return null;
+  // "Tên tài khoản ngân hàng: …" là chủ tài khoản, không phải tên bên tham gia.
+  if (/^ten (chu )?(tai khoan|ngan hang)\b/.test(f)) return null;
   for (const [re, field] of LABELS) if (re.test(f)) return field;
   return null;
 }
@@ -96,7 +98,7 @@ function partyMarker(text: string): { role: ExtractedParty['role']; name?: strin
   const colon = text.search(/[:：]/);
   const name = colon >= 0 ? clean(text.slice(colon + 1)) : '';
   const head = foldVi(colon >= 0 ? text.slice(0, colon) : text);
-  const side = /\bben mua\b/.test(head) ? 'BUY' : /\bben ban\b/.test(head) ? 'SELL' : undefined;
+  const side = /\bben (mua|su dung)\b/.test(head) ? 'BUY' : /\bben (ban|cung cap)\b/.test(head) ? 'SELL' : undefined;
   return { role, name: name && !/^[.…_\s]+$/.test(name) ? name : undefined, side };
 }
 
@@ -180,6 +182,11 @@ export function extractContractFields(blocks: DocBlock[]): ExtractedContract {
         continue;
       }
       if (current) {
+        // Tên pháp nhân đứng riêng một dòng ngay dưới "Bên A": "CÔNG TY TNHH …".
+        if (!current.name && !/[:：]/.test(text) && /^(cong ty|tap doan|tong cong ty|ngan hang|ho kinh doanh|doanh nghiep|chi nhanh)\b/.test(foldVi(text))) {
+          put('name', text);
+          continue;
+        }
         // "Địa chỉ        ⇥: …" – bỏ khoảng trắng/tab trước dấu hai chấm rồi mới tách các cặp nhãn–giá trị theo tab.
         for (const part of text.replace(/[ \t ]+(?=[:：])/g, '').split(/\t+|\s{3,}/)) {
           const i = part.search(/[:：]/);
@@ -226,6 +233,17 @@ export function extractContractFields(blocks: DocBlock[]): ExtractedContract {
           const v = parseVietnameseNumber([...row].reverse().find((c) => /\d/.test(c)) ?? '');
           if (v && Number(v) > 0) out.value = v;
         }
+      }
+    }
+  }
+  // PDF: bảng giá thành các dòng chữ "TỔNG CỘNG   6,480,000".
+  if (!out.value) {
+    for (const l of lines) {
+      if (!/^(tong cong|tong thanh toan)\b/.test(foldVi(l))) continue;
+      const v = parseVietnameseNumber(l.replace(/^\D+/, ''));
+      if (v && Number(v) > 0) {
+        out.value = v;
+        break;
       }
     }
   }

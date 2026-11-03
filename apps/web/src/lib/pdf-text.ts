@@ -4,6 +4,7 @@ import { type DocBlock, foldVi } from '@saha/shared';
  * Đọc lớp chữ của file PDF (pdf.js) để trích thông tin đơn đặt hàng.
  * Chữ được gom thành dòng theo tọa độ y và tách ô theo khoảng trống; bảng hàng hóa nhận ra từ dòng tiêu đề
  * (có "tên hàng" và "số lượng"), các dòng sau xếp vào cột theo vị trí x của tiêu đề.
+ * Kèm `html`: lớp chữ dựng lại thành đoạn văn để làm nội dung hợp đồng (bảng biểu thành các dòng chữ).
  * PDF dạng ảnh scan không có lớp chữ ⇒ trả null.
  */
 
@@ -11,6 +12,12 @@ interface Cell {
   x: number;
   end: number;
   text: string;
+}
+
+interface Line {
+  y: number;
+  height: number;
+  cells: Cell[];
 }
 
 const HEADER_NAME = /^(ten hang|ten san pham|ten vat tu|hang hoa|san pham|dien giai|mo ta|description)/;
@@ -24,7 +31,7 @@ async function loadPdfjs() {
 }
 
 /** Gom các mẩu chữ cùng dòng (sai lệch y ≤ 3pt) và nối/tách ô theo khoảng trống giữa chúng. */
-function toLines(items: { str: string; transform: number[]; width: number; height: number }[]): Cell[][] {
+function toLines(items: { str: string; transform: number[]; width: number; height: number }[]): Line[] {
   const sorted = items.filter((i) => i.str.trim()).sort((a, b) => b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4]);
   const lines: { y: number; parts: typeof sorted }[] = [];
   for (const it of sorted) {
@@ -46,8 +53,49 @@ function toLines(items: { str: string; transform: number[]; width: number; heigh
         last.end = Math.max(last.end, x + p.width);
       } else cells.push({ x, end: x + p.width, text: p.str });
     }
-    return cells.map((c) => ({ ...c, text: c.text.replace(/\s+/g, ' ').trim() }));
+    return {
+      y: l.y,
+      height: Math.max(...parts.map((p) => p.height || 0), 6),
+      cells: cells.map((c) => ({ ...c, text: c.text.replace(/\s+/g, ' ').trim() })),
+    };
   });
+}
+
+const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
+/** Dòng mở đầu mục: gạch đầu dòng, số thứ tự, "Điều 1", "Bên A"… */
+const STARTS_ITEM = /^([-–•+]|\d{1,2}\s*[.)/]|[a-z]\)|dieu\s+\d|ben\s+[abc]\b|chuong\s+\d)/;
+const isUpper = (t: string) => /\p{L}/u.test(t) && t === t.toLocaleUpperCase('vi');
+
+/** Gom các dòng của một trang thành đoạn: dòng sau nối vào đoạn trước nếu dòng trước chạy hết khổ và không có khoảng cách lớn. */
+function pageHtml(lines: Line[], pageWidth: number): string {
+  // Bỏ số trang ở đầu/cuối trang.
+  const body = lines.filter((l, i) => !((i === 0 || i === lines.length - 1) && /^\d{1,3}$/.test(l.cells.map((c) => c.text).join(' '))));
+  const right = Math.max(0, ...body.flatMap((l) => l.cells.map((c) => c.end)));
+  const out: string[] = [];
+  let para = '';
+  const flush = () => {
+    if (para) out.push(`<p>${para}</p>`);
+    para = '';
+  };
+  body.forEach((l, i) => {
+    const raw = l.cells.map((c) => c.text).join(' ');
+    const text = esc(raw);
+    const start = l.cells[0].x;
+    const end = l.cells[l.cells.length - 1].end;
+    // Dòng ngắn nằm giữa trang: tiêu đề.
+    if (Math.abs((start + end) / 2 - pageWidth / 2) < 12 && end - start < pageWidth * 0.7) {
+      flush();
+      out.push(`<p style="text-align:center">${isUpper(raw) ? `<strong>${text}</strong>` : text}</p>`);
+      return;
+    }
+    const prev = body[i - 1];
+    const prevEnd = prev ? prev.cells[prev.cells.length - 1].end : 0;
+    const newPara = !prev || prev.y - l.y > l.height * 1.9 || prevEnd < right - pageWidth * 0.12 || STARTS_ITEM.test(foldVi(raw)) || l.cells.length > 1 || isUpper(raw);
+    if (newPara) flush();
+    para += (para ? ' ' : '') + (isUpper(raw) ? `<strong>${text}</strong>` : text);
+  });
+  flush();
+  return out.join('');
 }
 
 /** Xếp ô của một dòng vào cột theo khoảng x của các ô tiêu đề. */
@@ -77,17 +125,19 @@ function alignToHeader(header: Cell[], cells: Cell[]): string[] {
   return out;
 }
 
-export async function readPdfText(file: Blob): Promise<{ blocks: DocBlock[] } | null> {
+export async function readPdfText(file: Blob): Promise<{ blocks: DocBlock[]; html: string } | null> {
   const pdfjs = await loadPdfjs();
   const task = pdfjs.getDocument({ data: new Uint8Array(await file.arrayBuffer()) });
   const doc = await task.promise;
   const blocks: DocBlock[] = [];
+  let html = '';
   let chars = 0;
   try {
     for (let n = 1; n <= Math.min(doc.numPages, 20); n++) {
       const page = await doc.getPage(n);
       const content = await page.getTextContent();
       const lines = toLines(content.items.filter((i) => 'str' in i) as never);
+      html += pageHtml(lines, page.getViewport({ scale: 1 }).width);
       let header: Cell[] | null = null;
       let table: string[][] = [];
       const flush = () => {
@@ -95,8 +145,9 @@ export async function readPdfText(file: Blob): Promise<{ blocks: DocBlock[] } | 
         table = [];
         header = null;
       };
-      for (const cells of lines) {
-        const text = cells.map((c) => c.text).join(' ');
+      for (const { cells } of lines) {
+        // Tab giữa các ô: tách được "Điện thoại: …   Mã số thuế: …" nằm trên cùng dòng.
+        const text = cells.map((c) => c.text).join('\t');
         chars += text.length;
         blocks.push({ type: 'p', text });
         const folded = cells.map((c) => foldVi(c.text));
@@ -114,5 +165,5 @@ export async function readPdfText(file: Blob): Promise<{ blocks: DocBlock[] } | 
     void task.destroy();
   }
   // Gần như không có chữ ⇒ PDF scan.
-  return chars < 20 ? null : { blocks };
+  return chars < 20 ? null : { blocks, html };
 }
