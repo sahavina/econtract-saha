@@ -15,6 +15,8 @@ import {
   Braces,
   ClipboardCheck,
   Columns3,
+  FoldHorizontal,
+  FoldVertical,
   Italic,
   List,
   ListOrdered,
@@ -24,6 +26,7 @@ import {
   SquareDashed,
   Strikethrough,
   Table as TableIcon,
+  TableCellsSplit,
   Trash2,
   Underline,
   Undo2,
@@ -43,6 +46,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator';
 import { escapeHtml } from '@saha/shared';
 import { useState } from 'react';
+import { toast } from 'sonner';
+import { type MergeDirection, mergeTableCells } from '@/lib/table-merge';
 import { cn } from '@/lib/utils';
 
 const BLOCKS = [
@@ -119,6 +124,13 @@ function Toolbar({ editor, enableClauses }: { editor: Editor; enableClauses?: bo
 
   const chain = () => editor.chain().focus();
 
+  const merge = (direction: MergeDirection) => {
+    const result = mergeTableCells(editor.state, direction);
+    if (typeof result === 'string') toast.error(result);
+    else editor.view.dispatch(result);
+    editor.commands.focus();
+  };
+
   const setBlock = (v: string) => {
     if (v === 'p') chain().setParagraph().run();
     else chain().setHeading({ level: Number(v.slice(1)) as 1 | 2 | 3 | 4 | 5 | 6 }).run();
@@ -188,7 +200,7 @@ function Toolbar({ editor, enableClauses }: { editor: Editor; enableClauses?: bo
             <TableIcon /> Bảng
           </Button>
         </DropdownMenuTrigger>
-        <DropdownMenuContent className="min-w-44">
+        <DropdownMenuContent className="min-w-60">
           <DropdownMenuItem onSelect={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}>
             <TableIcon /> Chèn bảng 3×3
           </DropdownMenuItem>
@@ -199,6 +211,16 @@ function Toolbar({ editor, enableClauses }: { editor: Editor; enableClauses?: bo
           <DropdownMenuItem disabled={!s.inTable} onSelect={() => chain().addColumnAfter().run()}>
             <Columns3 /> Thêm cột
           </DropdownMenuItem>
+          <DropdownMenuItem disabled={!s.inTable} onSelect={() => merge('vertical')}>
+            <FoldVertical /> Hợp nhất theo chiều dọc
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!s.inTable} onSelect={() => merge('horizontal')}>
+            <FoldHorizontal /> Hợp nhất theo chiều ngang
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={!s.inTable} onSelect={() => chain().splitCell().run()}>
+            <TableCellsSplit /> Tách ô đã hợp nhất
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
           <DropdownMenuItem disabled={!s.inTable} onSelect={() => chain().updateAttributes('table', { borderless: !s.borderless }).run()}>
             <SquareDashed /> {s.borderless ? 'Hiện viền bảng' : 'Ẩn viền bảng'}
           </DropdownMenuItem>
