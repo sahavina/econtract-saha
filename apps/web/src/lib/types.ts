@@ -782,6 +782,13 @@ export interface PaymentRequestListItem {
   createdAt: string;
   contract: { id: string; code: string; kind: ContractKind } | null;
   createdBy: { id: string; fullName: string };
+  sentAt: string | null;
+  sentMethod: import('@saha/shared').PaymentSendMethod | null;
+  sentTo: string | null;
+  sentNote: string | null;
+  sentBy: { id: string; fullName: string } | null;
+  paidAt: string | null;
+  paidBy: { id: string; fullName: string } | null;
 }
 
 export interface PaymentRequestDetail extends PaymentRequestListItem {

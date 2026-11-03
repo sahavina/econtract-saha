@@ -11,6 +11,8 @@ export interface MailMessage {
   subject: string;
   text: string;
   html?: string;
+  cc?: string;
+  attachments?: { filename: string; content: Buffer; contentType: string }[];
 }
 
 export const SMTP_PROVIDER = 'smtp';

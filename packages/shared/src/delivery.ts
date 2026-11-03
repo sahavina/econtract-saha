@@ -29,3 +29,13 @@ export const PAYMENT_REQUEST_STATUS_LABELS: Record<PaymentRequestStatus, string>
   PAID: 'Đã thanh toán',
   CANCELLED: 'Đã hủy',
 };
+
+/** Cách gửi đề nghị cho khách (EMAIL khi gửi từ hệ thống hoặc tự gửi bằng email). */
+export const PAYMENT_SEND_METHODS = ['ZALO', 'EMAIL', 'PAPER', 'OTHER'] as const;
+export type PaymentSendMethod = (typeof PAYMENT_SEND_METHODS)[number];
+export const PAYMENT_SEND_METHOD_LABELS: Record<PaymentSendMethod, string> = {
+  ZALO: 'Zalo',
+  EMAIL: 'Email',
+  PAPER: 'Bản giấy',
+  OTHER: 'Khác',
+};

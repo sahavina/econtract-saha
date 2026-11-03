@@ -3,6 +3,7 @@
 import { amountInWordsVnd, formatQtyVi } from '@saha/shared';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { setupPdfFonts } from '@/lib/pdf-fonts';
+import type { PaymentRequestDetail } from '@/lib/types';
 
 /** Giấy đề nghị thanh toán gửi khách hàng (theo mẫu SAHA): kính gửi, căn cứ, số tiền, tài khoản thụ hưởng. */
 export interface PaymentRequest {
@@ -174,6 +175,28 @@ export const fileBase = (r: PaymentRequest) => `De nghi thanh toan - ${(r.recipi
 export async function downloadPaymentRequestPdf(r: PaymentRequest) {
   await (await createPdf(r)).download(`${fileBase(r)}.pdf`);
 }
+
+/** PDF mẫu dựng sẵn dưới dạng File (đính kèm email). */
+export async function paymentRequestPdfFile(r: PaymentRequest) {
+  const blob = await (await createPdf(r)).getBlob();
+  return new File([blob], `${fileBase(r)}.pdf`, { type: 'application/pdf' });
+}
+
+/** Đưa đề nghị đã lưu về dạng nội dung giấy (số tiền nguyên đồng). */
+export const requestFromSaved = (s: PaymentRequestDetail): PaymentRequest => ({
+  company: s.company,
+  number: s.number,
+  place: s.place ?? '',
+  date: s.date.slice(0, 10),
+  recipient: s.recipient,
+  basis: s.basis ?? '',
+  amount: String(Math.round(Number(s.amount))),
+  beneficiary: s.beneficiary,
+  account: s.account ?? '',
+  accountHolder: s.accountHolder ?? '',
+  signerPosition: s.signerPosition ?? '',
+  signerName: s.signerName ?? '',
+});
 
 export async function openPaymentRequestPdf(r: PaymentRequest) {
   const url = URL.createObjectURL(await (await createPdf(r)).getBlob());

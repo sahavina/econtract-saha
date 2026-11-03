@@ -4,7 +4,9 @@ import { PAYMENT_REQUEST_STATUS_LABELS } from '@saha/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useParams } from 'next/navigation';
 import { ErrorState, PageHeader } from '@/components/page-header';
+import { PaymentRequestActions } from '@/components/payment-request-actions';
 import { PaymentRequestForm } from '@/components/payment-request-form';
+import { PaymentRequestProgress } from '@/components/payment-request-progress';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
@@ -27,7 +29,9 @@ export default function PaymentRequestDetailPage() {
         }
         description={`Ngày ${formatDate(r.date)} · Người lập: ${r.createdBy.fullName}`}
         crumbs={[{ label: 'Đề nghị thanh toán', href: '/payment-requests' }, { label: r.number }]}
+        actions={<PaymentRequestActions request={r} />}
       />
+      <PaymentRequestProgress request={r} className="mb-4 text-sm" />
       <PaymentRequestForm key={r.id} saved={r} />
     </>
   );

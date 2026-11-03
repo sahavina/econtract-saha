@@ -1,4 +1,4 @@
-import { PAYMENT_REQUEST_STATUSES } from '@saha/shared';
+import { PAYMENT_REQUEST_STATUSES, PAYMENT_SEND_METHODS } from '@saha/shared';
 import { z } from 'zod';
 import { optionalString, paginationSchema } from '../common/pagination.js';
 
@@ -35,6 +35,24 @@ export const paymentRequestCreateSchema = base.extend({ status: base.shape.statu
 export type PaymentRequestCreate = z.infer<typeof paymentRequestCreateSchema>;
 export const paymentRequestUpdateSchema = base.partial();
 export type PaymentRequestUpdate = z.infer<typeof paymentRequestUpdateSchema>;
+
+export const paymentRequestMarkSentSchema = z.object({
+  method: z.enum(PAYMENT_SEND_METHODS),
+  note: nullableText(500),
+});
+export type PaymentRequestMarkSent = z.infer<typeof paymentRequestMarkSentSchema>;
+
+export const paymentRequestMarkPaidSchema = z.object({ date: optionalDate });
+export type PaymentRequestMarkPaid = z.infer<typeof paymentRequestMarkPaidSchema>;
+
+/** Trường đi kèm tệp PDF (multipart). */
+export const paymentRequestSendEmailSchema = z.object({
+  to: z.email('Email người nhận không hợp lệ'),
+  cc: z.preprocess((v) => (v === '' ? undefined : v), z.email('Email CC không hợp lệ').optional()),
+  subject: z.string().trim().min(1, 'Nhập tiêu đề email').max(255),
+  message: z.string().trim().min(1, 'Nhập nội dung email').max(5000),
+});
+export type PaymentRequestSendEmail = z.infer<typeof paymentRequestSendEmailSchema>;
 
 export const paymentRequestQuerySchema = paginationSchema.extend({
   q: optionalString,

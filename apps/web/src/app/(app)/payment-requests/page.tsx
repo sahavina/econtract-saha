@@ -8,6 +8,8 @@ import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
+import { PaymentRequestActions } from '@/components/payment-request-actions';
+import { PaymentRequestProgress } from '@/components/payment-request-progress';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -87,6 +89,7 @@ export default function PaymentRequestsPage() {
                   <TableHead>Đơn / hợp đồng</TableHead>
                   <TableHead>Người lập</TableHead>
                   <TableHead>Trạng thái</TableHead>
+                  <TableHead>Thao tác</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -115,6 +118,10 @@ export default function PaymentRequestsPage() {
                     <TableCell className="whitespace-nowrap">{r.createdBy.fullName}</TableCell>
                     <TableCell>
                       <Badge variant={STATUS_VARIANT[r.status]}>{PAYMENT_REQUEST_STATUS_LABELS[r.status]}</Badge>
+                      <PaymentRequestProgress request={r} className="mt-0.5 text-xs" />
+                    </TableCell>
+                    <TableCell>
+                      <PaymentRequestActions request={r} size="sm" />
                     </TableCell>
                   </TableRow>
                 ))}

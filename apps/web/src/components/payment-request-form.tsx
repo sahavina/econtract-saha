@@ -27,6 +27,7 @@ import {
   openPaymentRequestPdf,
   paymentRequestHtml,
   paymentValues,
+  requestFromSaved,
   type PaymentRequest,
 } from '@/lib/payment-request';
 import type { ContractDetail, PaymentRequestDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
@@ -56,21 +57,6 @@ const EMPTY: PaymentRequest = {
   signerPosition: '',
   signerName: '',
 };
-
-const fromSaved = (s: PaymentRequestDetail): PaymentRequest => ({
-  company: s.company,
-  number: s.number,
-  place: s.place ?? '',
-  date: s.date.slice(0, 10),
-  recipient: s.recipient,
-  basis: s.basis ?? '',
-  amount: String(Math.round(Number(s.amount))),
-  beneficiary: s.beneficiary,
-  account: s.account ?? '',
-  accountHolder: s.accountHolder ?? '',
-  signerPosition: s.signerPosition ?? '',
-  signerName: s.signerName ?? '',
-});
 
 /** Giá trị cần thanh toán: đơn hàng = tổng gồm VAT theo các dòng hàng; hợp đồng = giá trị hợp đồng. Bỏ phần lẻ đồng. */
 function payableAmount(c: ContractDetail): string {
@@ -106,8 +92,10 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
   const qc = useQueryClient();
   const company = useCompanyProfile();
   const linkedId = saved?.contractId ?? contractId;
-  const [r, setR] = useState<PaymentRequest>(saved ? fromSaved(saved) : EMPTY);
-  const [status, setStatus] = useState<PaymentRequestStatus>(saved?.status ?? 'DRAFT');
+  const [r, setR] = useState<PaymentRequest>(saved ? requestFromSaved(saved) : EMPTY);
+  // Chỉ gửi trạng thái khi người dùng đổi ở đây; nút Đã gửi/Đã thanh toán đổi trạng thái ngay trên máy chủ.
+  const [pickedStatus, setPickedStatus] = useState<PaymentRequestStatus | null>(null);
+  const status = pickedStatus ?? saved?.status ?? 'DRAFT';
   // Đề nghị đã lưu: giữ nguyên nội dung, không điền lại từ hồ sơ.
   const [filledFrom, setFilledFrom] = useState<string | null>(saved ? (saved.contract?.code ?? '') : null);
   const [profileApplied, setProfileApplied] = useState(!!saved);
@@ -158,12 +146,13 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
 
   const save = useMutation({
     mutationFn: () => {
-      const body = { ...r, amount: amountDigits(r.amount), contractId: source?.id ?? null, templateId: templateId || null, status };
+      const body = { ...r, amount: amountDigits(r.amount), contractId: source?.id ?? null, templateId: templateId || null, ...(pickedStatus && { status: pickedStatus }) };
       return saved ? api<{ id: string }>(`/payment-requests/${saved.id}`, { method: 'PATCH', body }) : api<{ id: string }>('/payment-requests', { method: 'POST', body });
     },
     onSuccess: (x) => {
       qc.invalidateQueries({ queryKey: ['payment-requests'] });
       qc.invalidateQueries({ queryKey: ['payment-request', x.id] });
+      setPickedStatus(null);
       toast.success(saved ? 'Đã lưu thay đổi' : `Đã lưu đề nghị thanh toán ${r.number}`);
       if (!saved) router.replace(`/payment-requests/${x.id}`);
     },
@@ -265,7 +254,7 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
             </Field>
             {saved && can('payment_request.manage') && (
               <Field label="Trạng thái" className="sm:col-span-2">
-                <Select value={status} onValueChange={(v) => setStatus(v as PaymentRequestStatus)}>
+                <Select value={status} onValueChange={(v) => setPickedStatus(v as PaymentRequestStatus)}>
                   <SelectTrigger className="w-full" aria-label="Trạng thái"><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {PAYMENT_REQUEST_STATUSES.map((s) => <SelectItem key={s} value={s}>{PAYMENT_REQUEST_STATUS_LABELS[s]}</SelectItem>)}
