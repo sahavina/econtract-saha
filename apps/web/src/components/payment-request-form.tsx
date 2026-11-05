@@ -30,7 +30,7 @@ import {
   requestFromSaved,
   type PaymentRequest,
 } from '@/lib/payment-request';
-import type { ContractDetail, PaymentRequestDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
+import type { ContractDetail, PaymentRequestDetail, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
 
 /** Mẫu dựng sẵn theo giấy đề nghị SAHA (không thuộc thư viện mẫu). */
 const BUILT_IN = '';
@@ -86,7 +86,7 @@ function fromContract(c: ContractDetail, profile: CompanyProfile | undefined, x:
 }
 
 /** Giấy đề nghị thanh toán: điền từ đơn đặt hàng/hợp đồng, sửa lại, lưu vào danh sách, in PDF hoặc tải Word. */
-export function PaymentRequestForm({ contractId = '', saved }: { contractId?: string; saved?: PaymentRequestDetail }) {
+export function PaymentRequestForm({ contractId = '', quoteId = '', saved }: { contractId?: string; quoteId?: string; saved?: PaymentRequestDetail }) {
   const { can } = useAuth();
   const router = useRouter();
   const qc = useQueryClient();
@@ -117,6 +117,12 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
     enabled: !!linkedId,
   });
   const source = picked ?? contract.data ?? null;
+  const quote = useQuery({
+    queryKey: ['quote', quoteId],
+    queryFn: () => api<QuoteDetail>(`/quotes/${encodeURIComponent(quoteId)}`),
+    enabled: !!quoteId,
+  });
+  const [quoteApplied, setQuoteApplied] = useState(false);
 
   const set = (patch: Partial<PaymentRequest>) => setR((x) => ({ ...x, ...patch }));
   const apply = (c: ContractDetail) => {
@@ -130,6 +136,19 @@ export function PaymentRequestForm({ contractId = '', saved }: { contractId?: st
     const p = company.data;
     setProfileApplied(true);
     setR((x) => ({ ...x, company: p.name, beneficiary: p.name, accountHolder: p.name, account: p.bankAccount ?? '', signerPosition: p.position ?? '', signerName: p.representative ?? '' }));
+  }
+
+  // Lập từ báo giá: khách hàng, căn cứ, số tiền theo báo giá; điền sau thông tin doanh nghiệp mình.
+  if (quote.data && company.isFetched && profileApplied && !quoteApplied) {
+    const q = quote.data;
+    setQuoteApplied(true);
+    setR((x) => ({
+      ...x,
+      recipient: q.customerName,
+      basis: `Căn cứ vào báo giá số ${q.code}${formatDateVi(q.date) ? ` ngày ${formatDateVi(q.date)}` : ''} giữa ${x.company || '…'} và ${q.customerName}.`,
+      amount: String(Math.round(Number(q.total)) || ''),
+    }));
+    setFilledFrom(q.code);
   }
 
   const pick = (id: string) => api<ContractDetail>(`/contracts/${id}`).then(apply).catch((e: Error) => toast.error(e.message));

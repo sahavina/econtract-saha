@@ -197,6 +197,8 @@ model User {
   paymentRequests     PaymentRequest[]          @relation("PaymentRequestCreator")
   sentPaymentRequests PaymentRequest[]          @relation("PaymentRequestSender")
   paidPaymentRequests PaymentRequest[]          @relation("PaymentRequestPayer")
+  quotes              Quote[]                   @relation("QuoteCreator")
+  sentQuotes          Quote[]                   @relation("QuoteSender")
   uploadedDocuments   ContractDocument[]
   createdTemplates    ContractTemplate[]        @relation("TemplateCreator")
   templateVersions    ContractTemplateVersion[]
@@ -335,6 +337,7 @@ model Partner {
   tenant          Tenant           @relation(fields: [tenantId], references: [id])
   contacts        PartnerContact[]
   contractParties ContractParty[]
+  quotes          Quote[]
 
   @@unique([tenantId, code])
   /// Liên kết hệ thống ngoài, ví dụ "odoo:1831" – mỗi bản ghi ngoài chỉ nhập một lần.
@@ -442,6 +445,7 @@ model Contract {
   stockIssues       StockIssue[]
   shippingNotes     ShippingNote[]
   paymentRequests   PaymentRequest[]
+  quotes            Quote[]
   contractTypeId    String?              @db.Uuid
   group             String?
   description       String?
@@ -1173,6 +1177,7 @@ model Product {
   tenant      Tenant         @relation(fields: [tenantId], references: [id])
   items       ContractItem[]
   issueItems  StockIssueItem[]
+  quoteItems  QuoteItem[]
 
   @@unique([tenantId, code])
 }
@@ -1357,4 +1362,72 @@ model PaymentRequest {
   @@index([tenantId, date])
   @@index([tenantId, status])
   @@index([contractId])
+}
+
+enum QuoteStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+}
+
+/// Báo giá gửi khách: thông tin khách chụp tại thời điểm lập. "Hết hạn" suy ra từ validUntil, không lưu.
+model Quote {
+  id              String      @id @default(uuid()) @db.Uuid
+  tenantId        String      @db.Uuid
+  code            String
+  date            DateTime    @db.Date
+  validUntil      DateTime?   @db.Date
+  partnerId       String?     @db.Uuid
+  customerName    String
+  customerTaxCode String?
+  customerAddress String?
+  customerContact String?
+  customerPhone   String?
+  customerEmail   String?
+  vatRate         Decimal?    @db.Decimal(5, 2)
+  subtotal        Decimal     @db.Decimal(20, 2)
+  vatAmount       Decimal?    @db.Decimal(20, 2)
+  total           Decimal     @db.Decimal(20, 2)
+  paymentTerms    String?
+  deliveryTerms   String?
+  note            String?
+  status          QuoteStatus @default(DRAFT)
+  sentAt          DateTime?
+  sentById        String?     @db.Uuid
+  sentMethod      String?
+  sentTo          String?
+  sentNote        String?
+  decidedAt       DateTime?
+  orderId         String?     @db.Uuid
+  createdById     String      @db.Uuid
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  partner         Partner?    @relation(fields: [partnerId], references: [id], onDelete: SetNull)
+  order           Contract?   @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  createdBy       User        @relation("QuoteCreator", fields: [createdById], references: [id])
+  sentBy          User?       @relation("QuoteSender", fields: [sentById], references: [id], onDelete: SetNull)
+  items           QuoteItem[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, date])
+  @@index([tenantId, status])
+  @@index([partnerId])
+}
+
+model QuoteItem {
+  id        String   @id @default(uuid()) @db.Uuid
+  quoteId   String   @db.Uuid
+  sortOrder Int
+  productId String?  @db.Uuid
+  code      String?
+  name      String
+  unit      String?
+  quantity  Decimal  @db.Decimal(18, 3)
+  unitPrice Decimal  @db.Decimal(20, 2)
+  amount    Decimal  @db.Decimal(20, 2)
+  quote     Quote    @relation(fields: [quoteId], references: [id], onDelete: Cascade)
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([quoteId])
 }

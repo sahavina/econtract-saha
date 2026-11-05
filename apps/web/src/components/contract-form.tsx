@@ -41,7 +41,7 @@ import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocu
 import { toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
 import { useLookups } from '@/lib/queries';
-import type { ContractDetail, ContractKind, ContractListItem, Partner, Product, TemplateDetail, TemplateListItem } from '@/lib/types';
+import type { ContractDetail, ContractKind, ContractListItem, Partner, Product, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
 
 const PARTY_ROLES = [
   { value: 'PARTY_A', label: 'Bên A' },
@@ -178,6 +178,29 @@ const presetParties = (p: Partner, c?: CompanyProfile): FormValues['parties'] =>
 ];
 
 const decimalInput = (v: string) => String(Number(v));
+
+const quoteDefaults = (q: QuoteDetail, c?: CompanyProfile): Partial<FormValues> => ({
+  title: `Đơn đặt hàng theo báo giá ${q.code}`,
+  vatRate: q.vatRate === null ? '' : decimalInput(q.vatRate),
+  paymentTerms: q.paymentTerms ?? '',
+  deliveryAddress: q.customerAddress ?? '',
+  parties: presetParties(
+    {
+      id: q.partnerId ?? '',
+      entityType: 'ORGANIZATION',
+      name: q.customerName,
+      taxCode: q.customerTaxCode,
+      address: q.customerAddress,
+      email: q.customerEmail,
+      phone: q.customerPhone,
+      representative: q.customerContact,
+      position: null,
+      type: 'CUSTOMER',
+    } as Partner,
+    c,
+  ),
+  items: q.items.map((i) => ({ productId: i.productId ?? '', code: i.code ?? '', name: i.name, unit: i.unit ?? '', quantity: decimalInput(i.quantity), unitPrice: decimalInput(i.unitPrice) })),
+});
 
 function toForm(c?: ContractDetail, parentContractId = ''): FormValues {
   if (!c) {
@@ -389,16 +412,22 @@ function ContractFilesPicker({
 }
 
 /** Form tạo mới; có `partnerId` (mở từ trang đối tác) thì tải đối tác trước để điền sẵn các bên. */
-export function PartnerContractForm({ partnerId, ...props }: { partnerId: string; fromFile?: boolean; kind?: ContractKind; parentId?: string }) {
+export function PartnerContractForm({ partnerId, quoteId = '', ...props }: { partnerId: string; quoteId?: string; fromFile?: boolean; kind?: ContractKind; parentId?: string }) {
   const partner = useQuery({
     queryKey: ['partners', 'detail', partnerId],
     queryFn: () => api<Partner>(`/partners/${encodeURIComponent(partnerId)}`),
     enabled: !!partnerId,
     retry: false,
   });
-  const company = useCompanyProfile(!!partnerId);
-  if (partnerId && (partner.isPending || company.isPending)) return <Skeleton className="h-96" />;
-  return <ContractForm {...props} presetPartner={partner.data} presetCompany={company.data} />;
+  const quote = useQuery({
+    queryKey: ['quote', quoteId],
+    queryFn: () => api<QuoteDetail>(`/quotes/${encodeURIComponent(quoteId)}`),
+    enabled: !!quoteId,
+    retry: false,
+  });
+  const company = useCompanyProfile(!!partnerId || !!quoteId);
+  if ((partnerId && partner.isPending) || (quoteId && quote.isPending) || ((partnerId || quoteId) && company.isPending)) return <Skeleton className="h-96" />;
+  return <ContractForm {...props} presetPartner={partner.data} presetCompany={company.data} presetQuote={quote.data} />;
 }
 
 export function ContractForm({
@@ -408,6 +437,7 @@ export function ContractForm({
   parentId = '',
   presetPartner,
   presetCompany,
+  presetQuote,
 }: {
   contract?: ContractDetail;
   fromFile?: boolean;
@@ -418,6 +448,8 @@ export function ContractForm({
   /** Hồ sơ lập từ trang đối tác: đối tác là Bên A, doanh nghiệp mình là Bên B. */
   presetPartner?: Partner;
   presetCompany?: CompanyProfile;
+  /** Đơn lập từ báo giá: điền khách hàng, dòng hàng, VAT; lưu xong gắn đơn vào báo giá. */
+  presetQuote?: QuoteDetail;
 }) {
   const isEdit = !!contract;
   const kind: ContractKind = contract?.kind ?? kindProp;
@@ -444,7 +476,7 @@ export function ContractForm({
 
   const form = useForm<FormValues>({
     resolver: zodResolver(schema),
-    defaultValues: { ...toForm(contract, parentId), ...(presetPartner && { parties: presetParties(presetPartner, presetCompany) }) },
+    defaultValues: { ...toForm(contract, parentId), ...(presetPartner && { parties: presetParties(presetPartner, presetCompany) }), ...(presetQuote && quoteDefaults(presetQuote, presetCompany)) },
   });
   const { register, control, formState, setError, setValue } = form;
   const errors = formState.errors;
@@ -466,6 +498,12 @@ export function ContractForm({
       const typeId = v.contractTypeId || (isOrder ? (kindTypes[0]?.id ?? '') : '');
       const body = { ...toPayload({ ...v, contractTypeId: typeId }, false, kind), ...(imported?.use && !v.templateId && { contentHtml: imported.html }) };
       const c = await api<ContractDetail>('/contracts', { method: 'POST', body });
+      if (presetQuote) {
+        // Đơn đã tạo thì giữ lại dù gắn vào báo giá lỗi.
+        await api(`/quotes/${presetQuote.id}/link-order`, { method: 'POST', body: { orderId: c.id } }).catch((e: Error) => toast.error(`Đơn đã tạo nhưng chưa gắn được vào báo giá: ${e.message}`));
+        qc.invalidateQueries({ queryKey: ['quotes'] });
+        qc.invalidateQueries({ queryKey: ['quote', presetQuote.id] });
+      }
       // Hợp đồng đã tạo thì giữ lại dù có tệp tải lên lỗi; người dùng tải lại ở tab Tài liệu.
       const failed: string[] = [];
       for (const f of files) {

@@ -802,3 +802,50 @@ export interface PaymentRequestDetail extends PaymentRequestListItem {
   contractId: string | null;
   templateId: string | null;
 }
+
+export interface QuoteListItem {
+  id: string;
+  code: string;
+  date: string;
+  validUntil: string | null;
+  customerName: string;
+  customerEmail: string | null;
+  total: string;
+  status: import('@saha/shared').QuoteStatus;
+  sentAt: string | null;
+  sentMethod: import('@saha/shared').PaymentSendMethod | null;
+  sentTo: string | null;
+  sentNote: string | null;
+  sentBy: { id: string; fullName: string } | null;
+  decidedAt: string | null;
+  partner: { id: string; code: string; name: string } | null;
+  order: { id: string; code: string } | null;
+  createdBy: { id: string; fullName: string };
+}
+
+export interface QuoteItem {
+  id: string;
+  productId: string | null;
+  code: string | null;
+  name: string;
+  unit: string | null;
+  quantity: string;
+  unitPrice: string;
+  amount: string;
+}
+
+export interface QuoteDetail extends QuoteListItem {
+  partnerId: string | null;
+  orderId: string | null;
+  customerTaxCode: string | null;
+  customerAddress: string | null;
+  customerContact: string | null;
+  customerPhone: string | null;
+  vatRate: string | null;
+  subtotal: string;
+  vatAmount: string | null;
+  paymentTerms: string | null;
+  deliveryTerms: string | null;
+  note: string | null;
+  items: QuoteItem[];
+}

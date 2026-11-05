@@ -220,12 +220,16 @@ table.borderless td,table.borderless th{border:none}`;
 
 /** Word mở được tệp HTML đặt đuôi .doc – giữ bố cục để người dùng chỉnh tiếp. */
 export function downloadPaymentRequestWord(r: PaymentRequest, bodyHtml = paymentRequestHtml(r)) {
+  downloadWordHtml(fileBase(r), bodyHtml);
+}
+
+export function downloadWordHtml(fileName: string, bodyHtml: string) {
   const html = `<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:w="urn:schemas-microsoft-com:office:word"><head><meta charset="utf-8"><meta name="ProgId" content="Word.Document"><title>Đề nghị thanh toán</title>
 <style>${WORD_STYLES}</style></head><body lang="VI">${bodyHtml}</body></html>`;
   const url = URL.createObjectURL(new Blob(['﻿', html], { type: 'application/msword' }));
   const a = document.createElement('a');
   a.href = url;
-  a.download = `${fileBase(r)}.doc`;
+  a.download = `${fileName}.doc`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 10_000);
 }

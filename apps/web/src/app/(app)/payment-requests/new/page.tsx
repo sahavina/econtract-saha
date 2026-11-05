@@ -5,7 +5,9 @@ import { PageHeader } from '@/components/page-header';
 import { PaymentRequestForm } from '@/components/payment-request-form';
 
 export default function NewPaymentRequestPage() {
-  const contractId = useSearchParams().get('contract') ?? '';
+  const params = useSearchParams();
+  const contractId = params.get('contract') ?? '';
+  const quoteId = params.get('quote') ?? '';
   return (
     <>
       <PageHeader
@@ -14,7 +16,7 @@ export default function NewPaymentRequestPage() {
         crumbs={[{ label: 'Đề nghị thanh toán', href: '/payment-requests' }, { label: 'Lập đề nghị' }]}
       />
       {/* key: mở từ hồ sơ khác thì điền lại từ đầu. */}
-      <PaymentRequestForm key={contractId} contractId={contractId} />
+      <PaymentRequestForm key={`${contractId}-${quoteId}`} contractId={contractId} quoteId={quoteId} />
     </>
   );
 }

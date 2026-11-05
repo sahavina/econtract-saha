@@ -14,7 +14,8 @@ export default function NewOrderPage() {
   const parent = params.get('parent') ?? '';
   const fromFile = params.get('from') === 'file';
   const partner = params.get('partner') ?? '';
-  const keep = [parent && `parent=${parent}`, partner && `partner=${partner}`].filter(Boolean).join('&');
+  const quote = params.get('quote') ?? '';
+  const keep = [parent && `parent=${parent}`, partner && `partner=${partner}`, quote && `quote=${quote}`].filter(Boolean).join('&');
   return (
     <>
       <PageHeader
@@ -41,7 +42,7 @@ export default function NewOrderPage() {
       />
       {can('contract.create') ? (
         // key: đổi chế độ/hợp đồng nguyên tắc/đối tác thì dựng lại form.
-        <PartnerContractForm key={`${parent}-${partner}-${fromFile}`} kind="ORDER" parentId={parent} partnerId={partner} fromFile={fromFile} />
+        <PartnerContractForm key={`${parent}-${partner}-${quote}-${fromFile}`} kind="ORDER" parentId={parent} partnerId={partner} quoteId={quote} fromFile={fromFile} />
       ) : (
         <p className="text-sm text-muted-foreground">Bạn không có quyền tạo đơn đặt hàng.</p>
       )}
