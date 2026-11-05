@@ -8,6 +8,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ContractDownloadButton } from '@/components/contract-download-button';
 import { ContractFilesButton } from '@/components/contract-files-button';
+import { OrderArchiveButton } from '@/components/order-archive-button';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -60,7 +61,7 @@ function Pager({ data, onPage }: { data: Paginated<unknown>; onPage: (page: numb
 }
 
 /** Tạo hồ sơ ngay từ trang đối tác: soạn trong hệ thống, hoặc tải file lên để tự điền và đính kèm. */
-function CreateActions({ base, partnerId, label }: { base: string; partnerId: string; label: string }) {
+function CreateActions({ base, partnerId, label, extra }: { base: string; partnerId: string; label: string; extra?: React.ReactNode }) {
   return (
     <div className="flex flex-wrap justify-center gap-2">
       <Button size="sm" asChild>
@@ -69,6 +70,7 @@ function CreateActions({ base, partnerId, label }: { base: string; partnerId: st
       <Button size="sm" variant="outline" asChild>
         <Link href={`${base}?from=file&partner=${partnerId}`}><FileUp /> Tạo từ file đính kèm</Link>
       </Button>
+      {extra}
     </div>
   );
 }
@@ -151,7 +153,7 @@ export default function PartnerDetailPage() {
   const noteCount = notes.data?.total;
   const deliveryCount = issueCount === undefined || noteCount === undefined ? '…' : issueCount + noteCount;
   const contractActions = can('contract.create') ? <CreateActions base="/contracts/new" partnerId={p.id} label="Tạo hợp đồng" /> : undefined;
-  const orderActions = can('contract.create') ? <CreateActions base="/orders/new" partnerId={p.id} label="Tạo đơn đặt hàng" /> : undefined;
+  const orderActions = can('contract.create') ? <CreateActions base="/orders/new" partnerId={p.id} label="Tạo đơn đặt hàng" extra={<OrderArchiveButton partner={p} />} /> : undefined;
 
   return (
     <>
