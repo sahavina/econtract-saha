@@ -8,7 +8,7 @@ import { useParams, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { ContractDownloadButton } from '@/components/contract-download-button';
 import { ContractFilesButton } from '@/components/contract-files-button';
-import { OrderArchiveButton } from '@/components/order-archive-button';
+import { FileArchiveButton } from '@/components/file-archive-button';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
@@ -152,8 +152,8 @@ export default function PartnerDetailPage() {
   const issueCount = issues.data?.total;
   const noteCount = notes.data?.total;
   const deliveryCount = issueCount === undefined || noteCount === undefined ? '…' : issueCount + noteCount;
-  const contractActions = can('contract.create') ? <CreateActions base="/contracts/new" partnerId={p.id} label="Tạo hợp đồng" /> : undefined;
-  const orderActions = can('contract.create') ? <CreateActions base="/orders/new" partnerId={p.id} label="Tạo đơn đặt hàng" extra={<OrderArchiveButton partner={p} />} /> : undefined;
+  const contractActions = can('contract.create') ? <CreateActions base="/contracts/new" partnerId={p.id} label="Tạo hợp đồng" extra={<FileArchiveButton kind="CONTRACT" partner={p} />} /> : undefined;
+  const orderActions = can('contract.create') ? <CreateActions base="/orders/new" partnerId={p.id} label="Tạo đơn đặt hàng" extra={<FileArchiveButton kind="ORDER" partner={p} />} /> : undefined;
 
   return (
     <>
