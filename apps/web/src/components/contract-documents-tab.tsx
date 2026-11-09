@@ -2,10 +2,11 @@
 
 import { buildTemplateValues, renderTemplate } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, FilePlus2, FileText, Loader2, PenTool, Trash2, Upload } from 'lucide-react';
+import { Download, Eye, FilePlus2, FileText, Loader2, PenTool, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
+import { DocumentPreviewDialog } from '@/components/document-preview-dialog';
 import { MisaEsignDialog } from '@/components/misa-esign-dialog';
 import { EmptyState, ErrorState } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
@@ -46,6 +47,7 @@ export function ContractDocumentsTab({
   const input = useRef<HTMLInputElement>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [signing, setSigning] = useState<ContractDocument | null>(null);
+  const [viewing, setViewing] = useState<ContractDocument | null>(null);
   const misa = useMisaStatus(canSign);
   const key = ['contract', contractId, 'documents'];
   const docs = useQuery({ queryKey: key, queryFn: () => api<ContractDocument[]>(`/contracts/${contractId}/documents`) });
@@ -136,9 +138,9 @@ export function ContractDocumentsTab({
               {docs.data.map((d) => (
                 <TableRow key={d.id}>
                   <TableCell>
-                    <span className="inline-flex items-center gap-2 font-medium">
+                    <button type="button" className="inline-flex items-center gap-2 text-left font-medium text-primary hover:underline" title={`Xem ${d.fileName}`} onClick={() => setViewing(d)}>
                       <FileText className="size-4 text-muted-foreground" /> {d.fileName}
-                    </span>
+                    </button>
                   </TableCell>
                   <TableCell>v{d.version}</TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">{formatFileSize(d.size)}</TableCell>
@@ -158,6 +160,9 @@ export function ContractDocumentsTab({
                         <PenTool /> Ký số
                       </Button>
                     )}
+                    <Button variant="ghost" size="icon-sm" aria-label={`Xem ${d.fileName}`} title="Xem tài liệu" onClick={() => setViewing(d)}>
+                      <Eye />
+                    </Button>
                     <Button
                       variant="ghost"
                       size="icon-sm"
@@ -192,6 +197,7 @@ export function ContractDocumentsTab({
         </div>
       )}
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
+      {viewing && <DocumentPreviewDialog contractId={contractId} doc={viewing} onClose={() => setViewing(null)} />}
       {signing && (
         <MisaEsignDialog
           contractId={contractId}
