@@ -17,7 +17,7 @@ import {
 } from '@saha/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudDownload, FileText, FileUp, Loader2, PackagePlus, Plus, Trash2, X } from 'lucide-react';
+import { CloudDownload, Eye, FileText, FileUp, Loader2, PackagePlus, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cloneElement, isValidElement, useId, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, type UseFormReturn, useWatch } from 'react-hook-form';
@@ -32,6 +32,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
+import { TemplatePreviewDialog } from '@/components/template-preview-dialog';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { type CompanyProfile, useCompanyProfile } from '@/lib/company';
 import { convertDocToDocx, readDocx } from '@/lib/docx';
@@ -493,6 +494,7 @@ export function ContractForm({
   const watchedParties = useWatch({ control, name: 'parties' });
 
   const [files, setFiles] = useState<File[]>([]);
+  const [previewTemplate, setPreviewTemplate] = useState(false);
   /** Nội dung hợp đồng chuyển từ file Word (chỉ khi lập mới, không chọn mẫu). */
   const [imported, setImported] = useState<{ name: string; html: string; use: boolean } | null>(null);
 
@@ -899,6 +901,14 @@ export function ContractForm({
                 />
               )}
             />
+            {templateId && (
+              <Button type="button" variant="outline" size="sm" onClick={() => setPreviewTemplate(true)}>
+                <Eye /> Xem trước mẫu
+              </Button>
+            )}
+            {previewTemplate && templateId && (
+              <TemplatePreviewDialog templateId={templateId} kind={kind} open onClose={() => setPreviewTemplate(false)} />
+            )}
             {selectedTemplate && (
               <p className="text-sm text-muted-foreground">
                 {selectedTemplate.description ?? selectedTemplate.name}
