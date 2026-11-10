@@ -142,6 +142,31 @@ export class DocumentsService {
     }
   }
 
+  /**
+   * Đặt một tệp PDF làm bản gốc (kind MAIN) của hợp đồng/đơn: bản giữ nguyên định dạng file khách gửi,
+   * dùng để xem, in, tải thay cho nội dung soạn trong hệ thống. Mỗi hồ sơ chỉ có một bản gốc.
+   */
+  async setMain(user: AuthUser, contractId: string, documentId: string) {
+    const contract = await this.contracts.get(user, contractId);
+    if (contract.deletedAt || contract.archivedAt) throw new BadRequestException('Hợp đồng đã lưu trữ hoặc ở thùng rác');
+    if (contract.signatureStatus === 'COMPLETED') throw new BadRequestException('Hợp đồng đã ký, không đổi bản gốc được');
+    const doc = await this.prisma.contractDocument.findFirst({
+      where: { id: documentId, contractId, tenantId: user.tenantId, deletedAt: null },
+    });
+    if (!doc) throw new NotFoundException('Không tìm thấy tài liệu');
+    if (doc.mimeType !== 'application/pdf') throw new BadRequestException('Bản gốc phải là tệp PDF');
+    await this.prisma.$transaction(async (tx) => {
+      await tx.contractDocument.updateMany({ where: { contractId, kind: 'MAIN', NOT: { id: doc.id } }, data: { kind: 'ATTACHMENT' } });
+      await tx.contractDocument.update({ where: { id: doc.id }, data: { kind: 'MAIN' } });
+      await this.audit.log(
+        user,
+        { action: 'contract.document_main', entityType: 'contract', entityId: contractId, data: { code: contract.code, documentId: doc.id, fileName: doc.fileName, version: doc.version } },
+        tx,
+      );
+    });
+    return { id: doc.id, kind: 'MAIN' as const };
+  }
+
   /** Xóa mềm: giữ file trên storage để phục vụ truy vết. */
   async remove(user: AuthUser, contractId: string, documentId: string) {
     const contract = await this.contracts.get(user, contractId);

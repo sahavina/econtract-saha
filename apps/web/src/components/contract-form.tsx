@@ -37,11 +37,11 @@ import { type CompanyProfile, useCompanyProfile } from '@/lib/company';
 import { convertDocToDocx, readDocx } from '@/lib/docx';
 import { readPdfText } from '@/lib/pdf-text';
 import { readXlsx } from '@/lib/xlsx';
-import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
+import { attachMainDocument, DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
 import { useLookups } from '@/lib/queries';
-import type { ContractDetail, ContractKind, ContractListItem, Partner, Product, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
+import type { ContractDetail, ContractDocument, ContractKind, ContractListItem, Partner, Product, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
 
 const PARTY_ROLES = [
   { value: 'PARTY_A', label: 'Bên A' },
@@ -178,6 +178,15 @@ const presetParties = (p: Partner, c?: CompanyProfile): FormValues['parties'] =>
 ];
 
 const decimalInput = (v: string) => String(Number(v));
+
+/** Ghi chú cho nội dung lấy từ file: định dạng nào giữ được gì. */
+function importedNote(fileName: string, isOrder: boolean) {
+  const noun = isOrder ? 'đơn' : 'hợp đồng';
+  const after = `Sau khi lưu có thể sửa tiếp ở tab “Nội dung ${isOrder ? 'đơn hàng' : 'hợp đồng'}”.`;
+  if (/\.pdf$/i.test(fileName)) return `Chữ trong PDF được chép vào ${noun} để xem, in/xuất PDF và ký; hãy đối chiếu với bản gốc vì bảng biểu thành các dòng chữ, hình ảnh không được chép. ${after}`;
+  if (/\.xlsx$/i.test(fileName)) return `Trang tính đầu tiên của file Excel được chép vào ${noun} dưới dạng bảng; ô gộp, màu và hình ảnh không được chép. ${after}`;
+  return `Nội dung file Word được chép vào ${noun} để xem, in/xuất PDF và ký. ${after} Hình ảnh và đánh số tự động của Word không được chép.`;
+}
 
 const quoteDefaults = (q: QuoteDetail, c?: CompanyProfile): Partial<FormValues> => ({
   title: `Đơn đặt hàng theo báo giá ${q.code}`,
@@ -506,12 +515,21 @@ export function ContractForm({
       }
       // Hợp đồng đã tạo thì giữ lại dù có tệp tải lên lỗi; người dùng tải lại ở tab Tài liệu.
       const failed: string[] = [];
+      // Lập từ file: tệp đã đọc nội dung (hoặc tệp đầu tiên) được giữ nguyên định dạng làm bản gốc.
+      const mainFile = fromFile ? (files.find((f) => f.name === imported?.name) ?? files[0]) : undefined;
+      let mainUploaded: ContractDocument | undefined;
       for (const f of files) {
         try {
-          await uploadContractDocument(c.id, f);
+          const d = await uploadContractDocument(c.id, f);
+          if (f === mainFile) mainUploaded = d;
         } catch (err) {
           failed.push(`${f.name}: ${err instanceof Error ? err.message : 'tải lên thất bại'}`);
         }
+      }
+      if (mainFile && mainUploaded) {
+        await attachMainDocument(c.id, mainFile, mainUploaded).catch((e: Error) =>
+          toast.warning(`Chưa tạo được bản gốc từ ${mainFile.name}: ${e.message}`, { description: 'Tệp vẫn được đính kèm; có thể đặt bản gốc ở tab Tài liệu.', duration: 10_000 }),
+        );
       }
       return { c, uploaded: files.length - failed.length, failed };
     },
@@ -692,15 +710,15 @@ export function ContractForm({
       const pdf = await readPdfText(file).catch(() => null);
       toast.dismiss(id);
       if (!pdf) return toast.info(`${file.name} là PDF dạng ảnh scan – chưa tự đọc được. Tệp vẫn được đính kèm; hãy nhập thông tin${isOrder ? ' và hàng hóa' : ''} thủ công.`, { duration: 10_000 });
-      // Đơn hàng dựng nội dung từ dòng hàng; hợp đồng lấy chữ trong PDF làm nội dung.
-      doc = isOrder ? { blocks: pdf.blocks } : pdf;
+      doc = pdf;
     } else if (/\.(png|jpe?g)$/i.test(file.name)) {
       return toast.info(`${file.name} là ảnh – chưa tự đọc được. Tệp vẫn được đính kèm; hãy nhập thông tin và hàng hóa thủ công.`, { duration: 10_000 });
     }
     if (!doc) return toast.error(`Không đọc được nội dung ${file.name} – hãy nhập thông tin thủ công`);
     const x: ExtractedOrder = isOrder ? extractOrderFields(doc.blocks) : { ...extractContractFields(doc.blocks), items: [] };
     const filled: string[] = [];
-    // Chép nội dung file Word làm nội dung hợp đồng (khi không dùng mẫu) để xem, in/xuất PDF, ký như hợp đồng soạn trong hệ thống.
+    // Chép nội dung file (Word, PDF có lớp chữ, Excel) làm nội dung hợp đồng/đơn theo đúng cấu trúc file, không theo mẫu
+    // (khi chưa chọn mẫu) để xem, in/xuất PDF, ký như hồ sơ soạn trong hệ thống.
     if (doc.html && !form.getValues('templateId')) {
       setImported({ name: file.name, html: doc.html, use: true });
       filled.push(`nội dung ${noun}`);
@@ -822,11 +840,9 @@ export function ContractForm({
   const importedCard = imported && (
     <Card>
       <CardHeader>
-        <CardTitle>Nội dung hợp đồng (từ {imported.name})</CardTitle>
+        <CardTitle>Nội dung {isOrder ? 'đơn đặt hàng' : 'hợp đồng'} (từ {imported.name})</CardTitle>
         <CardDescription>
-          {/\.pdf$/i.test(imported.name)
-            ? 'Chữ trong PDF được chép vào hợp đồng để xem, in/xuất PDF và ký; hãy đối chiếu với bản gốc vì bảng biểu thành các dòng chữ, hình ảnh không được chép. Sau khi lưu có thể sửa tiếp ở tab “Nội dung hợp đồng”.'
-            : 'Nội dung file Word được chép vào hợp đồng để xem, in/xuất PDF và ký; sau khi lưu có thể sửa tiếp ở tab “Nội dung hợp đồng”. Hình ảnh và đánh số tự động của Word không được chép.'}
+          {importedNote(imported.name, isOrder)}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">

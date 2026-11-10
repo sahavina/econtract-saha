@@ -1,16 +1,17 @@
 'use client';
 
 import { buildTemplateValues, renderTemplate, variableLabel } from '@saha/shared';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Check, Eye, Loader2, Pencil, Printer, Save } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Check, Eye, FileCheck2, Loader2, Pencil, Printer, Save } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { ContractEditor } from '@/components/contract-editor';
+import { MainDocumentFrame } from '@/components/document-preview-dialog';
 import { EmptyState } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import type { ContractDetail } from '@/lib/types';
+import type { ContractDetail, ContractDocument } from '@/lib/types';
 
 const AUTOSAVE_MS = 2000;
 
@@ -67,6 +68,11 @@ function A4Preview({ contract, html, editable }: { contract: ContractDetail; htm
 
 export function ContractContentTab({ contract, editable }: { contract: ContractDetail; editable: boolean }) {
   const qc = useQueryClient();
+  const docs = useQuery({ queryKey: ['contract', contract.id, 'documents'], queryFn: () => api<ContractDocument[]>(`/contracts/${contract.id}/documents`) });
+  const mainDoc = docs.data?.find((d) => d.kind === 'MAIN');
+  // Có bản gốc (lập từ file) thì mặc định xem bản gốc, giữ đúng định dạng file khách gửi.
+  const [view, setView] = useState<'original' | 'content' | null>(null);
+  const showOriginal = !!mainDoc && (view ?? 'original') === 'original';
   const [mode, setMode] = useState<'edit' | 'preview'>(editable ? 'edit' : 'preview');
   const [draft, setDraft] = useState(contract.contentHtml ?? '');
   const [state, setState] = useState<SaveState>({ kind: 'idle' });
@@ -132,6 +138,25 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
 
   return (
     <div className="space-y-3">
+      {mainDoc && (
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="inline-flex rounded-lg border p-0.5">
+            <Button size="sm" variant={showOriginal ? 'secondary' : 'ghost'} onClick={() => setView('original')}>
+              <FileCheck2 /> Bản gốc
+            </Button>
+            <Button size="sm" variant={showOriginal ? 'ghost' : 'secondary'} onClick={() => setView('content')}>
+              <Pencil /> Nội dung sửa được
+            </Button>
+          </div>
+          <span className="text-xs text-muted-foreground">
+            {showOriginal ? `${mainDoc.fileName} – giữ nguyên định dạng file tải lên; dùng nút in, tải trên khung xem.` : 'Nội dung chép từ file để sửa trong hệ thống; định dạng có thể khác bản gốc.'}
+          </span>
+        </div>
+      )}
+      {showOriginal ? (
+        <MainDocumentFrame contractId={contract.id} doc={mainDoc} />
+      ) : (
+      <>
       <div className="flex flex-wrap items-center gap-2">
         {editable && (
           <div className="inline-flex rounded-lg border p-0.5">
@@ -185,6 +210,8 @@ export function ContractContentTab({ contract, editable }: { contract: ContractD
         <ContractEditor value={draft} onChange={setDraft} enableClauses />
       ) : (
         <A4Preview contract={contract} html={html} editable={editable} />
+      )}
+      </>
       )}
     </div>
   );

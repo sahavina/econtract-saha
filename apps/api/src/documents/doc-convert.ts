@@ -24,7 +24,10 @@ import type { Env } from '../config/env.js';
 import { ALLOWED_FILE_TYPES, MAX_UPLOAD_BYTES } from './file-types.js';
 
 const DOCX_MIME = ALLOWED_FILE_TYPES.docx.mime;
+const PDF_MIME = ALLOWED_FILE_TYPES.pdf.mime;
 const OLE = ALLOWED_FILE_TYPES.doc.signature;
+const ZIP = ALLOWED_FILE_TYPES.docx.signature;
+const startsWith = (data: Buffer, sig: readonly number[]) => data.length >= sig.length && sig.every((b, i) => data[i] === b);
 /** Quá thời gian này coi như file lỗi/độc hại – dừng LibreOffice. */
 const CONVERT_TIMEOUT_MS = 60_000;
 
@@ -40,19 +43,29 @@ export class DocConvertService {
   constructor(private readonly config: ConfigService<Env, true>) {}
 
   convert(data: Buffer): Promise<Buffer> {
-    if (data.length < OLE.length || !OLE.every((b, i) => data[i] === b)) {
-      throw new BadRequestException('Tệp không phải định dạng Word 97–2003 (.doc)');
-    }
+    if (!startsWith(data, OLE)) throw new BadRequestException('Tệp không phải định dạng Word 97–2003 (.doc)');
+    return this.enqueue(data, 'doc', 'docx');
+  }
+
+  /** Word (.doc, .docx) hoặc Excel (.xlsx) ⇒ PDF giữ nguyên bố cục, làm bản gốc của hồ sơ lập từ file. */
+  toPdf(data: Buffer, fileName: string): Promise<Buffer> {
+    const ext = fileName.toLowerCase().match(/\.(docx|xlsx|doc)$/)?.[1];
+    const ok = ext === 'doc' ? startsWith(data, OLE) : !!ext && startsWith(data, ZIP);
+    if (!ok) throw new BadRequestException('Chỉ chuyển được tệp Word (.doc, .docx) hoặc Excel (.xlsx) sang PDF');
+    return this.enqueue(data, ext!, 'pdf');
+  }
+
+  private enqueue(data: Buffer, inExt: string, outExt: string): Promise<Buffer> {
     // Một lần một file: LibreOffice tốn RAM/CPU, máy chủ dùng chung với dịch vụ khác.
-    const run = this.queue.then(() => this.run(data));
+    const run = this.queue.then(() => this.run(data, inExt, outExt));
     this.queue = run.catch(() => undefined);
     return run;
   }
 
-  private async run(data: Buffer): Promise<Buffer> {
+  private async run(data: Buffer, inExt: string, outExt: string): Promise<Buffer> {
     const dir = await mkdtemp(join(tmpdir(), 'econtract-doc-'));
     try {
-      const input = join(dir, 'input.doc');
+      const input = join(dir, `input.${inExt}`);
       await writeFile(input, data);
       const soffice = this.config.get('SOFFICE_PATH', { infer: true }) ?? 'soffice';
       await new Promise<void>((resolve, reject) => {
@@ -64,7 +77,7 @@ export class DocConvertService {
             '--nolockcheck',
             `-env:UserInstallation=${pathToFileURL(join(dir, 'profile')).href}`,
             '--convert-to',
-            'docx',
+            outExt,
             '--outdir',
             dir,
             input,
@@ -73,15 +86,15 @@ export class DocConvertService {
           (err) => {
             if (!err) return resolve();
             if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
-              return reject(new ServiceUnavailableException('Máy chủ chưa cài bộ chuyển đổi .doc – hãy lưu tệp thành .docx trong Word rồi tải lại'));
+              return reject(new ServiceUnavailableException(outExt === 'pdf' ? 'Máy chủ chưa cài bộ chuyển đổi sang PDF (LibreOffice)' : 'Máy chủ chưa cài bộ chuyển đổi .doc – hãy lưu tệp thành .docx trong Word rồi tải lại'));
             }
             this.logger.warn(`Chuyển .doc thất bại: ${err.message}`);
             reject(new BadRequestException('Không chuyển được tệp .doc (tệp hỏng, có mật khẩu hoặc quá phức tạp) – hãy lưu thành .docx trong Word rồi tải lại'));
           },
         );
       });
-      const out = await readFile(join(dir, 'input.docx')).catch(() => null);
-      if (!out) throw new BadRequestException('Không chuyển được tệp .doc – hãy lưu thành .docx trong Word rồi tải lại');
+      const out = await readFile(join(dir, `input.${outExt}`)).catch(() => null);
+      if (!out) throw new BadRequestException(outExt === 'pdf' ? 'Không chuyển được tệp sang PDF' : 'Không chuyển được tệp .doc – hãy lưu thành .docx trong Word rồi tải lại');
       return out;
     } finally {
       await rm(dir, { recursive: true, force: true }).catch(() => undefined);
@@ -105,5 +118,17 @@ export class DocConvertController {
     if (!file) throw new BadRequestException('Chưa chọn tệp');
     const docx = await this.converter.convert(file.buffer);
     return new StreamableFile(docx, { type: DOCX_MIME, disposition: 'attachment; filename="converted.docx"' });
+  }
+
+  /** Nhận Word/Excel, trả PDF (không lưu lại tệp nào trên máy chủ). */
+  @Post('convert-pdf')
+  @RequireAnyPermission(PERMISSIONS.CONTRACT_CREATE, PERMISSIONS.CONTRACT_UPDATE)
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({ schema: { type: 'object', properties: { file: { type: 'string', format: 'binary' } } } })
+  @UseInterceptors(FileInterceptor('file', { storage: memoryStorage(), limits: { fileSize: MAX_UPLOAD_BYTES, files: 1 } }))
+  async convertPdf(@UploadedFile() file: Express.Multer.File | undefined) {
+    if (!file) throw new BadRequestException('Chưa chọn tệp');
+    const pdf = await this.converter.toPdf(file.buffer, file.originalname);
+    return new StreamableFile(pdf, { type: PDF_MIME, disposition: 'attachment; filename="converted.pdf"' });
   }
 }

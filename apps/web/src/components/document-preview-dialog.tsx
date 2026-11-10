@@ -40,8 +40,7 @@ async function loadPreview(path: string, doc: ContractDocument): Promise<Preview
   return { type: 'html', html: content.html };
 }
 
-/** Xem tài liệu ngay trên trang: PDF, ảnh, Word, Excel. */
-export function DocumentPreviewDialog({ contractId, doc, onClose }: { contractId: string; doc: ContractDocument; onClose: () => void }) {
+function useDocumentPreview(contractId: string, doc: ContractDocument) {
   const path = `/contracts/${contractId}/documents/${doc.id}/download`;
   const preview = useQuery({
     queryKey: ['contract', contractId, 'documents', doc.id, 'preview'],
@@ -54,6 +53,20 @@ export function DocumentPreviewDialog({ contractId, doc, onClose }: { contractId
   const data = preview.data;
   const url = data && 'url' in data ? data.url : null;
   useEffect(() => () => void (url && URL.revokeObjectURL(url)), [url]);
+  return { path, preview, data, url };
+}
+
+/** Bản gốc (PDF) của hồ sơ hiển thị ngay trong trang, đúng định dạng file khách gửi. */
+export function MainDocumentFrame({ contractId, doc }: { contractId: string; doc: ContractDocument }) {
+  const { preview, data } = useDocumentPreview(contractId, doc);
+  if (preview.isError) return <ErrorState error={preview.error} onRetry={() => preview.refetch()} />;
+  if (!data || data.type !== 'pdf') return <Skeleton className="h-[80vh]" />;
+  return <iframe src={data.url} title={doc.fileName} className="h-[80vh] w-full rounded-lg border" />;
+}
+
+/** Xem tài liệu ngay trên trang: PDF, ảnh, Word, Excel. */
+export function DocumentPreviewDialog({ contractId, doc, onClose }: { contractId: string; doc: ContractDocument; onClose: () => void }) {
+  const { path, preview, data, url } = useDocumentPreview(contractId, doc);
 
   return (
     <Dialog open onOpenChange={(o) => !o && onClose()}>

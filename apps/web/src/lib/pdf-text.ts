@@ -66,6 +66,23 @@ const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '
 const STARTS_ITEM = /^([-–•+]|\d{1,2}\s*[.)/]|[a-z]\)|dieu\s+\d|ben\s+[abc]\b|chuong\s+\d)/;
 const isUpper = (t: string) => /\p{L}/u.test(t) && t === t.toLocaleUpperCase('vi');
 
+/** Các dòng nhiều cột liền nhau ⇒ một bảng không viền; cột lấy theo vị trí bắt đầu của các khối chữ (lệch dưới 20pt coi là cùng cột). */
+function columnsHtml(lines: Line[]): string {
+  const xs = lines.flatMap((l) => l.cells.map((c) => c.x)).sort((a, b) => a - b);
+  const starts: number[] = [];
+  for (const x of xs) if (!starts.length || x - starts[starts.length - 1] > 20) starts.push(x);
+  const rows = lines.map((l) => {
+    const cols = starts.map(() => [] as string[]);
+    for (const c of l.cells) {
+      let k = 0;
+      while (k + 1 < starts.length && starts[k + 1] <= c.x + 5) k++;
+      cols[k].push(esc(c.text));
+    }
+    return `<tr>${cols.map((t) => `<td><p>${t.join(' ')}</p></td>`).join('')}</tr>`;
+  });
+  return `<table class="borderless"><tbody>${rows.join('')}</tbody></table>`;
+}
+
 /** Gom các dòng của một trang thành đoạn: dòng sau nối vào đoạn trước nếu dòng trước chạy hết khổ và không có khoảng cách lớn. */
 function pageHtml(lines: Line[], pageWidth: number): string {
   // Bỏ số trang ở đầu/cuối trang.
@@ -73,11 +90,25 @@ function pageHtml(lines: Line[], pageWidth: number): string {
   const right = Math.max(0, ...body.flatMap((l) => l.cells.map((c) => c.end)));
   const out: string[] = [];
   let para = '';
+  let group: Line[] = [];
+  const flushGroup = () => {
+    if (group.length) out.push(columnsHtml(group));
+    group = [];
+  };
   const flush = () => {
     if (para) out.push(`<p>${para}</p>`);
     para = '';
+    flushGroup();
   };
   body.forEach((l, i) => {
+    // Dòng có nhiều khối chữ cách xa nhau (thông tin hai bên, bảng): giữ bố cục cột bằng bảng không viền.
+    if (l.cells.length > 1) {
+      if (para) out.push(`<p>${para}</p>`);
+      para = '';
+      group.push(l);
+      return;
+    }
+    flushGroup();
     const raw = l.cells.map((c) => c.text).join(' ');
     const text = esc(raw);
     const start = l.cells[0].x;
@@ -90,7 +121,7 @@ function pageHtml(lines: Line[], pageWidth: number): string {
     }
     const prev = body[i - 1];
     const prevEnd = prev ? prev.cells[prev.cells.length - 1].end : 0;
-    const newPara = !prev || prev.y - l.y > l.height * 1.9 || prevEnd < right - pageWidth * 0.12 || STARTS_ITEM.test(foldVi(raw)) || l.cells.length > 1 || isUpper(raw);
+    const newPara = !prev || prev.cells.length > 1 || prev.y - l.y > l.height * 1.9 || prevEnd < right - pageWidth * 0.12 || STARTS_ITEM.test(foldVi(raw)) || isUpper(raw);
     if (newPara) flush();
     para += (para ? ' ' : '') + (isUpper(raw) ? `<strong>${text}</strong>` : text);
   });

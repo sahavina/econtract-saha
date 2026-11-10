@@ -2,7 +2,7 @@
 
 import { buildTemplateValues, renderTemplate } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Download, Eye, FilePlus2, FileText, Loader2, PenTool, Trash2, Upload } from 'lucide-react';
+import { Download, Eye, FileCheck2, FilePlus2, FileText, Loader2, PenTool, Trash2, Upload } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
@@ -15,7 +15,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, downloadFile } from '@/lib/api';
 import { contractPdfFile } from '@/lib/contract-pdf';
-import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
+import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, setMainDocument, uploadContractDocument } from '@/lib/documents';
 import { useMisaStatus } from '@/lib/esign';
 import { formatDateTime } from '@/lib/format';
 import type { ContractDetail, ContractDocument } from '@/lib/types';
@@ -70,6 +70,14 @@ export function ContractDocumentsTab({
     onSuccess: () => {
       invalidate();
       toast.success('Đã xóa tài liệu');
+    },
+  });
+
+  const setMain = useMutation({
+    mutationFn: (id: string) => setMainDocument(contractId, id),
+    onSuccess: () => {
+      invalidate();
+      toast.success('Đã đặt bản gốc – xem ở tab Nội dung');
     },
   });
 
@@ -141,6 +149,7 @@ export function ContractDocumentsTab({
                     <button type="button" className="inline-flex items-center gap-2 text-left font-medium text-primary hover:underline" title={`Xem ${d.fileName}`} onClick={() => setViewing(d)}>
                       <FileText className="size-4 text-muted-foreground" /> {d.fileName}
                     </button>
+                    {d.kind === 'MAIN' && <Badge variant="secondary" className="ml-2">Bản gốc</Badge>}
                   </TableCell>
                   <TableCell>v{d.version}</TableCell>
                   <TableCell className="whitespace-nowrap tabular-nums">{formatFileSize(d.size)}</TableCell>
@@ -155,6 +164,11 @@ export function ContractDocumentsTab({
                   <TableCell>{d.uploadedBy.fullName}</TableCell>
                   <TableCell className="whitespace-nowrap">{formatDateTime(d.createdAt)}</TableCell>
                   <TableCell className="text-right whitespace-nowrap">
+                    {canManage && canDelete && d.kind !== 'MAIN' && d.mimeType === 'application/pdf' && (
+                      <Button variant="outline" size="sm" className="mr-1" disabled={setMain.isPending} title="Xem, in, tải hồ sơ theo đúng tệp này" onClick={() => setMain.mutate(d.id)}>
+                        <FileCheck2 /> Đặt làm bản gốc
+                      </Button>
+                    )}
                     {canSign && misa.data?.ready && d.mimeType === 'application/pdf' && (
                       <Button variant="outline" size="sm" className="mr-1" onClick={() => setSigning(d)}>
                         <PenTool /> Ký số

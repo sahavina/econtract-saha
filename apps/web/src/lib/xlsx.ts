@@ -37,7 +37,16 @@ async function firstSheetPath(file: Blob) {
 }
 
 /** Đọc file .xlsx; trả null nếu không đọc được. Số trong ô ghi theo kiểu Việt Nam (dấu phẩy thập phân) để bộ trích hiểu đúng. */
-export async function readXlsx(file: Blob): Promise<{ blocks: DocBlock[] } | null> {
+const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[ch]!);
+
+/** Bảng HTML giữ đúng hàng, cột của trang tính (bỏ cột trống ở cuối) – làm nội dung hồ sơ lập từ file Excel. */
+function sheetHtml(rows: string[][]): string {
+  const width = Math.max(...rows.map((r) => r.length));
+  const body = rows.map((r) => `<tr>${Array.from({ length: width }, (_, i) => `<td><p>${esc(r[i] ?? '')}</p></td>`).join('')}</tr>`).join('');
+  return `<table><tbody>${body}</tbody></table>`;
+}
+
+export async function readXlsx(file: Blob): Promise<{ blocks: DocBlock[]; html: string } | null> {
   const sheetXml = await readZipEntry(file, await firstSheetPath(file)).catch(() => null);
   if (!sheetXml) return null;
   const sharedXml = await readZipEntry(file, 'xl/sharedStrings.xml').catch(() => null);
@@ -65,5 +74,5 @@ export async function readXlsx(file: Blob): Promise<{ blocks: DocBlock[] } | nul
   if (!rows.length) return null;
   const blocks: DocBlock[] = rows.map((r) => ({ type: 'p', text: r.filter(Boolean).join(' ') }));
   blocks.push({ type: 'table', rows });
-  return { blocks };
+  return { blocks, html: sheetHtml(rows) };
 }

@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { api, ApiError } from '@/lib/api';
 import { useCompanyProfile } from '@/lib/company';
-import { DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
+import { attachMainDocument, DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { useLookups } from '@/lib/queries';
 import type { ContractDetail, ContractKind, Partner } from '@/lib/types';
 
@@ -97,9 +97,16 @@ function FileArchiveDialog({ kind, partner, onClose }: { kind: ContractKind; par
         },
       });
       // Hồ sơ đã tạo thì giữ lại dù có tệp lỗi; người dùng tải lại bằng nút đính kèm trên dòng của hồ sơ.
-      const uploads = [new File([main!], codedFileName(code, main!.name), { type: main!.type }), ...extras];
+      const mainFile = new File([main!], codedFileName(code, main!.name), { type: main!.type });
+      const uploads = [mainFile, ...extras];
       const failed: string[] = [];
-      for (const file of uploads) await uploadContractDocument(record.id, file).catch(() => failed.push(file.name));
+      for (const file of uploads) {
+        const doc = await uploadContractDocument(record.id, file).catch(() => void failed.push(file.name));
+        // Tệp chính giữ nguyên định dạng làm bản gốc (Word, Excel đổi sang PDF).
+        if (doc && file === mainFile) {
+          await attachMainDocument(record.id, file, doc).catch((e: Error) => toast.warning(`Chưa tạo được bản gốc PDF: ${e.message}`, { duration: 10_000 }));
+        }
+      }
       return { record, failed, uploaded: uploads.length - failed.length };
     },
     onSuccess: ({ record, failed, uploaded }) => {

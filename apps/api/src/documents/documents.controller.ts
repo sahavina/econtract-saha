@@ -62,6 +62,17 @@ export class DocumentsController {
     return new StreamableFile(stream);
   }
 
+  @Post(':documentId/main')
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.CONTRACT_UPDATE)
+  setMain(
+    @CurrentUser() user: AuthUser,
+    @Param('contractId', ParseUUIDPipe) contractId: string,
+    @Param('documentId', ParseUUIDPipe) documentId: string,
+  ) {
+    return this.documents.setMain(user, contractId, documentId);
+  }
+
   @Delete(':documentId')
   @HttpCode(204)
   @RequirePermissions(PERMISSIONS.CONTRACT_UPDATE)

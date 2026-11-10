@@ -9,6 +9,14 @@ export async function convertDocToDocx(file: File): Promise<Blob> {
   return res.blob();
 }
 
+/** Word/Excel ⇒ PDF giữ nguyên bố cục (máy chủ chuyển bằng LibreOffice). */
+export async function convertToPdf(file: File): Promise<File> {
+  const formData = new FormData();
+  formData.append('file', file);
+  const res = await apiRaw('/documents/convert-pdf', { method: 'POST', formData });
+  return new File([await res.blob()], `${file.name.replace(/\.[^.]+$/, '')}.pdf`, { type: 'application/pdf' });
+}
+
 /**
  * Đọc nội dung file Word (.docx) ngay trong trình duyệt, không cần thư viện:
  * .docx là file zip ⇒ tìm word/document.xml trong central directory, giải nén deflate bằng DecompressionStream,
