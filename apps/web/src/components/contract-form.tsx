@@ -17,12 +17,13 @@ import {
 } from '@saha/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CloudDownload, Eye, FileText, FileUp, Loader2, PackagePlus, Plus, Trash2, X } from 'lucide-react';
+import { Check, CloudDownload, Eye, FileText, FileUp, Loader2, PackagePlus, Pencil, Plus, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { cloneElement, isValidElement, useId, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, type UseFormReturn, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { ContractEditor } from '@/components/contract-editor';
 import { FilterSelect } from '@/components/filter-select';
 import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
 import { Button } from '@/components/ui/button';
@@ -497,6 +498,7 @@ export function ContractForm({
   const [files, setFiles] = useState<File[]>([]);
   const [previewTemplate, setPreviewTemplate] = useState(false);
   const [previewImported, setPreviewImported] = useState(false);
+  const [editingImported, setEditingImported] = useState(false);
   /** Nội dung hợp đồng chuyển từ file Word (chỉ khi lập mới, không chọn mẫu). */
   const [imported, setImported] = useState<{ name: string; html: string; use: boolean } | null>(null);
 
@@ -856,17 +858,26 @@ export function ContractForm({
             dung {noun}
           </label>
           {imported.use && (
-            <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => setPreviewImported(true)}>
-              <Eye /> Xem trước trên A4
-            </Button>
+            <div className="ml-auto flex gap-2">
+              <Button type="button" variant={editingImported ? 'secondary' : 'outline'} size="sm" onClick={() => setEditingImported((x) => !x)}>
+                {editingImported ? <Check /> : <Pencil />} {editingImported ? 'Xong' : 'Chỉnh sửa'}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => setPreviewImported(true)}>
+                <Eye /> Xem trước trên A4
+              </Button>
+            </div>
           )}
         </div>
-        {imported.use && (
-          <div className="max-h-[480px] overflow-y-auto rounded-md border bg-white px-8 py-6 text-[#111]">
-            {/* HTML do readDocx tạo (văn bản đã escape); máy chủ làm sạch lại khi lưu. */}
-            <div className="contract-content" dangerouslySetInnerHTML={{ __html: imported.html }} />
-          </div>
-        )}
+        {imported.use &&
+          (editingImported ? (
+            // Sửa ngay trước khi lưu (thêm, xóa dòng, gộp ô, căn lề…); bản gốc vẫn giữ nguyên file tải lên.
+            <ContractEditor value={imported.html} onChange={(html) => setImported((x) => (x ? { ...x, html } : x))} enableClauses />
+          ) : (
+            <div className="max-h-[480px] overflow-y-auto rounded-md border bg-white px-8 py-6 text-[#111]">
+              {/* HTML do readDocx tạo (văn bản đã escape); máy chủ làm sạch lại khi lưu. */}
+              <div className="contract-content" dangerouslySetInnerHTML={{ __html: imported.html }} />
+            </div>
+          ))}
         {previewImported && (
           <Dialog open onOpenChange={(o) => !o && setPreviewImported(false)}>
             <DialogContent className="max-h-[92vh] max-w-[min(96vw,980px)] overflow-hidden p-0 sm:max-w-[min(96vw,980px)]">
