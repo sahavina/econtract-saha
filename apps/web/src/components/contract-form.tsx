@@ -27,6 +27,7 @@ import { FilterSelect } from '@/components/filter-select';
 import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -495,6 +496,7 @@ export function ContractForm({
 
   const [files, setFiles] = useState<File[]>([]);
   const [previewTemplate, setPreviewTemplate] = useState(false);
+  const [previewImported, setPreviewImported] = useState(false);
   /** Nội dung hợp đồng chuyển từ file Word (chỉ khi lập mới, không chọn mẫu). */
   const [imported, setImported] = useState<{ name: string; html: string; use: boolean } | null>(null);
 
@@ -848,15 +850,39 @@ export function ContractForm({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4" checked={imported.use} onChange={(e) => setImported({ ...imported, use: e.target.checked })} /> Dùng nội dung này làm nội
-          dung hợp đồng
-        </label>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4" checked={imported.use} onChange={(e) => setImported({ ...imported, use: e.target.checked })} /> Dùng nội dung này làm nội
+            dung {noun}
+          </label>
+          {imported.use && (
+            <Button type="button" variant="outline" size="sm" className="ml-auto" onClick={() => setPreviewImported(true)}>
+              <Eye /> Xem trước trên A4
+            </Button>
+          )}
+        </div>
         {imported.use && (
           <div className="max-h-[480px] overflow-y-auto rounded-md border bg-white px-8 py-6 text-[#111]">
             {/* HTML do readDocx tạo (văn bản đã escape); máy chủ làm sạch lại khi lưu. */}
             <div className="contract-content" dangerouslySetInnerHTML={{ __html: imported.html }} />
           </div>
+        )}
+        {previewImported && (
+          <Dialog open onOpenChange={(o) => !o && setPreviewImported(false)}>
+            <DialogContent className="max-h-[92vh] max-w-[min(96vw,980px)] overflow-hidden p-0 sm:max-w-[min(96vw,980px)]">
+              <div className="flex max-h-[92vh] flex-col">
+                <DialogHeader className="border-b px-5 pt-5 pb-3">
+                  <DialogTitle>Xem trước trên A4 – {imported.name}</DialogTitle>
+                  <DialogDescription>Nội dung {noun} như khi in, xuất PDF và ký. Bản gốc giữ nguyên định dạng file được lưu kèm sau khi lưu {noun}.</DialogDescription>
+                </DialogHeader>
+                <div className="min-h-0 flex-1 overflow-auto bg-muted/40 p-4">
+                  <div className="a4-page">
+                    <div className="contract-content" dangerouslySetInnerHTML={{ __html: imported.html }} />
+                  </div>
+                </div>
+              </div>
+            </DialogContent>
+          </Dialog>
         )}
       </CardContent>
     </Card>
