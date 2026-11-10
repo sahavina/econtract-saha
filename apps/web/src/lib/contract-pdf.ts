@@ -24,7 +24,8 @@ function withColumnPercents(html: string): string {
     const cols = Array.from(table.querySelectorAll(':scope > colgroup > col')).map((c) => parseFloat((c as HTMLElement).style.width));
     const total = cols.reduce((a, b) => a + b, 0);
     if (!cols.length || cols.some((w) => !(w > 0))) continue;
-    table.setAttribute('data-pdfmake', JSON.stringify({ widths: cols.map((w) => `${((w / total) * 100).toFixed(2)}%`) }));
+    // Bảng nhiều cột: chữ nhỏ hơn như bản xem/in (globals.css) để cột hẹp không ngắt chữ giữa từ.
+    table.setAttribute('data-pdfmake', JSON.stringify({ widths: cols.map((w) => `${((w / total) * 100).toFixed(2)}%`), ...(cols.length >= 8 && { fontSize: 9 }) }));
   }
   return doc.body.firstElementChild?.innerHTML ?? html;
 }

@@ -844,7 +844,8 @@ export function ContractForm({
   );
 
   const importedCard = imported && (
-    <Card>
+    // overflow-visible: Card mặc định overflow-hidden làm thanh công cụ trình soạn thảo không "dính" khi cuộn.
+    <Card className="overflow-visible">
       <CardHeader>
         <CardTitle>Nội dung {isOrder ? 'đơn đặt hàng' : 'hợp đồng'} (từ {imported.name})</CardTitle>
         <CardDescription>

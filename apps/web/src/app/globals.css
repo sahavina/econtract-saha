@@ -165,6 +165,8 @@
   .contract-content th,
   .contract-content td { border: 1px solid var(--border); padding: 0.35em 0.5em; vertical-align: top; overflow-wrap: anywhere; }
   .contract-content th { background: var(--muted); font-weight: 600; text-align: left; }
+  /* Bảng nhiều cột (bảng hàng chép từ Excel…): chữ nhỏ hơn để cột hẹp không ngắt chữ giữa từ trên khổ A4. */
+  .contract-content table:has(> colgroup > col:nth-child(8)) { font-size: 0.7em; }
   /* Bảng ẩn viền (bảng thông tin các bên, khối chữ ký): không viền khi xem/in/xuất PDF;
      trong trình soạn thảo vẫn hiện viền nét đứt mờ để dễ thao tác. */
   .contract-content table.borderless th,
