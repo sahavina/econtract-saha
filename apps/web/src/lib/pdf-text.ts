@@ -1,4 +1,5 @@
 import { type DocBlock, foldVi } from '@saha/shared';
+import { fitColumnWidths } from '@/lib/table-widths';
 
 /**
  * Đọc lớp chữ của file PDF (pdf.js) để trích thông tin đơn đặt hàng.
@@ -31,7 +32,7 @@ async function loadPdfjs() {
 }
 
 /** Gom các mẩu chữ cùng dòng (sai lệch y ≤ 3pt) và nối/tách ô theo khoảng trống giữa chúng. */
-function toLines(items: { str: string; transform: number[]; width: number; height: number }[]): Line[] {
+function toLines(items: TextItem[]): Line[] {
   const sorted = items.filter((i) => i.str.trim()).sort((a, b) => b.transform[5] - a.transform[5] || a.transform[4] - b.transform[4]);
   const lines: { y: number; parts: typeof sorted }[] = [];
   for (const it of sorted) {
@@ -83,8 +84,204 @@ function columnsHtml(lines: Line[]): string {
   return `<table class="borderless"><tbody>${rows.join('')}</tbody></table>`;
 }
 
+type TextItem = { str: string; transform: number[]; width: number; height: number };
+
+/** Đoạn kẻ ngang (y cố định, x1→x2) hoặc dọc (x cố định, y1→y2), tọa độ trang PDF (gốc dưới trái). */
+interface Rule {
+  at: number;
+  from: number;
+  to: number;
+}
+
+/** Bảng kẻ khung tìm được trên trang: vùng chiếm chỗ và HTML dựng lại. */
+interface GridTable {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+  html: string;
+}
+
+type Matrix = [number, number, number, number, number, number];
+const mul = (m: Matrix, n: Matrix): Matrix => [
+  m[0] * n[0] + m[2] * n[1],
+  m[1] * n[0] + m[3] * n[1],
+  m[0] * n[2] + m[2] * n[3],
+  m[1] * n[2] + m[3] * n[3],
+  m[0] * n[4] + m[2] * n[5] + m[4],
+  m[1] * n[4] + m[3] * n[5] + m[5],
+];
+const apply = (m: Matrix, x: number, y: number) => [m[0] * x + m[2] * y + m[4], m[1] * x + m[3] * y + m[5]] as const;
+
+/** Gộp các giá trị gần nhau (lệch ≤ tol) thành một. */
+function cluster(values: number[], tol = 2.5): number[] {
+  const out: number[] = [];
+  for (const v of [...values].sort((a, b) => a - b)) if (!out.length || v - out[out.length - 1] > tol) out.push(v);
+  return out;
+}
+
+/**
+ * Đường kẻ khung trên trang: Excel/Word xuất PDF vẽ viền ô bằng hình chữ nhật rất mảnh (tô) hoặc đường thẳng (nét).
+ * Theo dõi ma trận biến đổi (save/restore/transform) để đổi về tọa độ trang như lớp chữ.
+ */
+async function pageRules(
+  page: { getOperatorList: () => Promise<{ fnArray: number[]; argsArray: unknown[][] }> },
+  OPS: Record<string, number>,
+): Promise<{ h: Rule[]; v: Rule[] }> {
+  const { fnArray, argsArray } = await page.getOperatorList();
+  const h: Rule[] = [];
+  const v: Rule[] = [];
+  const strokeOps = new Set([OPS.stroke, OPS.closeStroke, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+  const fillOps = new Set([OPS.fill, OPS.eoFill, OPS.fillStroke, OPS.eoFillStroke, OPS.closeFillStroke, OPS.closeEOFillStroke]);
+  let ctm: Matrix = [1, 0, 0, 1, 0, 0];
+  const stack: Matrix[] = [];
+  const addSeg = (x1: number, y1: number, x2: number, y2: number) => {
+    if (Math.abs(y1 - y2) < 0.5 && Math.abs(x2 - x1) > 3) h.push({ at: (y1 + y2) / 2, from: Math.min(x1, x2), to: Math.max(x1, x2) });
+    else if (Math.abs(x1 - x2) < 0.5 && Math.abs(y2 - y1) > 3) v.push({ at: (x1 + x2) / 2, from: Math.min(y1, y2), to: Math.max(y1, y2) });
+  };
+  fnArray.forEach((fn, i) => {
+    const args = argsArray[i];
+    if (fn === OPS.save) stack.push(ctm);
+    else if (fn === OPS.restore) ctm = stack.pop() ?? ctm;
+    else if (fn === OPS.transform) ctm = mul(ctm, args as Matrix);
+    else if (fn === OPS.constructPath) {
+      const op = args?.[0] as number;
+      const data = (args?.[1] as ArrayLike<number>[] | undefined)?.[0];
+      if (!data || typeof data.length !== 'number' || !(strokeOps.has(op) || fillOps.has(op))) return;
+      // Tách đường đi thành các đường gấp khúc (moveTo 0, lineTo 1, curveTo 2, quadraticCurveTo 3, closePath 4).
+      const polys: (readonly [number, number])[][] = [];
+      let cur: (readonly [number, number])[] = [];
+      let curved = false;
+      for (let k = 0; k < data.length; ) {
+        const code = data[k];
+        if (code === 0) {
+          if (cur.length) polys.push(cur);
+          cur = [apply(ctm, data[k + 1], data[k + 2])];
+          k += 3;
+        } else if (code === 1) {
+          cur.push(apply(ctm, data[k + 1], data[k + 2]));
+          k += 3;
+        } else if (code === 2) {
+          curved = true;
+          k += 7;
+        } else if (code === 3) {
+          curved = true;
+          k += 5;
+        } else {
+          if (cur.length > 2) cur.push(cur[0]);
+          k += 1;
+        }
+      }
+      if (cur.length) polys.push(cur);
+      if (curved) return;
+      for (const p of polys) {
+        if (strokeOps.has(op)) for (let k = 1; k < p.length; k++) addSeg(p[k - 1][0], p[k - 1][1], p[k][0], p[k][1]);
+        if (fillOps.has(op) && p.length >= 4) {
+          const xs = p.map((q) => q[0]);
+          const ys = p.map((q) => q[1]);
+          const [x1, x2, y1, y2] = [Math.min(...xs), Math.max(...xs), Math.min(...ys), Math.max(...ys)];
+          // Hình chữ nhật mảnh = một đường kẻ; hình lớn (tô nền) bỏ qua.
+          if (y2 - y1 <= 2.5 && x2 - x1 > 3) addSeg(x1, (y1 + y2) / 2, x2, (y1 + y2) / 2);
+          else if (x2 - x1 <= 2.5 && y2 - y1 > 3) addSeg((x1 + x2) / 2, y1, (x1 + x2) / 2, y2);
+        }
+      }
+    }
+  });
+  return { h, v };
+}
+
+/** Chữ trong một ô: các mẩu chữ gom thành dòng, nối các dòng bằng dấu cách; căn lề đoán theo khoảng trống hai bên. */
+function cellHtml(items: TextItem[], x1: number, x2: number): { text: string; html: string } {
+  if (!items.length) return { text: '', html: '<p></p>' };
+  const text = toLines(items)
+    .map((l) => l.cells.map((c) => c.text).join(' '))
+    // Dòng xuống hàng ngay sau dấu gạch nối (mã hàng "406-" / "20g") thì nối liền.
+    .reduce((s, t) => (!s ? t : /[-–/]$/.test(s) ? s + t : `${s} ${t}`), '');
+  const minX = Math.min(...items.map((i) => i.transform[4]));
+  const maxX = Math.max(...items.map((i) => i.transform[4] + i.width));
+  const left = minX - x1;
+  const right = x2 - maxX;
+  const align = left > 3 && Math.abs(left - right) < 3 ? 'center' : right < 6 && left > right + 4 ? 'right' : '';
+  return { text, html: `<p${align ? ` style="text-align:${align}"` : ''}>${esc(text)}</p>` };
+}
+
+/**
+ * Bảng kẻ khung: các đường dọc chồng nhau theo chiều cao tạo thành một vùng bảng; lưới lấy từ vị trí đường dọc (cột) và
+ * đường ngang (hàng). Hai ô lưới liền nhau không có đường kẻ ngăn cách ⇒ ô gộp (colspan/rowspan) như bản gốc.
+ */
+function gridTables(rules: { h: Rule[]; v: Rule[] }, items: TextItem[]): GridTable[] {
+  const groups: Rule[][] = [];
+  for (const r of [...rules.v].sort((a, b) => a.from - b.from)) {
+    const g = groups.find((gr) => gr.some((o) => r.from <= o.to + 2 && r.to >= o.from - 2));
+    if (g) g.push(r);
+    else groups.push([r]);
+  }
+  const tables: GridTable[] = [];
+  for (const g of groups) {
+    const xs = cluster(g.map((r) => r.at));
+    if (xs.length < 2) continue;
+    const [left, right] = [xs[0], xs[xs.length - 1]];
+    const [bottom, top] = [Math.min(...g.map((r) => r.from)), Math.max(...g.map((r) => r.to))];
+    const hs = rules.h.filter((r) => r.at >= bottom - 2 && r.at <= top + 2 && r.to > left + 2 && r.from < right - 2);
+    // Hàng từ trên xuống (y giảm dần).
+    const ys = cluster([bottom, top, ...hs.map((r) => r.at)]).reverse();
+    if (ys.length < 2) continue;
+    const nr = ys.length - 1;
+    const nc = xs.length - 1;
+    const vAt = (x: number, y: number) => g.some((r) => Math.abs(r.at - x) <= 2.5 && r.from <= y + 1 && r.to >= y - 1);
+    const hAt = (y: number, x: number) => hs.some((r) => Math.abs(r.at - y) <= 2.5 && r.from <= x + 1 && r.to >= x - 1);
+    const inTable = items.filter((it) => {
+      const cx = it.transform[4] + it.width / 2;
+      const cy = it.transform[5] + it.height * 0.3;
+      return it.str.trim() && cx >= left && cx <= right && cy >= bottom && cy <= top;
+    });
+    const covered = new Set<string>();
+    const grid: { r: number; c: number; cs: number; rs: number; own: TextItem[]; x1: number; x2: number }[] = [];
+    let filled = 0;
+    for (let r = 0; r < nr; r++) {
+      const ym = (ys[r] + ys[r + 1]) / 2;
+      for (let c = 0; c < nc; c++) {
+        if (covered.has(`${r}:${c}`)) continue;
+        let cs = 1;
+        while (c + cs < nc && !vAt(xs[c + cs], ym) && !covered.has(`${r}:${c + cs}`)) cs++;
+        let rs = 1;
+        while (r + rs < nr && Array.from({ length: cs }, (_, k) => c + k).every((k) => !hAt(ys[r + rs], (xs[k] + xs[k + 1]) / 2) && !covered.has(`${r + rs}:${k}`))) rs++;
+        for (let dr = 0; dr < rs; dr++) for (let dc = 0; dc < cs; dc++) covered.add(`${r + dr}:${c + dc}`);
+        const [x1, x2, yTop, yBot] = [xs[c], xs[c + cs], ys[r], ys[r + rs]];
+        const own = inTable.filter((it) => {
+          const cx = it.transform[4] + it.width / 2;
+          const cy = it.transform[5] + it.height * 0.3;
+          return cx >= x1 && cx < x2 && cy <= yTop && cy > yBot;
+        });
+        if (own.length) filled++;
+        grid.push({ r, c, cs, rs, own, x1, x2 });
+      }
+    }
+    // Khung trang trí không chứa chữ (đường viền trang…) thì bỏ qua.
+    if (!filled) continue;
+    const html = grid.map((g) => ({ ...g, ...cellHtml(g.own, g.x1, g.x2) }));
+    // Độ rộng cột theo tỉ lệ bản gốc, mỗi cột đủ chứa từ dài nhất (ô không gộp cột) để không ngắt chữ giữa từ.
+    const px = fitColumnWidths(
+      xs.slice(1).map((x, c) => x - xs[c]),
+      Array.from({ length: nc }, (_, c) => html.filter((g) => g.c === c && g.cs === 1).map((g) => g.text)),
+    );
+    const rows = Array.from({ length: nr }, (_, r) =>
+      html
+        .filter((g) => g.r === r)
+        .map((g) => {
+          const attrs = `${g.cs > 1 ? ` colspan="${g.cs}"` : ''}${g.rs > 1 ? ` rowspan="${g.rs}"` : ''} colwidth="${px.slice(g.c, g.c + g.cs).join(',')}"`;
+          return `<td${attrs}>${g.html}</td>`;
+        })
+        .join(''),
+    ).map((cells) => `<tr>${cells}</tr>`);
+    const colgroup = `<colgroup>${px.map((w) => `<col style="width:${w}px">`).join('')}</colgroup>`;
+    tables.push({ top, bottom, left, right, html: `<table>${colgroup}<tbody>${rows.join('')}</tbody></table>` });
+  }
+  return tables.sort((a, b) => b.top - a.top);
+}
+
 /** Gom các dòng của một trang thành đoạn: dòng sau nối vào đoạn trước nếu dòng trước chạy hết khổ và không có khoảng cách lớn. */
-function pageHtml(lines: Line[], pageWidth: number): string {
+function pageHtml(lines: Line[], pageWidth: number, tables: GridTable[] = []): string {
   // Bỏ số trang ở đầu/cuối trang.
   const body = lines.filter((l, i) => !((i === 0 || i === lines.length - 1) && /^\d{1,3}$/.test(l.cells.map((c) => c.text).join(' '))));
   const right = Math.max(0, ...body.flatMap((l) => l.cells.map((c) => c.end)));
@@ -100,7 +297,17 @@ function pageHtml(lines: Line[], pageWidth: number): string {
     para = '';
     flushGroup();
   };
+  const pending = [...tables];
+  let afterTable = false;
   body.forEach((l, i) => {
+    // Bảng kẻ khung nằm phía trên dòng này: chèn vào đúng vị trí.
+    while (pending.length && pending[0].bottom >= l.y) {
+      flush();
+      out.push(pending.shift()!.html);
+      afterTable = true;
+    }
+    const breakBefore = afterTable;
+    afterTable = false;
     // Dòng có nhiều khối chữ cách xa nhau (thông tin hai bên, bảng): giữ bố cục cột bằng bảng không viền.
     if (l.cells.length > 1) {
       if (para) out.push(`<p>${para}</p>`);
@@ -121,11 +328,12 @@ function pageHtml(lines: Line[], pageWidth: number): string {
     }
     const prev = body[i - 1];
     const prevEnd = prev ? prev.cells[prev.cells.length - 1].end : 0;
-    const newPara = !prev || prev.cells.length > 1 || prev.y - l.y > l.height * 1.9 || prevEnd < right - pageWidth * 0.12 || STARTS_ITEM.test(foldVi(raw)) || isUpper(raw);
+    const newPara = breakBefore || !prev || prev.cells.length > 1 || prev.y - l.y > l.height * 1.9 || prevEnd < right - pageWidth * 0.12 || STARTS_ITEM.test(foldVi(raw)) || isUpper(raw);
     if (newPara) flush();
     para += (para ? ' ' : '') + (isUpper(raw) ? `<strong>${text}</strong>` : text);
   });
   flush();
+  for (const t of pending) out.push(t.html);
   return out.join('');
 }
 
@@ -167,8 +375,18 @@ export async function readPdfText(file: Blob): Promise<{ blocks: DocBlock[]; htm
     for (let n = 1; n <= Math.min(doc.numPages, 20); n++) {
       const page = await doc.getPage(n);
       const content = await page.getTextContent();
-      const lines = toLines(content.items.filter((i) => 'str' in i) as never);
-      html += pageHtml(lines, page.getViewport({ scale: 1 }).width);
+      const items = content.items.filter((i) => 'str' in i) as unknown as TextItem[];
+      const lines = toLines(items);
+      // Bảng kẻ khung dựng lại thành bảng có viền; phần chữ còn lại theo dòng/đoạn như trước. Lỗi đọc nét vẽ ⇒ bỏ qua bảng.
+      const tables = await pageRules(page as never, pdfjs.OPS as unknown as Record<string, number>)
+        .then((rules) => gridTables(rules, items))
+        .catch(() => [] as GridTable[]);
+      const inside = (it: TextItem) => {
+        const cx = it.transform[4] + it.width / 2;
+        const cy = it.transform[5] + it.height * 0.3;
+        return tables.some((t) => cx >= t.left && cx <= t.right && cy >= t.bottom && cy <= t.top);
+      };
+      html += pageHtml(tables.length ? toLines(items.filter((it) => !inside(it))) : lines, page.getViewport({ scale: 1 }).width, tables);
       let header: Cell[] | null = null;
       let table: string[][] = [];
       const flush = () => {

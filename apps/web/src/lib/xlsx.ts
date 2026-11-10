@@ -1,5 +1,6 @@
 import type { DocBlock } from '@saha/shared';
 import { readZipEntry } from '@/lib/docx';
+import { fitColumnWidths } from '@/lib/table-widths';
 
 /**
  * Đọc trang tính đầu tiên của file Excel (.xlsx) ngay trong trình duyệt (không cần thư viện):
@@ -52,12 +53,6 @@ function parseMerge(ref: string): Merge | null {
   return { c1: columnIndex(`${m[1]}1`), r1: Number(m[2]), c2: columnIndex(`${m[3]}1`), r2: Number(m[4]) };
 }
 
-/** Bề ngang vùng nội dung trang A4 (px, 96 dpi) – độ rộng cột của bảng được chia theo tỉ lệ Excel trong phạm vi này. */
-const A4_CONTENT_PX = 640;
-/** Khoảng đệm hai bên ô (px) – cộng vào bề ngang từ dài nhất để ước lượng cột tối thiểu. */
-const CELL_PADDING_PX = 14;
-/** Bề ngang ước lượng một từ ở cỡ chữ bảng nhiều cột (khoảng 10pt): chữ in hoa, chữ số rộng hơn chữ thường. */
-const wordPx = (word: string) => Array.from(word).reduce((s, ch) => s + (/[A-ZĐ0-9]/.test(ch.normalize('NFD')[0]) ? 9.4 : 6.8), 0);
 
 interface Sheet {
   rows: string[][];
@@ -124,18 +119,11 @@ function segmentHtml(sheet: Sheet, start: number, end: number): string {
   }
   // Độ rộng cột: tỉ lệ theo Excel, tổng vừa bề ngang A4. Ghi cả colgroup (xem, in, PDF) và colwidth của ô (trình soạn thảo).
   // Mỗi cột tối thiểu đủ chứa từ dài nhất của nó (ô không gộp) để không ngắt chữ giữa từ; phần còn lại chia theo tỉ lệ Excel.
-  const raw = keptCols.map((c) => sheet.colWidth(c));
-  const need = keptCols.map((c) => {
-    const longest = Math.max(0, ...idx.filter((i) => !span.has(`${i}:${c}`) && !covered.has(`${i}:${c}`)).flatMap((i) => (shown[i][c] ?? '').split(/\s+/).map(wordPx)));
-    return Math.round(longest + CELL_PADDING_PX);
-  });
-  const needTotal = need.reduce((s, w) => s + w, 0);
-  const rawTotal = raw.reduce((s, w) => s + w, 0) || 1;
-  const widthsPx =
-    needTotal >= A4_CONTENT_PX
-      ? need.map((w) => (w / needTotal) * A4_CONTENT_PX)
-      : need.map((w, k) => w + ((A4_CONTENT_PX - needTotal) * raw[k]) / rawTotal);
-  const px = new Map(keptCols.map((c, k) => [c, Math.max(24, Math.round(widthsPx[k]))]));
+  const widthsPx = fitColumnWidths(
+    keptCols.map((c) => sheet.colWidth(c)),
+    keptCols.map((c) => idx.filter((i) => !span.has(`${i}:${c}`) && !covered.has(`${i}:${c}`)).map((i) => shown[i][c] ?? '')),
+  );
+  const px = new Map(keptCols.map((c, k) => [c, widthsPx[k]]));
   const colgroup = `<colgroup>${keptCols.map((c) => `<col style="width:${px.get(c)}px">`).join('')}</colgroup>`;
   const body = idx
     .map((i) => {
