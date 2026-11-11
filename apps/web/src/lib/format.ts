@@ -62,6 +62,8 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'contract.approval_reject': 'Từ chối phê duyệt',
   'contract.approval_request_changes': 'Yêu cầu chỉnh sửa',
   'contract.approval_cancel': 'Rút lại yêu cầu phê duyệt',
+  'contract.approval_reopen': 'Mở lại hồ sơ đã phê duyệt để chỉnh sửa',
+  'contract.self_approve': 'Tự phê duyệt',
   'contract.signature_request': 'Gửi yêu cầu ký',
   'contract.signature_link': 'Cấp lại liên kết ký',
   'contract.preview_link_create': 'Tạo link xem trước cho khách hàng',

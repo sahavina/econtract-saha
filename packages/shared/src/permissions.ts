@@ -16,6 +16,7 @@ export const PERMISSIONS = {
   CONTRACT_LIQUIDATE: 'contract.liquidate',
   CONTRACT_SHARE: 'contract.share',
   CONTRACT_SELF_APPROVE: 'contract.self_approve',
+  CONTRACT_REOPEN_APPROVED: 'contract.reopen_approved',
 
   PARTNER_VIEW: 'partner.view',
   PARTNER_MANAGE: 'partner.manage',
@@ -56,6 +57,7 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'contract.liquidate': 'Thanh lý hợp đồng',
   'contract.share': 'Gửi khách hàng xem trước, xử lý góp ý của khách',
   'contract.self_approve': 'Tự phê duyệt hợp đồng (duyệt ngay, không qua quy trình phê duyệt)',
+  'contract.reopen_approved': 'Sửa hợp đồng đã phê duyệt (mở lại về Nháp, phải duyệt lại)',
   'partner.view': 'Xem đối tác',
   'partner.manage': 'Quản lý đối tác',
   'product.manage': 'Quản lý danh mục sản phẩm (đơn đặt hàng)',

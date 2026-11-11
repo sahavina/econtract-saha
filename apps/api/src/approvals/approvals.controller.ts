@@ -8,6 +8,8 @@ import {
   ApprovalsService,
   type DecideInput,
   decideSchema,
+  type ReopenInput,
+  reopenSchema,
   type SubmitInput,
   submitSchema,
 } from './approvals.service.js';
@@ -76,5 +78,17 @@ export class ApprovalsController {
   @RequirePermissions(PERMISSIONS.CONTRACT_UPDATE)
   cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.approvals.cancel(user, id);
+  }
+
+  /** Mở lại hồ sơ đã phê duyệt để chỉnh sửa – về Nháp, phải duyệt lại. */
+  @Post('contracts/:id/approval/reopen')
+  @HttpCode(204)
+  @RequirePermissions(PERMISSIONS.CONTRACT_REOPEN_APPROVED)
+  reopen(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseUUIDPipe) id: string,
+    @Body(new ZodPipe(reopenSchema)) body: ReopenInput,
+  ) {
+    return this.approvals.reopen(user, id, body);
   }
 }

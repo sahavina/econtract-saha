@@ -7,7 +7,7 @@ import {
   type ApprovalDecision,
 } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, BadgeCheck, Check, CircleDashed, Clock, Loader2, MessageSquareWarning, Send, Undo2, X } from 'lucide-react';
+import { AlertTriangle, BadgeCheck, Check, CircleDashed, Clock, Loader2, MessageSquareWarning, Pencil, Send, Undo2, X } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
@@ -243,6 +243,55 @@ function SelfApprovePanel({ contract, onConfirm }: { contract: ContractDetail; o
   );
 }
 
+/** Hồ sơ Đã phê duyệt, chưa gửi ký: người có quyền mở lại về Nháp để sửa nội dung, sau đó phải gửi duyệt lại. */
+function ReopenPanel({ contract, onConfirm }: { contract: ContractDetail; onConfirm: (state: ConfirmState) => void }) {
+  const qc = useQueryClient();
+  const [reason, setReason] = useState('');
+  const reopen = useMutation({
+    mutationFn: () => api<undefined>(`/contracts/${contract.id}/approval/reopen`, { method: 'POST', body: { reason: reason.trim() } }),
+    onSuccess: () => {
+      toast.success('Đã mở lại hồ sơ về Nháp, bạn có thể chỉnh sửa');
+      setReason('');
+      qc.invalidateQueries({ queryKey: ['contract', contract.id] });
+      qc.invalidateQueries({ queryKey: ['contracts'] });
+      qc.invalidateQueries({ queryKey: ['dashboard'] });
+    },
+    onError: (e) => toast.error(e.message),
+  });
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Pencil className="size-4" /> Cần thay đổi nội dung?
+        </CardTitle>
+        <CardDescription>
+          Mở lại để chỉnh sửa: hồ sơ trở về Nháp và phải gửi phê duyệt lại trước khi ký. Lần phê duyệt cũ vẫn giữ trong lịch sử, lý do mở lại được ghi vào nhật ký.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-3">
+        <div className="space-y-1.5">
+          <Label htmlFor="reopen-reason">Lý do mở lại *</Label>
+          <Textarea id="reopen-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+        </div>
+        <Button
+          variant="outline"
+          disabled={!reason.trim() || reopen.isPending}
+          onClick={() =>
+            onConfirm({
+              title: `Mở lại hồ sơ ${contract.code} để chỉnh sửa?`,
+              description: 'Hồ sơ trở về Nháp; kết quả phê duyệt hiện tại không còn hiệu lực và phải gửi duyệt lại.',
+              confirmLabel: 'Mở lại',
+              onConfirm: () => reopen.mutateAsync().then(() => undefined),
+            })
+          }
+        >
+          {reopen.isPending ? <Loader2 className="animate-spin" /> : <Pencil />} Mở lại để chỉnh sửa
+        </Button>
+      </CardContent>
+    </Card>
+  );
+}
+
 function DecisionPanel({ contractId }: { contractId: string }) {
   const qc = useQueryClient();
   const [comment, setComment] = useState('');
@@ -324,6 +373,7 @@ export function ContractApprovalTab({ contract }: { contract: ContractDetail }) 
     !contract.archivedAt &&
     !contract.deletedAt &&
     ((contract.status === 'DRAFT' && !pending) || (contract.status === 'PENDING_APPROVAL' && !!pending));
+  const canReopen = contract.status === 'APPROVED' && !contract.archivedAt && !contract.deletedAt && can('contract.reopen_approved');
   const canCancel = !!pending && can('contract.update') && (pending.submittedBy.id === user?.id || contract.owner?.id === user?.id);
 
   return (
@@ -365,6 +415,7 @@ export function ContractApprovalTab({ contract }: { contract: ContractDetail }) 
         </Card>
       )}
 
+      {canReopen && <ReopenPanel contract={contract} onConfirm={setConfirm} />}
       {canSelfApprove && <SelfApprovePanel contract={contract} onConfirm={setConfirm} />}
       {!pending && canSubmit && <SubmitPanel contract={contract} />}
       {!pending && !canSubmit && !canSelfApprove && history.data.length === 0 && <EmptyState title="Hợp đồng chưa được gửi phê duyệt" />}

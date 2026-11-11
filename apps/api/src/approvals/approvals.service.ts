@@ -33,6 +33,9 @@ export const decideSchema = z
   });
 export type DecideInput = z.infer<typeof decideSchema>;
 
+export const reopenSchema = z.object({ reason: z.string().trim().min(1, 'Vui lòng nhập lý do mở lại').max(2000) });
+export type ReopenInput = z.infer<typeof reopenSchema>;
+
 /** Bước đã giải quyết người duyệt – được lưu làm ảnh chụp trong ApprovalRequest.stepsSnapshot. */
 export interface ResolvedStep {
   order: number;
@@ -400,6 +403,31 @@ export class ApprovalsService {
           entityType: 'contract',
           entityId: contractId,
           data: { code: contract.code },
+        },
+        tx,
+      );
+    });
+  }
+
+  /**
+   * Mở lại hồ sơ Đã phê duyệt (chưa gửi ký) để chỉnh sửa: hồ sơ về Nháp và phải gửi duyệt lại.
+   * Yêu cầu duyệt cũ giữ nguyên trong lịch sử; lý do mở lại ghi vào nhật ký.
+   */
+  async reopen(user: AuthUser, contractId: string, input: ReopenInput) {
+    const contract = await this.contracts.get(user, contractId);
+    await this.prisma.$transaction(async (tx) => {
+      const moved = await tx.contract.updateMany({
+        where: { id: contractId, tenantId: user.tenantId, status: 'APPROVED', approvalStatus: 'APPROVED', deletedAt: null, archivedAt: null },
+        data: { status: 'DRAFT', approvalStatus: 'NOT_SUBMITTED' },
+      });
+      if (moved.count !== 1) throw new BadRequestException('Chỉ mở lại được hồ sơ ở trạng thái Đã phê duyệt, chưa gửi ký');
+      await this.audit.log(
+        user,
+        {
+          action: 'contract.approval_reopen',
+          entityType: 'contract',
+          entityId: contractId,
+          data: { code: contract.code, comment: input.reason },
         },
         tx,
       );
