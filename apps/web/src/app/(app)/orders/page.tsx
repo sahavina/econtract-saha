@@ -158,7 +158,7 @@ export default function OrdersPage() {
         />
       ) : (
         <>
-          <div className="rounded-lg border">
+          <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
             <Table>
               <TableHeader>
                 <TableRow>

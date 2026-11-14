@@ -78,7 +78,7 @@ export default function PaymentRequestsPage() {
         <EmptyState title="Chưa có đề nghị thanh toán đã lưu" description={canManage ? 'Bấm “Lập đề nghị thanh toán”, hoặc lập từ một đơn đặt hàng / hợp đồng rồi bấm “Lưu đề nghị”.' : undefined} />
       ) : (
         <>
-          <div className="rounded-lg border">
+          <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
             <Table>
               <TableHeader>
                 <TableRow>

@@ -128,7 +128,7 @@ export function ContractDocumentsTab({
       ) : docs.data.length === 0 ? (
         <EmptyState title="Chưa có tài liệu đính kèm" />
       ) : (
-        <div className="rounded-lg border">
+        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
           <Table>
             <TableHeader>
               <TableRow>

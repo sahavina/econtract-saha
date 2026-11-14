@@ -174,7 +174,7 @@ export default function ContractDetailPage() {
       />
 
       <Tabs defaultValue={initialTab}>
-        <TabsList className="h-auto flex-wrap justify-start">
+        <TabsList variant="line" className="h-auto w-full justify-start gap-0 overflow-x-auto [scrollbar-width:thin] rounded-none border-b p-0 pb-px **:data-[slot=tabs-trigger]:h-10 **:data-[slot=tabs-trigger]:flex-none **:data-[slot=tabs-trigger]:px-3 **:data-[slot=tabs-trigger]:after:bottom-0 **:data-[slot=tabs-trigger]:after:bg-primary">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           {isOrder && <TabsTrigger value="items">Hàng hóa & giao hàng ({c.items.length})</TabsTrigger>}
           <TabsTrigger value="content">{isOrder ? 'Nội dung đơn hàng' : 'Nội dung hợp đồng'}</TabsTrigger>

@@ -247,7 +247,7 @@ export default function PartnerDetailPage() {
 
       {(canContracts || canDeliveries) && (
         <Tabs defaultValue={initialTab ?? (canContracts ? 'contracts' : 'deliveries')}>
-          <TabsList className="h-auto flex-wrap justify-start">
+          <TabsList variant="line" className="h-auto w-full justify-start gap-0 overflow-x-auto [scrollbar-width:thin] rounded-none border-b p-0 pb-px **:data-[slot=tabs-trigger]:h-10 **:data-[slot=tabs-trigger]:flex-none **:data-[slot=tabs-trigger]:px-3 **:data-[slot=tabs-trigger]:after:bottom-0 **:data-[slot=tabs-trigger]:after:bg-primary">
             {canContracts && (
               <>
                 <TabsTrigger value="contracts">Hợp đồng ({contracts.data?.total ?? '…'})</TabsTrigger>
@@ -270,7 +270,7 @@ export default function PartnerDetailPage() {
                 ) : (
                   <>
                     {contractActions && <div className="mb-3 flex justify-end">{contractActions}</div>}
-                    <div className="rounded-lg border">
+                    <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -316,7 +316,7 @@ export default function PartnerDetailPage() {
                 ) : (
                   <>
                     {orderActions && <div className="mb-3 flex justify-end">{orderActions}</div>}
-                    <div className="rounded-lg border">
+                    <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -371,7 +371,7 @@ export default function PartnerDetailPage() {
                   <EmptyState title="Chưa có đợt thanh toán" description="Các đợt thanh toán được khai báo trong tab Vòng đời của từng hợp đồng hoặc đơn hàng." />
                 ) : (
                   <>
-                    <div className="rounded-lg border">
+                    <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -420,7 +420,7 @@ export default function PartnerDetailPage() {
                   <EmptyState title="Chưa có phiếu xuất kho" description="Chỉ tính các phiếu lập từ đơn đặt hàng của đối tác này." />
                 ) : (
                   <>
-                    <div className="rounded-lg border">
+                    <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
                       <Table>
                         <TableHeader>
                           <TableRow>
@@ -461,7 +461,7 @@ export default function PartnerDetailPage() {
                   <EmptyState title="Chưa có phiếu gửi hàng" description="Chỉ tính các phiếu gắn với đơn đặt hàng của đối tác này." />
                 ) : (
                   <>
-                    <div className="rounded-lg border">
+                    <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
                       <Table>
                         <TableHeader>
                           <TableRow>

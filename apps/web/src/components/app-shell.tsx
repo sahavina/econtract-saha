@@ -33,7 +33,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       </Suspense>
       <SidebarInset className="min-w-0">
         <AppHeader />
-        <div className="min-w-0 flex-1 p-4 md:p-6">
+        <div className="mx-auto w-full max-w-[1680px] min-w-0 flex-1 p-4 md:p-6 lg:px-8">
           <Suspense fallback={<FullScreenLoader />}>{children}</Suspense>
         </div>
       </SidebarInset>

@@ -15,6 +15,7 @@ import {
   PenLine,
   Percent,
   Wallet,
+  SlidersHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -44,14 +45,14 @@ interface Filters {
 
 function Kpi({ icon: Icon, label, value, href, tone }: { icon: LucideIcon; label: string; value: React.ReactNode; href?: string; tone?: string }) {
   const body = (
-    <Card className="h-full gap-2 py-4 transition-colors hover:bg-muted/40">
-      <CardContent className="flex items-start justify-between gap-3 px-4">
+    <Card className={`h-full gap-2 py-4 transition-all ${href ? 'hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md' : ''}`}>
+      <CardContent className="flex items-center justify-between gap-3 px-4">
         <div className="min-w-0">
-          <p className="truncate text-xs text-muted-foreground">{label}</p>
-          <p className="mt-1 truncate text-2xl font-semibold tabular-nums">{value}</p>
+          <p className="truncate text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">{label}</p>
+          <p className="mt-1.5 truncate text-[1.6rem] leading-none font-bold tracking-tight tabular-nums">{value}</p>
         </div>
-        <div className={`rounded-lg p-2 ${tone ?? 'bg-primary/10 text-primary'}`}>
-          <Icon className="size-4" />
+        <div className={`flex size-10 shrink-0 items-center justify-center rounded-xl ${tone ?? 'bg-primary/10 text-primary'}`}>
+          <Icon className="size-5" />
         </div>
       </CardContent>
     </Card>
@@ -87,7 +88,10 @@ export default function DashboardPage() {
         }
       />
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-5 flex flex-wrap items-center gap-2 rounded-xl border bg-card p-2.5 shadow-[0_1px_2px_0_rgb(15_23_42/0.04)]">
+        <span className="flex items-center gap-1.5 px-1.5 text-xs font-semibold tracking-wide text-muted-foreground uppercase">
+          <SlidersHorizontal className="size-3.5" /> Bộ lọc
+        </span>
         <Input type="date" className="w-40" aria-label="Từ ngày" value={filters.from ?? ''} onChange={(e) => set({ from: e.target.value || undefined })} />
         <span className="text-sm text-muted-foreground">–</span>
         <Input type="date" className="w-40" aria-label="Đến ngày" value={filters.to ?? ''} onChange={(e) => set({ to: e.target.value || undefined })} />
