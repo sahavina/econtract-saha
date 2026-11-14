@@ -35,6 +35,7 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
+import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -88,6 +89,21 @@ const SIGNATURE_LABELS: Record<string, string> = {
   COMPLETED: 'Đã ký',
   REJECTED: 'Từ chối ký',
   EXPIRED: 'Hết hạn ký',
+};
+/** Màu chữ theo tình trạng phê duyệt / ký (cùng hệ màu với nhãn trạng thái hợp đồng). */
+const APPROVAL_TONE: Record<string, string> = {
+  NOT_SUBMITTED: 'text-slate-500 dark:text-slate-400',
+  PENDING: 'text-amber-700 dark:text-amber-400',
+  APPROVED: 'text-sky-700 dark:text-sky-400',
+  REJECTED: 'text-red-700 dark:text-red-400',
+  CHANGES_REQUESTED: 'text-orange-700 dark:text-orange-400',
+};
+const SIGNATURE_TONE: Record<string, string> = {
+  NOT_STARTED: 'text-slate-500 dark:text-slate-400',
+  IN_PROGRESS: 'text-violet-700 dark:text-violet-400',
+  COMPLETED: 'text-green-700 dark:text-green-400',
+  REJECTED: 'text-red-700 dark:text-red-400',
+  EXPIRED: 'text-orange-700 dark:text-orange-400',
 };
 
 export default function ContractsPage() {
@@ -309,8 +325,16 @@ export default function ContractsPage() {
       { id: 'signedDate', header: 'Ngày ký', cell: ({ row }) => formatDate(row.original.signedDate) },
       { id: 'effectiveDate', header: 'Ngày hiệu lực', cell: ({ row }) => formatDate(row.original.effectiveDate) },
       { id: 'expiryDate', header: 'Ngày hết hạn', cell: ({ row }) => formatDate(row.original.expiryDate) },
-      { id: 'approval', header: 'Phê duyệt', cell: ({ row }) => APPROVAL_LABELS[row.original.approvalStatus] },
-      { id: 'signature', header: 'Ký', cell: ({ row }) => SIGNATURE_LABELS[row.original.signatureStatus] },
+      {
+        id: 'approval',
+        header: 'Phê duyệt',
+        cell: ({ row }) => <span className={cn('font-medium whitespace-nowrap', APPROVAL_TONE[row.original.approvalStatus])}>{APPROVAL_LABELS[row.original.approvalStatus]}</span>,
+      },
+      {
+        id: 'signature',
+        header: 'Ký',
+        cell: ({ row }) => <span className={cn('font-medium whitespace-nowrap', SIGNATURE_TONE[row.original.signatureStatus])}>{SIGNATURE_LABELS[row.original.signatureStatus]}</span>,
+      },
       { id: 'status', header: 'Trạng thái', cell: ({ row }) => <ContractStatusBadge status={row.original.status} /> },
       {
         id: 'actions',
