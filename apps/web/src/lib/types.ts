@@ -176,10 +176,13 @@ export interface DashboardSummary {
     totalValue: string;
     valueThisMonth: string;
     signSuccessRate: number | null;
+    activeValue: string;
+    myApprovals: number;
   };
   byStatus: { status: ContractStatus; count: number }[];
   monthly: { month: string; count: number; value: number }[];
-  expiringContracts: { id: string; code: string; title: string; expiryDate: string; owner: { fullName: string } | null }[];
+  expiringContracts: { id: string; code: string; title: string; expiryDate: string; owner: { fullName: string } | null; parties: { name: string }[] }[];
+  payments: { dueThisMonth: string; paidThisMonth: string; installmentsThisMonth: number; overdue: string; overdueCount: number };
   recentActivity: TimelineEntry[];
   myApprovals: { id: string; stepName: string; dueAt: string | null; request: { contract: { id: string; code: string; title: string } } }[];
 }

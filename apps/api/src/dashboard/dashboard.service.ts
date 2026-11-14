@@ -104,11 +104,39 @@ export class DashboardService {
           status: 'ACTIVE',
           expiryDate: { gte: today, lte: new Date(today.getTime() + EXPIRING_SOON_DAYS * DAY) },
         }),
-        select: { id: true, code: true, title: true, expiryDate: true, owner: { select: { fullName: true } } },
+        select: {
+          id: true,
+          code: true,
+          title: true,
+          expiryDate: true,
+          owner: { select: { fullName: true } },
+          parties: { where: { isInternal: false }, orderBy: { sortOrder: 'asc' }, take: 1, select: { name: true } },
+        },
         orderBy: { expiryDate: 'asc' },
-        take: 5,
+        take: 6,
       }),
     ]);
+
+    // Giá trị hợp đồng đang hiệu lực; thanh toán theo lịch của các hợp đồng trong phạm vi xem (đến hạn trong tháng, quá hạn).
+    const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1));
+    const inScope: Prisma.PaymentInstallmentWhereInput = { tenantId: user.tenantId, contract: w({}), status: { not: 'CANCELLED' } };
+    const [activeValueAgg, dueMonthAgg, overdueAgg, myApprovalCount] = await Promise.all([
+      this.prisma.contract.aggregate({ where: w({ status: 'ACTIVE' }), _sum: { value: true } }),
+      this.prisma.paymentInstallment.aggregate({
+        where: { ...inScope, dueDate: { gte: monthStart, lt: monthEnd } },
+        _sum: { amount: true, paidAmount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.paymentInstallment.aggregate({
+        where: { ...inScope, status: { in: ['PLANNED', 'PARTIAL'] }, dueDate: { lt: today } },
+        _sum: { amount: true, paidAmount: true },
+        _count: { _all: true },
+      }),
+      this.prisma.approvalTask.count({
+        where: { tenantId: user.tenantId, approverId: user.userId, status: 'PENDING', request: { status: 'PENDING' } },
+      }),
+    ]);
+    const dec = (v: Prisma.Decimal | null | undefined) => Number(v ?? 0);
 
     const months = new Map<string, { month: string; count: number; value: number }>();
     for (let i = 0; i < 12; i++) {
@@ -158,6 +186,15 @@ export class DashboardService {
         totalValue: valueAgg._sum.value?.toString() ?? '0',
         valueThisMonth: valueMonthAgg._sum.value?.toString() ?? '0',
         signSuccessRate: signFinished ? Math.round((signed / signFinished) * 1000) / 10 : null,
+        activeValue: activeValueAgg._sum.value?.toString() ?? '0',
+        myApprovals: myApprovalCount,
+      },
+      payments: {
+        dueThisMonth: String(dec(dueMonthAgg._sum.amount)),
+        paidThisMonth: String(dec(dueMonthAgg._sum.paidAmount)),
+        installmentsThisMonth: dueMonthAgg._count._all,
+        overdue: String(dec(overdueAgg._sum.amount) - dec(overdueAgg._sum.paidAmount)),
+        overdueCount: overdueAgg._count._all,
       },
       byStatus: byStatus.map((s) => ({ status: s.status, count: s._count._all })),
       monthly: [...months.values()],
