@@ -31,10 +31,13 @@ const ROW_TONE: Record<ContractStatus, string> = {
 
 export const contractRowTone = (status: ContractStatus) => ROW_TONE[status];
 
+/** Chỉ vạch màu bên trái dòng theo trạng thái (danh sách nền trắng). */
+export const contractRowAccent = (status: ContractStatus) => ROW_TONE[status].split(' ').filter((c) => c.startsWith('[&>td:first-child]')).join(' ');
+
 export function ContractStatusBadge({ status, className }: { status: ContractStatus; className?: string }) {
   const tone = TONE[status];
   return (
-    <span className={cn('inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium whitespace-nowrap', tone.badge, className)}>
+    <span className={cn('inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium whitespace-nowrap', tone.badge, className)}>
       <span aria-hidden className={cn('size-1.5 shrink-0 rounded-full', tone.dot)} />
       {CONTRACT_STATUS_LABELS[status]}
     </span>

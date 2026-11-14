@@ -1,7 +1,7 @@
 'use client';
 
-import { CONTRACT_CATEGORIES, CONTRACT_CATEGORY_LABELS, CONTRACT_CATEGORY_SHORT, type ContractCategory, CONTRACT_STATUS_LABELS, CONTRACT_STATUSES, type ContractStatus } from '@saha/shared';
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { CONTRACT_CATEGORIES, CONTRACT_CATEGORY_LABELS, CONTRACT_CATEGORY_SHORT, type ContractCategory, CONTRACT_STATUS_LABELS, CONTRACT_STATUSES, type ContractStatus, EXPIRING_SOON_DAYS } from '@saha/shared';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   type ColumnDef,
   flexRender,
@@ -11,20 +11,32 @@ import {
   type VisibilityState,
 } from '@tanstack/react-table';
 import {
+  AlertTriangle,
   Archive,
   ArchiveRestore,
   ArrowDown,
+  ArrowRight,
   ArrowUp,
   ArrowUpDown,
+  CalendarClock,
+  CalendarRange,
+  CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Clock,
   Columns3,
   Copy,
   Download,
   Eye,
+  FileCheck2,
   FilePlus2,
+  FileText,
+  History,
+  ListChecks,
   MoreHorizontal,
   RotateCcw,
+  Search,
   Trash2,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -34,10 +46,10 @@ import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { ContractStatusBadge, contractRowTone } from '@/components/status-badge';
-import { cn } from '@/lib/utils';
+import { ContractStatusBadge, contractRowAccent } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
   DropdownMenu,
@@ -54,9 +66,10 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { api, downloadFile, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
-import { formatDate, formatMoney } from '@/lib/format';
+import { AUDIT_ACTION_LABELS, formatDate, formatDateTime, formatMoney } from '@/lib/format';
 import { useLookups } from '@/lib/queries';
-import type { ContractListItem } from '@/lib/types';
+import type { ContractListItem, DashboardSummary, MyApprovalTask } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const VIEWS = [
   { value: 'all', label: 'Tất cả hợp đồng' },
@@ -73,8 +86,25 @@ const VIEWS = [
 ] as const;
 type View = (typeof VIEWS)[number]['value'];
 
-const SORTABLE = new Set(['code', 'title', 'value', 'createdAt', 'signedDate', 'effectiveDate', 'expiryDate']);
-const COLUMN_STORAGE_KEY = 'saha.contracts.columns';
+/** Các tab chính (kèm số lượng); nhóm còn lại nằm trong menu "Khác". */
+const TABS: { value: View; label: string }[] = [
+  { value: 'all', label: 'Tất cả' },
+  { value: 'draft', label: 'Bản nháp' },
+  { value: 'pending_approval', label: 'Chờ phê duyệt' },
+  { value: 'pending_signature', label: 'Chờ ký' },
+  { value: 'active', label: 'Đang hiệu lực' },
+  { value: 'expired', label: 'Hết hạn' },
+];
+const MORE_VIEWS = VIEWS.filter((v) => !TABS.some((t) => t.value === v.value));
+/** Nhóm cần đếm: các tab chính + "Sắp hết hạn" (thẻ số liệu, cảnh báo). */
+const COUNTED: View[] = ['all', 'draft', 'pending_approval', 'pending_signature', 'active', 'expired', 'expiring'];
+
+const SORTABLE = new Set(['contract', 'value', 'createdAt', 'signedDate', 'term']);
+/** Cột → trường sắp xếp của API. */
+const SORT_FIELD: Record<string, string> = { contract: 'title', value: 'value', createdAt: 'createdAt', signedDate: 'signedDate', term: 'expiryDate' };
+const COLUMN_STORAGE_KEY = 'saha.contracts.columns.v2';
+/** Cột phụ: ẩn mặc định, bật lại trong menu "Cột". */
+const DEFAULT_HIDDEN: VisibilityState = { category: false, type: false, createdAt: false, signedDate: false, approval: false, signature: false };
 
 const APPROVAL_LABELS: Record<string, string> = {
   NOT_SUBMITTED: 'Chưa gửi',
@@ -106,6 +136,56 @@ const SIGNATURE_TONE: Record<string, string> = {
   EXPIRED: 'text-orange-700 dark:text-orange-400',
 };
 
+const AVATAR_TONES = ['bg-indigo-100 text-indigo-700', 'bg-sky-100 text-sky-700', 'bg-emerald-100 text-emerald-700', 'bg-violet-100 text-violet-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700'];
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/);
+  return ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+}
+function Avatar({ name }: { name: string }) {
+  const tone = AVATAR_TONES[Array.from(name).reduce((s, ch) => s + ch.charCodeAt(0), 0) % AVATAR_TONES.length];
+  return <span className={cn('flex size-7 shrink-0 items-center justify-center rounded-full text-[11px] font-semibold', tone)}>{initials(name)}</span>;
+}
+
+/** Ngày ngắn dd/mm/yy cho cột thời hạn. */
+const shortDate = (d: string | null) => (d ? formatDate(d).replace(/\/(\d{2})(\d{2})$/, '/$2') : '…');
+
+/** Danh sách số trang có dấu "…" (1 … 4 5 6 … 42). */
+function pageList(cur: number, total: number): (number | '…')[] {
+  if (total <= 7) return Array.from({ length: total }, (_, i) => i + 1);
+  const set = new Set([1, total, cur - 1, cur, cur + 1].filter((p) => p >= 1 && p <= total));
+  const sorted = [...set].sort((a, b) => a - b);
+  const out: (number | '…')[] = [];
+  sorted.forEach((p, i) => {
+    if (i > 0 && p - sorted[i - 1] > 1) out.push('…');
+    out.push(p);
+  });
+  return out;
+}
+
+function Kpi({ icon: Icon, label, value, tone, dot, active, onClick }: { icon: typeof FileText; label: string; value: number | undefined; tone: string; dot?: string; active?: boolean; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={cn(
+        'flex items-center gap-4 rounded-xl border bg-card p-4 text-left shadow-[0_1px_3px_0_rgb(15_23_42/0.05)] transition-all hover:-translate-y-0.5 hover:shadow-md',
+        active && 'border-primary/40 ring-2 ring-primary/15',
+      )}
+    >
+      <span className={cn('flex size-12 shrink-0 items-center justify-center rounded-xl', tone)}>
+        <Icon className="size-6" />
+      </span>
+      <span className="min-w-0">
+        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+          {dot && <span className={cn('size-2 rounded-full', dot)} />}
+          {label}
+        </span>
+        <span className="mt-0.5 block text-[1.75rem] leading-tight font-bold tracking-tight tabular-nums">{value ?? '–'}</span>
+      </span>
+    </button>
+  );
+}
+
 export default function ContractsPage() {
   const router = useRouter();
   const pathname = usePathname();
@@ -122,6 +202,9 @@ export default function ContractsPage() {
     contractTypeId: params.get('contractTypeId') ?? undefined,
     category: params.get('category') ?? undefined,
     departmentId: params.get('departmentId') ?? undefined,
+    ownerId: params.get('ownerId') ?? undefined,
+    createdFrom: params.get('createdFrom') ?? undefined,
+    createdTo: params.get('createdTo') ?? undefined,
     sort: params.get('sort') ?? 'createdAt',
     order: (params.get('order') ?? 'desc') as 'asc' | 'desc',
     page: Number(params.get('page') ?? 1),
@@ -156,14 +239,32 @@ export default function ContractsPage() {
     placeholderData: keepPreviousData,
   });
 
+  // Số lượng từng nhóm (theo phân loại đang xem, không theo các bộ lọc khác) – lấy tổng của trang 1 dòng.
+  const countResults = useQueries({
+    queries: COUNTED.map((v) => ({
+      queryKey: ['contracts', 'count', v, query.category],
+      queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { view: v, category: query.category, pageSize: 1 } }),
+      staleTime: 30_000,
+    })),
+  });
+  const counts = Object.fromEntries(COUNTED.map((v, i) => [v, countResults[i].data?.total])) as Partial<Record<View, number>>;
+
+  const tasks = useQuery({ queryKey: ['my-tasks'], queryFn: () => api<MyApprovalTask[]>('/approvals/my-tasks') });
+  const activity = useQuery({
+    queryKey: ['dashboard', 'contracts-activity'],
+    queryFn: () => api<DashboardSummary>('/dashboard/summary'),
+    enabled: can('dashboard.view'),
+    staleTime: 30_000,
+  });
+
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
   useEffect(() => setRowSelection({}), [params]);
 
   const [columnVisibility, setColumnVisibility] = useState<VisibilityState>(() => {
     try {
-      return JSON.parse(localStorage.getItem(COLUMN_STORAGE_KEY) ?? '{}');
+      return { ...DEFAULT_HIDDEN, ...JSON.parse(localStorage.getItem(COLUMN_STORAGE_KEY) ?? '{}') };
     } catch {
-      return {};
+      return DEFAULT_HIDDEN;
     }
   });
   useEffect(() => {
@@ -199,8 +300,11 @@ export default function ContractsPage() {
     const items: React.ReactNode[] = [
       <DropdownMenuItem key="view" asChild>
         <Link href={`/contracts/${c.id}`}>
-          <Eye /> Xem chi tiết
+          <FileText /> Xem chi tiết
         </Link>
+      </DropdownMenuItem>,
+      <DropdownMenuItem key="quick" onSelect={() => setQuickView(c)}>
+        <Eye /> Xem nhanh
       </DropdownMenuItem>,
     ];
     if (c.deletedAt) {
@@ -286,13 +390,14 @@ export default function ContractsPage() {
     return items;
   };
 
-  const SortHeader = ({ id, label }: { id: string; label: string }) => {
-    const active = query.sort === id;
+  const SortHeader = ({ id, label, className }: { id: string; label: string; className?: string }) => {
+    const field = SORT_FIELD[id];
+    const active = query.sort === field;
     const Icon = !active ? ArrowUpDown : query.order === 'asc' ? ArrowUp : ArrowDown;
     return (
       <button
-        className="inline-flex items-center gap-1 hover:text-foreground"
-        onClick={() => setParams({ sort: id, order: active && query.order === 'desc' ? 'asc' : 'desc' })}
+        className={cn('inline-flex items-center gap-1 hover:text-foreground', active && 'text-foreground', className)}
+        onClick={() => setParams({ sort: field, order: active && query.order === 'desc' ? 'asc' : 'desc' })}
       >
         {label}
         <Icon className="size-3.5 opacity-60" />
@@ -314,17 +419,40 @@ export default function ContractsPage() {
         ),
         cell: ({ row }) => <Checkbox aria-label="Chọn dòng" checked={row.getIsSelected()} onCheckedChange={(v) => row.toggleSelected(!!v)} />,
       },
-      { id: 'code', header: 'Mã hợp đồng', enableHiding: false, cell: ({ row }) => <Link href={`/contracts/${row.original.id}`} className="font-medium whitespace-nowrap text-primary hover:underline">{row.original.code}</Link> },
-      { id: 'title', header: 'Tên hợp đồng', enableHiding: false, cell: ({ row }) => <span className="line-clamp-2 min-w-48">{row.original.title}</span> },
+      {
+        id: 'contract',
+        header: 'Hợp đồng',
+        enableHiding: false,
+        cell: ({ row }) => (
+          <Link href={`/contracts/${row.original.id}`} className="group flex max-w-[21rem] min-w-64 items-center gap-3 whitespace-normal">
+            <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <FileText className="size-[18px]" />
+            </span>
+            <span className="min-w-0">
+              <span className="line-clamp-2 leading-snug font-semibold text-foreground group-hover:text-primary">{row.original.title}</span>
+              <span className="block text-xs whitespace-nowrap text-muted-foreground">{row.original.code}</span>
+            </span>
+          </Link>
+        ),
+      },
+      { id: 'partner', header: 'Đối tác', cell: ({ row }) => <span className="line-clamp-2 block max-w-52 min-w-36 whitespace-normal" title={row.original.parties[0]?.name}>{row.original.parties[0]?.name ?? '—'}</span> },
       { id: 'category', header: 'Phân loại', cell: ({ row }) => (row.original.category ? <Badge variant="outline" className="whitespace-nowrap">{CONTRACT_CATEGORY_SHORT[row.original.category]}</Badge> : <span className="text-muted-foreground">—</span>) },
       { id: 'type', header: 'Loại hợp đồng', cell: ({ row }) => row.original.contractType?.name ?? '—' },
-      { id: 'partner', header: 'Đối tác', cell: ({ row }) => row.original.parties[0]?.name ?? '—' },
-      { id: 'value', header: 'Giá trị', cell: ({ row }) => <span className="whitespace-nowrap tabular-nums">{formatMoney(row.original.value, row.original.currency)}</span> },
-      { id: 'owner', header: 'Người phụ trách', cell: ({ row }) => row.original.owner?.fullName ?? '—' },
+      { id: 'value', header: 'Giá trị', cell: ({ row }) => <span className="block text-right font-medium whitespace-nowrap tabular-nums">{formatMoney(row.original.value, row.original.currency)}</span> },
+      {
+        id: 'term',
+        header: 'Thời hạn',
+        cell: ({ row }) =>
+          row.original.effectiveDate || row.original.expiryDate ? (
+            <span className="whitespace-nowrap tabular-nums">
+              {shortDate(row.original.effectiveDate)} – {shortDate(row.original.expiryDate)}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
       { id: 'createdAt', header: 'Ngày tạo', cell: ({ row }) => formatDate(row.original.createdAt) },
       { id: 'signedDate', header: 'Ngày ký', cell: ({ row }) => formatDate(row.original.signedDate) },
-      { id: 'effectiveDate', header: 'Ngày hiệu lực', cell: ({ row }) => formatDate(row.original.effectiveDate) },
-      { id: 'expiryDate', header: 'Ngày hết hạn', cell: ({ row }) => formatDate(row.original.expiryDate) },
       {
         id: 'approval',
         header: 'Phê duyệt',
@@ -337,13 +465,23 @@ export default function ContractsPage() {
       },
       { id: 'status', header: 'Trạng thái', cell: ({ row }) => <ContractStatusBadge status={row.original.status} /> },
       {
+        id: 'owner',
+        header: 'Phụ trách',
+        cell: ({ row }) =>
+          row.original.owner ? (
+            <span className="flex items-center gap-2 whitespace-nowrap">
+              <Avatar name={row.original.owner.fullName} />
+              {row.original.owner.fullName}
+            </span>
+          ) : (
+            <span className="text-muted-foreground">—</span>
+          ),
+      },
+      {
         id: 'actions',
         enableHiding: false,
         cell: ({ row }) => (
-          <div className="flex justify-end gap-1">
-            <Button variant="ghost" size="icon-sm" aria-label="Xem nhanh" onClick={() => setQuickView(row.original)}>
-              <Eye />
-            </Button>
+          <div className="flex justify-end">
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon-sm" aria-label="Thao tác">
@@ -374,27 +512,30 @@ export default function ContractsPage() {
   });
 
   const selectedIds = Object.keys(rowSelection).filter((k) => rowSelection[k]);
-  const viewName = VIEWS.find((v) => v.value === view)?.label ?? 'Hợp đồng';
-  // Lọc theo phân loại ⇒ tiêu đề nêu rõ loại hợp đồng (vd "Hợp đồng nhà cung cấp", "Hợp đồng nhà cung cấp · Hợp đồng nháp").
+  // Lọc theo phân loại ⇒ tiêu đề nêu rõ loại hợp đồng (vd "Hợp đồng nhà cung cấp").
   const categoryName =
     query.category === 'NONE' ? 'Hợp đồng chưa phân loại' : query.category ? CONTRACT_CATEGORY_LABELS[query.category as ContractCategory] : undefined;
-  const viewLabel = categoryName ? (view === 'all' ? categoryName : `${categoryName} · ${viewName}`) : viewName;
+  const title = categoryName ?? 'Quản lý hợp đồng';
+  const moreView = MORE_VIEWS.find((v) => v.value === view);
   const data = list.data;
+  const hasFilters = !!(query.q || query.status || query.contractTypeId || query.departmentId || query.ownerId || query.createdFrom || query.createdTo);
+  const pendingSign = counts.pending_approval !== undefined && counts.pending_signature !== undefined ? counts.pending_approval + counts.pending_signature : undefined;
 
   return (
     <>
       <PageHeader
-        title={viewLabel}
-        crumbs={[{ label: 'Quản lý hợp đồng', href: '/contracts' }, { label: viewLabel }]}
+        title={title}
+        description="Theo dõi, phê duyệt và quản lý toàn bộ hợp đồng doanh nghiệp"
+        crumbs={[{ label: 'Không gian làm việc', href: '/' }, { label: title }]}
         actions={
           <>
             {can('contract.export') && (
-              <Button variant="outline" onClick={() => downloadFile('/contracts/export', { ...query, page: undefined, pageSize: undefined }).catch((e: Error) => toast.error(e.message))}>
+              <Button variant="outline" className="h-9" onClick={() => downloadFile('/contracts/export', { ...query, page: undefined, pageSize: undefined }).catch((e: Error) => toast.error(e.message))}>
                 <Download /> Xuất CSV
               </Button>
             )}
             {can('contract.create') && (
-              <Button asChild>
+              <Button asChild className="h-9">
                 <Link href="/contracts/new">
                   <FilePlus2 /> Tạo hợp đồng
                 </Link>
@@ -404,74 +545,152 @@ export default function ContractsPage() {
         }
       />
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <FilterSelect allLabel="Tất cả hợp đồng" className="w-48" value={view === 'all' ? undefined : view} onChange={(v) => setParams({ view: v })} options={VIEWS.filter((v) => v.value !== 'all').map((v) => ({ value: v.value, label: v.label }))} ariaLabel="Nhóm hợp đồng" />
-        <Input className="w-64" placeholder="Tìm mã, tên, đối tác, tag…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm kiếm" />
-        <FilterSelect allLabel="Mọi trạng thái" value={query.status} onChange={(v) => setParams({ status: v })} options={CONTRACT_STATUSES.map((s) => ({ value: s, label: CONTRACT_STATUS_LABELS[s] }))} />
-        <FilterSelect allLabel="Mọi phân loại hợp đồng" className="w-56" value={query.category} onChange={(v) => setParams({ category: v })} options={[...CONTRACT_CATEGORIES.map((c) => ({ value: c, label: CONTRACT_CATEGORY_LABELS[c] })), { value: 'NONE', label: 'Hợp đồng chưa phân loại' }]} ariaLabel="Phân loại hợp đồng" />
-        <FilterSelect allLabel="Mọi loại HĐ" value={query.contractTypeId} onChange={(v) => setParams({ contractTypeId: v })} options={(lookups.data?.contractTypes ?? []).map((t) => ({ value: t.id, label: t.name }))} />
-        <FilterSelect allLabel="Mọi phòng ban" value={query.departmentId} onChange={(v) => setParams({ departmentId: v })} options={(lookups.data?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} />
-        <div className="ml-auto flex items-center gap-2">
-          {selectedIds.length > 0 && view !== 'trash' && (
-            <>
-              <span className="text-sm text-muted-foreground">Đã chọn {selectedIds.length}</span>
-              {can('contract.archive') && view !== 'archived' && (
-                <Button variant="outline" size="sm" onClick={() => setConfirm({ title: `Lưu trữ ${selectedIds.length} hợp đồng?`, onConfirm: () => runBulk('archive', selectedIds) })}>
-                  <Archive /> Lưu trữ
-                </Button>
-              )}
-              {can('contract.delete') && (
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  onClick={() =>
-                    setConfirm({
-                      title: `Xóa ${selectedIds.length} hợp đồng?`,
-                      description: 'Chỉ hợp đồng Nháp hoặc Đã hủy được chuyển vào thùng rác; hợp đồng khác sẽ bị bỏ qua.',
-                      destructive: true,
-                      confirmLabel: 'Xóa',
-                      onConfirm: () => runBulk('delete', selectedIds),
-                    })
-                  }
-                >
-                  <Trash2 /> Xóa
-                </Button>
-              )}
-            </>
-          )}
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <Kpi icon={FileText} label="Tổng hợp đồng" value={counts.all} tone="bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300" active={view === 'all'} onClick={() => setParams({ view: 'all' })} />
+        <Kpi icon={FileCheck2} label="Đang hiệu lực" value={counts.active} dot="bg-green-500" tone="bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300" active={view === 'active'} onClick={() => setParams({ view: 'active' })} />
+        <Kpi icon={Clock} label="Chờ duyệt / chờ ký" value={pendingSign} dot="bg-amber-500" tone="bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300" active={view === 'pending_approval' || view === 'pending_signature'} onClick={() => setParams({ view: 'pending_approval' })} />
+        <Kpi icon={CalendarClock} label="Sắp hết hạn" value={counts.expiring} dot="bg-orange-500" tone="bg-orange-50 text-orange-600 dark:bg-orange-950 dark:text-orange-300" active={view === 'expiring'} onClick={() => setParams({ view: 'expiring' })} />
+      </div>
+
+      {!!counts.expiring && view !== 'expiring' && (
+        <div role="status" className="mb-4 flex flex-wrap items-center gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm dark:border-amber-900 dark:bg-amber-950/50">
+          <AlertTriangle className="size-5 shrink-0 text-amber-500" />
+          <span className="font-semibold text-amber-900 dark:text-amber-200">
+            {counts.expiring} hợp đồng sắp hết hạn trong {EXPIRING_SOON_DAYS} ngày tới
+          </span>
+          <button type="button" onClick={() => setParams({ view: 'expiring' })} className="ml-auto inline-flex items-center gap-1 font-semibold text-primary hover:underline">
+            Xem danh sách <ArrowRight className="size-4" />
+          </button>
+        </div>
+      )}
+
+      <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
+        {/* Tab nhóm hợp đồng kèm số lượng */}
+        <div className="flex items-end gap-1 overflow-x-auto border-b px-3 [scrollbar-width:thin]">
+          {TABS.map((t) => {
+            const active = view === t.value;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                onClick={() => setParams({ view: t.value })}
+                className={cn(
+                  'relative flex shrink-0 items-center gap-2 px-3 py-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground transition-colors hover:text-foreground',
+                  active && 'text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary hover:text-primary',
+                )}
+              >
+                {t.label}
+                <span className={cn('rounded-full px-2 py-0.5 text-xs tabular-nums', active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground')}>{counts[t.value] ?? '·'}</span>
+              </button>
+            );
+          })}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="sm">
-                <Columns3 /> Cột
-              </Button>
+              <button
+                type="button"
+                className={cn(
+                  'relative flex shrink-0 items-center gap-1 px-3 py-3.5 text-sm font-medium whitespace-nowrap text-muted-foreground hover:text-foreground',
+                  moreView && 'text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary',
+                )}
+              >
+                {moreView ? moreView.label : 'Khác'} <ChevronDown className="size-4" />
+              </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuLabel>Hiển thị cột</DropdownMenuLabel>
-              {table
-                .getAllLeafColumns()
-                .filter((c) => c.getCanHide())
-                .map((c) => (
-                  <DropdownMenuCheckboxItem key={c.id} checked={c.getIsVisible()} onCheckedChange={(v) => c.toggleVisibility(!!v)} onSelect={(e) => e.preventDefault()}>
-                    {String(c.columnDef.header)}
-                  </DropdownMenuCheckboxItem>
-                ))}
+            <DropdownMenuContent align="start">
+              {MORE_VIEWS.map((v) => (
+                <DropdownMenuItem key={v.value} onSelect={() => setParams({ view: v.value })}>
+                  {v.label}
+                  {counts[v.value] !== undefined && <span className="ml-auto text-xs text-muted-foreground">{counts[v.value]}</span>}
+                </DropdownMenuItem>
+              ))}
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-      </div>
 
-      {list.isError ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
+        {/* Bộ lọc */}
+        <div className="flex flex-wrap items-center gap-2 border-b px-3 py-3">
+          <div className="relative min-w-56 flex-1 basis-64">
+            <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+            <Input className="h-9 pl-9" placeholder="Tìm mã, tên hợp đồng, đối tác, tag…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm kiếm" />
+          </div>
+          <FilterSelect allLabel="Loại hợp đồng" className="h-9 w-44" value={query.contractTypeId} onChange={(v) => setParams({ contractTypeId: v })} options={(lookups.data?.contractTypes ?? []).map((t) => ({ value: t.id, label: t.name }))} ariaLabel="Loại hợp đồng" />
+          <FilterSelect allLabel="Trạng thái" className="h-9 w-40" value={query.status} onChange={(v) => setParams({ status: v })} options={CONTRACT_STATUSES.map((s) => ({ value: s, label: CONTRACT_STATUS_LABELS[s] }))} ariaLabel="Trạng thái" />
+          <FilterSelect allLabel="Người phụ trách" className="h-9 w-44" value={query.ownerId} onChange={(v) => setParams({ ownerId: v })} options={(lookups.data?.users ?? []).map((u) => ({ value: u.id, label: u.fullName }))} ariaLabel="Người phụ trách" />
+          <FilterSelect allLabel="Phòng ban" className="h-9 w-40" value={query.departmentId} onChange={(v) => setParams({ departmentId: v })} options={(lookups.data?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} ariaLabel="Phòng ban" />
+          <FilterSelect allLabel="Phân loại" className="h-9 w-48" value={query.category} onChange={(v) => setParams({ category: v })} options={[...CONTRACT_CATEGORIES.map((c) => ({ value: c, label: CONTRACT_CATEGORY_LABELS[c] })), { value: 'NONE', label: 'Hợp đồng chưa phân loại' }]} ariaLabel="Phân loại hợp đồng" />
+          <div className="flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 shadow-xs" title="Lọc theo ngày tạo">
+            <CalendarRange className="size-4 shrink-0 text-muted-foreground" />
+            <input type="date" aria-label="Từ ngày" className="w-[7.4rem] bg-transparent text-sm outline-none" value={query.createdFrom ?? ''} onChange={(e) => setParams({ createdFrom: e.target.value || undefined })} />
+            <span className="text-muted-foreground">–</span>
+            <input type="date" aria-label="Đến ngày" className="w-[7.4rem] bg-transparent text-sm outline-none" value={query.createdTo ?? ''} onChange={(e) => setParams({ createdTo: e.target.value || undefined })} />
+          </div>
+          {hasFilters && (
+            <Button variant="ghost" size="sm" onClick={() => setParams({ q: undefined, status: undefined, contractTypeId: undefined, departmentId: undefined, ownerId: undefined, createdFrom: undefined, createdTo: undefined })}>
+              Xóa lọc
+            </Button>
+          )}
+          <div className="ml-auto flex items-center gap-2">
+            {selectedIds.length > 0 && view !== 'trash' && (
+              <>
+                <span className="text-sm text-muted-foreground">Đã chọn {selectedIds.length}</span>
+                {can('contract.archive') && view !== 'archived' && (
+                  <Button variant="outline" size="sm" onClick={() => setConfirm({ title: `Lưu trữ ${selectedIds.length} hợp đồng?`, onConfirm: () => runBulk('archive', selectedIds) })}>
+                    <Archive /> Lưu trữ
+                  </Button>
+                )}
+                {can('contract.delete') && (
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    onClick={() =>
+                      setConfirm({
+                        title: `Xóa ${selectedIds.length} hợp đồng?`,
+                        description: 'Chỉ hợp đồng Nháp hoặc Đã hủy được chuyển vào thùng rác; hợp đồng khác sẽ bị bỏ qua.',
+                        destructive: true,
+                        confirmLabel: 'Xóa',
+                        onConfirm: () => runBulk('delete', selectedIds),
+                      })
+                    }
+                  >
+                    <Trash2 /> Xóa
+                  </Button>
+                )}
+              </>
+            )}
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="h-9">
+                  <Columns3 /> Cột
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuLabel>Hiển thị cột</DropdownMenuLabel>
+                {table
+                  .getAllLeafColumns()
+                  .filter((c) => c.getCanHide())
+                  .map((c) => (
+                    <DropdownMenuCheckboxItem key={c.id} checked={c.getIsVisible()} onCheckedChange={(v) => c.toggleVisibility(!!v)} onSelect={(e) => e.preventDefault()}>
+                      {String(c.columnDef.header)}
+                    </DropdownMenuCheckboxItem>
+                  ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </div>
+
+        {list.isError ? (
+          <div className="p-4">
+            <ErrorState error={list.error} onRetry={() => list.refetch()} />
+          </div>
+        ) : (
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
-                <TableRow key={hg.id}>
+                <TableRow key={hg.id} className="hover:bg-transparent">
                   {hg.headers.map((h) => (
-                    <TableHead key={h.id} className="whitespace-nowrap">
+                    <TableHead key={h.id} className={cn('h-11 normal-case tracking-normal text-[13px] text-foreground/80', h.column.id === 'value' && 'text-right', h.column.id === 'select' && 'w-10 pl-4')}>
                       {SORTABLE.has(h.column.id) && typeof h.column.columnDef.header === 'string' ? (
-                        <SortHeader id={h.column.id} label={h.column.columnDef.header} />
+                        <SortHeader id={h.column.id} label={h.column.columnDef.header} className={h.column.id === 'value' ? 'justify-end' : undefined} />
                       ) : (
                         flexRender(h.column.columnDef.header, h.getContext())
                       )}
@@ -485,12 +704,12 @@ export default function ContractsPage() {
                 Array.from({ length: 6 }).map((_, i) => (
                   <TableRow key={i}>
                     <TableCell colSpan={table.getVisibleLeafColumns().length}>
-                      <Skeleton className="h-6" />
+                      <Skeleton className="h-9" />
                     </TableCell>
                   </TableRow>
                 ))
               ) : table.getRowModel().rows.length === 0 ? (
-                <TableRow>
+                <TableRow className="hover:bg-transparent">
                   <TableCell colSpan={table.getVisibleLeafColumns().length} className="p-4">
                     <EmptyState
                       title="Không có hợp đồng phù hợp"
@@ -500,44 +719,165 @@ export default function ContractsPage() {
                 </TableRow>
               ) : (
                 table.getRowModel().rows.map((row) => (
-                  <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'} className={contractRowTone(row.original.status)}>
+                  <TableRow key={row.id} data-state={row.getIsSelected() && 'selected'} className={contractRowAccent(row.original.status)}>
                     {row.getVisibleCells().map((cell) => (
-                      <TableCell key={cell.id}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>
+                      <TableCell key={cell.id} className={cell.column.id === 'select' ? 'pl-4' : undefined}>
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </TableCell>
                     ))}
                   </TableRow>
                 ))
               )}
             </TableBody>
           </Table>
-        </div>
-      )}
+        )}
 
-      {data && data.total > 0 && (
-        <div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-sm text-muted-foreground">
-          <span>
-            {(data.page - 1) * data.pageSize + 1}–{Math.min(data.page * data.pageSize, data.total)} / {data.total} hợp đồng
-          </span>
-          <div className="flex items-center gap-2">
-            <FilterSelect
-              allLabel="20 / trang"
-              className="w-32"
-              value={query.pageSize === 20 ? undefined : String(query.pageSize)}
-              onChange={(v) => setParams({ pageSize: v })}
-              options={[{ value: '50', label: '50 / trang' }, { value: '100', label: '100 / trang' }]}
-              ariaLabel="Số dòng mỗi trang"
-            />
-            <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={data.page <= 1} onClick={() => setParams({ page: data.page - 1 }, false)}>
-              <ChevronLeft />
-            </Button>
+        {data && data.total > 0 && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t px-4 py-3 text-sm text-muted-foreground">
             <span>
-              Trang {data.page}/{data.totalPages}
+              Hiển thị {(data.page - 1) * data.pageSize + 1}–{Math.min(data.page * data.pageSize, data.total)} trong {data.total} hợp đồng
             </span>
-            <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={data.page >= data.totalPages} onClick={() => setParams({ page: data.page + 1 }, false)}>
-              <ChevronRight />
-            </Button>
+            <div className="flex items-center gap-1.5">
+              <FilterSelect
+                allLabel="20 / trang"
+                className="mr-2 h-8 w-32"
+                value={query.pageSize === 20 ? undefined : String(query.pageSize)}
+                onChange={(v) => setParams({ pageSize: v })}
+                options={[{ value: '50', label: '50 / trang' }, { value: '100', label: '100 / trang' }]}
+                ariaLabel="Số dòng mỗi trang"
+              />
+              <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={data.page <= 1} onClick={() => setParams({ page: data.page - 1 }, false)}>
+                <ChevronLeft />
+              </Button>
+              {pageList(data.page, data.totalPages).map((p, i) =>
+                p === '…' ? (
+                  <span key={`gap-${i}`} className="px-1">
+                    …
+                  </span>
+                ) : (
+                  <Button
+                    key={p}
+                    variant={p === data.page ? 'default' : 'outline'}
+                    size="icon-sm"
+                    aria-label={`Trang ${p}`}
+                    aria-current={p === data.page ? 'page' : undefined}
+                    onClick={() => setParams({ page: p }, false)}
+                    className="min-w-8 px-2 tabular-nums"
+                  >
+                    {p}
+                  </Button>
+                ),
+              )}
+              <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={data.page >= data.totalPages} onClick={() => setParams({ page: data.page + 1 }, false)}>
+                <ChevronRight />
+              </Button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      {/* Công việc cần xử lý & hoạt động gần đây */}
+      <div className={cn('mt-4 grid gap-4', can('dashboard.view') && 'lg:grid-cols-2')}>
+        <Card className="gap-0 py-0">
+          <CardHeader className="flex flex-row items-center justify-between border-b py-3.5">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <ListChecks className="size-5 text-primary" /> Công việc cần xử lý {tasks.data && `(${tasks.data.length})`}
+            </CardTitle>
+            <Link href="/tasks" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+              Xem tất cả <ArrowRight className="size-4" />
+            </Link>
+          </CardHeader>
+          <CardContent className="px-0">
+            {!tasks.data ? (
+              <div className="space-y-2 p-4">
+                <Skeleton className="h-10" />
+                <Skeleton className="h-10" />
+              </div>
+            ) : tasks.data.length === 0 ? (
+              <p className="flex items-center gap-2 px-4 py-6 text-sm text-muted-foreground">
+                <CheckCircle2 className="size-4 text-green-600" /> Không có hợp đồng nào chờ bạn phê duyệt.
+              </p>
+            ) : (
+              <ul className="divide-y">
+                {tasks.data.slice(0, 4).map((t) => (
+                  <li key={t.id}>
+                    <Link href={`/contracts/${t.request.contract.id}?tab=approval`} className="flex items-center gap-3 px-4 py-3 hover:bg-muted/50">
+                      <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                        <FileText className="size-[18px]" />
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="line-clamp-1 text-sm">
+                          Phê duyệt hợp đồng <span className="font-semibold">{t.request.contract.title}</span>
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                          {t.request.contract.code} · {t.stepName}
+                        </span>
+                      </span>
+                      <span className="shrink-0 rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-amber-700 dark:bg-amber-950 dark:text-amber-300">Chờ phê duyệt</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+
+        {can('dashboard.view') && (
+          <Card className="gap-0 py-0">
+            <CardHeader className="flex flex-row items-center justify-between border-b py-3.5">
+              <CardTitle className="flex items-center gap-2 text-base">
+                <History className="size-5 text-primary" /> Hoạt động gần đây
+              </CardTitle>
+              {can('audit.view') && (
+                <Link href="/audit-logs" className="inline-flex items-center gap-1 text-sm font-semibold text-primary hover:underline">
+                  Xem tất cả <ArrowRight className="size-4" />
+                </Link>
+              )}
+            </CardHeader>
+            <CardContent className="px-0">
+              {!activity.data ? (
+                <div className="space-y-2 p-4">
+                  <Skeleton className="h-10" />
+                  <Skeleton className="h-10" />
+                </div>
+              ) : activity.data.recentActivity.length === 0 ? (
+                <p className="px-4 py-6 text-sm text-muted-foreground">Chưa có hoạt động.</p>
+              ) : (
+                <ul className="divide-y">
+                  {activity.data.recentActivity.slice(0, 4).map((a) => {
+                    const code = (a.data as { code?: string } | null)?.code;
+                    return (
+                      <li key={a.id} className="flex items-center gap-3 px-4 py-3">
+                        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground">
+                          <History className="size-4" />
+                        </span>
+                        <span className="min-w-0 flex-1">
+                          <span className="line-clamp-1 text-sm">
+                            {AUDIT_ACTION_LABELS[a.action] ?? a.action}
+                            {code &&
+                              (a.entityId ? (
+                                <>
+                                  {' '}
+                                  <Link href={`/contracts/${a.entityId}`} className="font-semibold hover:text-primary hover:underline">
+                                    {code}
+                                  </Link>
+                                </>
+                              ) : (
+                                <span className="font-semibold"> {code}</span>
+                              ))}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">Bởi {a.actorName ?? 'Hệ thống'}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">{formatDateTime(a.createdAt)}</span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        )}
+      </div>
 
       <Sheet open={!!quickView} onOpenChange={(o) => !o && setQuickView(null)}>
         <SheetContent className="data-[side=right]:sm:max-w-md">
