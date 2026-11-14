@@ -1,8 +1,8 @@
 'use client';
 
-import { CONTRACT_CATEGORY_LABELS } from '@saha/shared';
+import { CONTRACT_CATEGORY_LABELS, type ContractStatus } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, Copy, FileX2, PackageMinus, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
+import { Archive, ArchiveRestore, CheckCircle2, ChevronRight, Copy, FileText, FileX2, MoreHorizontal, Package, PackageMinus, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -18,20 +18,81 @@ import { OrderDeliveries } from '@/components/order-deliveries';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { EmptyState, ErrorState } from '@/components/page-header';
 import { ContractStatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AUDIT_ACTION_LABELS, formatDate, formatDateTime, formatMoney } from '@/lib/format';
 import type { ContractDetail, TimelineEntry } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 const ROLE_LABELS = { PARTY_A: 'Bên A', PARTY_B: 'Bên B', PARTY_C: 'Bên C', RELATED: 'Bên liên quan' } as const;
 const CONF_LABELS = { PUBLIC: 'Công khai', INTERNAL: 'Nội bộ', CONFIDENTIAL: 'Mật', SECRET: 'Tối mật' } as const;
+
+const APPROVAL_LABELS: Record<string, string> = {
+  NOT_SUBMITTED: 'Chưa gửi duyệt',
+  PENDING: 'Đang duyệt',
+  APPROVED: 'Đã duyệt',
+  REJECTED: 'Bị từ chối',
+  CHANGES_REQUESTED: 'Yêu cầu sửa',
+};
+const SIGNATURE_LABELS: Record<string, string> = {
+  NOT_STARTED: 'Chưa ký',
+  IN_PROGRESS: 'Đang ký',
+  COMPLETED: 'Đã ký',
+  REJECTED: 'Từ chối ký',
+  EXPIRED: 'Hết hạn ký',
+};
+
+/** Vị trí của trạng thái trên tiến trình Soạn thảo → Phê duyệt → Ký → Hiệu lực → Kết thúc (-1: đã hủy / lưu trữ). */
+const STEP_OF: Record<ContractStatus, number> = {
+  DRAFT: 0,
+  PENDING_APPROVAL: 1,
+  APPROVED: 2,
+  PENDING_SIGNATURE: 2,
+  SIGNED: 3,
+  ACTIVE: 3,
+  EXPIRED: 4,
+  LIQUIDATED: 4,
+  CANCELLED: -1,
+  ARCHIVED: -1,
+};
+
+function StatusStepper({ status, isOrder }: { status: ContractStatus; isOrder: boolean }) {
+  const steps = ['Soạn thảo', 'Phê duyệt', 'Ký kết', isOrder ? 'Thực hiện' : 'Hiệu lực', status === 'LIQUIDATED' ? 'Thanh lý' : 'Kết thúc'];
+  const cur = STEP_OF[status];
+  if (cur < 0) return null;
+  return (
+    <ol className="flex items-center gap-1 overflow-x-auto border-t px-4 py-3 [scrollbar-width:none] sm:px-5">
+      {steps.map((label, i) => {
+        const done = i < cur || (i === cur && i === steps.length - 1);
+        const current = i === cur && !done;
+        return (
+          <li key={label} className="flex shrink-0 items-center gap-1">
+            {i > 0 && <span className={cn('h-0.5 w-6 rounded-full sm:w-10', i <= cur ? 'bg-primary' : 'bg-border')} />}
+            <span
+              className={cn(
+                'flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium whitespace-nowrap',
+                done && 'text-primary',
+                current && 'bg-primary text-primary-foreground shadow-sm',
+                !done && !current && 'text-muted-foreground',
+              )}
+            >
+              {done ? <CheckCircle2 className="size-3.5" /> : <span className={cn('flex size-4 items-center justify-center rounded-full text-[10px]', current ? 'bg-white/25' : 'border')}>{i + 1}</span>}
+              {label}
+            </span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
 
 function Info({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -69,109 +130,169 @@ export default function ContractDetailPage() {
   if (!q.data) return <Skeleton className="h-96" />;
   const c = q.data;
   const editable = c.status === 'DRAFT' && !c.archivedAt && !c.deletedAt;
+  // Nút sửa ngay tại khung thông tin: hồ sơ Nháp mở trang sửa; hồ sơ đã duyệt (chưa gửi ký) phải mở lại ở tab Phê duyệt trước.
+  const editInfo =
+    editable && can('contract.update') ? (
+      <Button variant="outline" size="sm" asChild>
+        <Link href={`/contracts/${c.id}/edit`}>
+          <Pencil /> Sửa thông tin
+        </Link>
+      </Button>
+    ) : c.status === 'APPROVED' && !c.archivedAt && !c.deletedAt && can('contract.reopen_approved') ? (
+      <span className="text-xs text-muted-foreground">Đã phê duyệt – mở lại ở tab Phê duyệt để sửa</span>
+    ) : null;
   const isOrder = c.kind === 'ORDER';
   const noun = isOrder ? 'đơn hàng' : 'hợp đồng';
 
   return (
     <>
-      <PageHeader
-        crumbs={[isOrder ? { label: 'Đơn đặt hàng', href: '/orders' } : { label: 'Quản lý hợp đồng', href: '/contracts' }, { label: c.code }]}
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            {c.title} <ContractStatusBadge status={c.status} />
-            {c.archivedAt && <Badge variant="outline">Đã lưu trữ</Badge>}
-            {c.deletedAt && <Badge variant="destructive">Thùng rác</Badge>}
-          </span>
-        }
-        description={
-          <>
-            {c.code} · Phụ trách: {c.owner?.fullName ?? '—'}
-            {c.parentContract && (
+      <nav aria-label="Breadcrumb" className="mb-3 flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+        <Link href="/" className="hover:text-foreground">Không gian làm việc</Link>
+        <ChevronRight className="size-3.5" />
+        <Link href={isOrder ? '/orders' : '/contracts'} className="hover:text-foreground">{isOrder ? 'Đơn đặt hàng' : 'Quản lý hợp đồng'}</Link>
+        <ChevronRight className="size-3.5" />
+        <span className="text-foreground">{c.code}</span>
+      </nav>
+
+      <div className="mb-5 overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
+        <div className="flex flex-col gap-4 p-4 sm:p-5 lg:flex-row lg:items-start lg:justify-between">
+          <div className="flex min-w-0 gap-3 sm:gap-4">
+            <span className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary sm:size-12">
+              {isOrder ? <Package className="size-6" /> : <FileText className="size-6" />}
+            </span>
+            <div className="min-w-0">
+              <h1 className="text-xl leading-tight font-semibold tracking-tight break-words sm:text-2xl">{c.title}</h1>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted-foreground">
+                <ContractStatusBadge status={c.status} />
+                {c.archivedAt && <Badge variant="outline">Đã lưu trữ</Badge>}
+                {c.deletedAt && <Badge variant="destructive">Thùng rác</Badge>}
+                <span className="font-medium text-foreground/80">{c.code}</span>
+                <span>· Phụ trách: {c.owner?.fullName ?? '—'}</span>
+                {c.parentContract && (
+                  <span>
+                    · Thuộc hợp đồng{' '}
+                    <Link href={`/contracts/${c.parentContract.id}?tab=orders`} className="text-primary hover:underline">
+                      {c.parentContract.code}
+                    </Link>
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="flex shrink-0 flex-wrap items-center gap-2">
+            {c.deletedAt ? (
+              can('contract.delete') && (
+                <Button variant="outline" onClick={() => op.mutate('restore', { onSuccess: () => toast.success('Đã khôi phục') })}>
+                  <RotateCcw /> Khôi phục
+                </Button>
+              )
+            ) : (
               <>
-                {' · Thuộc hợp đồng '}
-                <Link href={`/contracts/${c.parentContract.id}?tab=orders`} className="text-primary hover:underline">
-                  {c.parentContract.code}
-                </Link>
+                {editable && can('contract.update') && (
+                  <Button asChild>
+                    <Link href={`/contracts/${c.id}/edit`}>
+                      <Pencil /> Sửa {noun}
+                    </Link>
+                  </Button>
+                )}
+                <Button variant="outline" asChild>
+                  <Link href={`/payment-requests/new?contract=${c.id}`}>
+                    <Receipt /> Đề nghị thanh toán
+                  </Link>
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline">
+                      <MoreHorizontal /> Thao tác
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="min-w-52">
+                    {isOrder && can('delivery.manage') && (
+                      <DropdownMenuItem asChild>
+                        <Link href={`/stock-issues/new?order=${c.id}`}>
+                          <PackageMinus /> Lập phiếu xuất kho
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {isOrder && (
+                      <DropdownMenuItem asChild>
+                        <Link href={`/shipping-labels/new?order=${c.id}`}>
+                          <Truck /> In phiếu gửi hàng
+                        </Link>
+                      </DropdownMenuItem>
+                    )}
+                    {can('contract.liquidate') && ['SIGNED', 'ACTIVE', 'EXPIRED'].includes(c.status) && !c.archivedAt && (
+                      <DropdownMenuItem onSelect={() => setLiquidating(true)}>
+                        <FileX2 /> Thanh lý
+                      </DropdownMenuItem>
+                    )}
+                    {can('contract.create') && (
+                      <DropdownMenuItem onSelect={() => op.mutate('duplicate', { onSuccess: (r) => { toast.success('Đã tạo bản sao'); if (r) router.push(`/contracts/${r.id}`); } })}>
+                        <Copy /> Sao chép
+                      </DropdownMenuItem>
+                    )}
+                    {can('contract.archive') &&
+                      (c.archivedAt ? (
+                        <DropdownMenuItem onSelect={() => op.mutate('unarchive', { onSuccess: () => toast.success('Đã bỏ lưu trữ') })}>
+                          <ArchiveRestore /> Bỏ lưu trữ
+                        </DropdownMenuItem>
+                      ) : (
+                        <DropdownMenuItem onSelect={() => setConfirm({ title: `Lưu trữ ${noun} này?`, onConfirm: () => op.mutateAsync('archive').then(() => void toast.success('Đã lưu trữ')) })}>
+                          <Archive /> Lưu trữ
+                        </DropdownMenuItem>
+                      ))}
+                    {can('contract.delete') && (c.status === 'DRAFT' || c.status === 'CANCELLED') && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          variant="destructive"
+                          onSelect={() =>
+                            setConfirm({
+                              title: `Chuyển ${noun} vào thùng rác?`,
+                              description: 'Có thể khôi phục từ Thùng rác.',
+                              destructive: true,
+                              confirmLabel: 'Xóa',
+                              onConfirm: () => op.mutateAsync('delete').then(() => { toast.success('Đã chuyển vào thùng rác'); router.push(isOrder ? '/orders' : '/contracts'); }),
+                            })
+                          }
+                        >
+                          <Trash2 /> Xóa
+                        </DropdownMenuItem>
+                      </>
+                    )}
+                  </DropdownMenuContent>
+                </DropdownMenu>
               </>
             )}
-          </>
-        }
-        actions={
-          c.deletedAt ? (
-            can('contract.delete') && (
-              <Button variant="outline" onClick={() => op.mutate('restore', { onSuccess: () => toast.success('Đã khôi phục') })}>
-                <RotateCcw /> Khôi phục
-              </Button>
-            )
-          ) : (
-            <>
-              <Button variant="outline" asChild>
-                <Link href={`/payment-requests/new?contract=${c.id}`}>
-                  <Receipt /> Đề nghị thanh toán
-                </Link>
-              </Button>
-              {isOrder && can('delivery.manage') && (
-                <Button variant="outline" asChild>
-                  <Link href={`/stock-issues/new?order=${c.id}`}>
-                    <PackageMinus /> Lập phiếu xuất kho
-                  </Link>
-                </Button>
-              )}
-              {isOrder && (
-                <Button variant="outline" asChild>
-                  <Link href={`/shipping-labels/new?order=${c.id}`}>
-                    <Truck /> In phiếu gửi hàng
-                  </Link>
-                </Button>
-              )}
-              {editable && can('contract.update') && (
-                <Button variant="outline" asChild>
-                  <Link href={`/contracts/${c.id}/edit`}>
-                    <Pencil /> Sửa
-                  </Link>
-                </Button>
-              )}
-              {can('contract.liquidate') && ['SIGNED', 'ACTIVE', 'EXPIRED'].includes(c.status) && !c.archivedAt && (
-                <Button variant="outline" onClick={() => setLiquidating(true)}>
-                  <FileX2 /> Thanh lý
-                </Button>
-              )}
-              {can('contract.create') && (
-                <Button variant="outline" onClick={() => op.mutate('duplicate', { onSuccess: (r) => { toast.success('Đã tạo bản sao'); if (r) router.push(`/contracts/${r.id}`); } })}>
-                  <Copy /> Sao chép
-                </Button>
-              )}
-              {can('contract.archive') && (
-                c.archivedAt ? (
-                  <Button variant="outline" onClick={() => op.mutate('unarchive', { onSuccess: () => toast.success('Đã bỏ lưu trữ') })}>
-                    <ArchiveRestore /> Bỏ lưu trữ
-                  </Button>
-                ) : (
-                  <Button variant="outline" onClick={() => setConfirm({ title: `Lưu trữ ${noun} này?`, onConfirm: () => op.mutateAsync('archive').then(() => void toast.success('Đã lưu trữ')) })}>
-                    <Archive /> Lưu trữ
-                  </Button>
-                )
-              )}
-              {can('contract.delete') && (c.status === 'DRAFT' || c.status === 'CANCELLED') && (
-                <Button
-                  variant="destructive"
-                  onClick={() =>
-                    setConfirm({
-                      title: `Chuyển ${noun} vào thùng rác?`,
-                      description: 'Có thể khôi phục từ Thùng rác.',
-                      destructive: true,
-                      confirmLabel: 'Xóa',
-                      onConfirm: () => op.mutateAsync('delete').then(() => { toast.success('Đã chuyển vào thùng rác'); router.push(isOrder ? '/orders' : '/contracts'); }),
-                    })
-                  }
-                >
-                  <Trash2 /> Xóa
-                </Button>
-              )}
-            </>
-          )
-        }
-      />
+          </div>
+        </div>
+
+        <StatusStepper status={c.status} isOrder={isOrder} />
+
+        <dl className="grid grid-cols-2 border-t lg:grid-cols-4 [&>div]:p-4 [&>div]:sm:px-5 [&>div:nth-child(odd)]:border-r lg:[&>div]:border-r lg:[&>div:last-child]:border-r-0 max-lg:[&>div:nth-child(-n+2)]:border-b">
+          <div>
+            <dt className="text-xs text-muted-foreground">{isOrder ? 'Giá trị đơn (chưa VAT)' : 'Giá trị hợp đồng'}</dt>
+            <dd className="mt-1 text-lg font-bold tabular-nums">{formatMoney(c.value, c.currency)}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">{isOrder ? 'Khách hàng' : 'Đối tác'}</dt>
+            <dd className="mt-1 line-clamp-2 text-sm font-semibold">{c.parties.find((p) => !p.isInternal)?.name ?? '—'}</dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">{isOrder ? 'Ngày giao hàng' : 'Thời hạn'}</dt>
+            <dd className="mt-1 text-sm font-semibold tabular-nums">
+              {isOrder ? formatDate(c.deliveryDate) : c.effectiveDate || c.expiryDate ? `${formatDate(c.effectiveDate)} → ${formatDate(c.expiryDate)}` : '—'}
+            </dd>
+          </div>
+          <div>
+            <dt className="text-xs text-muted-foreground">Phê duyệt · Ký</dt>
+            <dd className="mt-1 text-sm font-semibold">
+              {APPROVAL_LABELS[c.approvalStatus] ?? c.approvalStatus} · {SIGNATURE_LABELS[c.signatureStatus] ?? c.signatureStatus}
+            </dd>
+          </div>
+        </dl>
+      </div>
 
       <Tabs defaultValue={initialTab}>
         <TabsList variant="line" className="h-auto w-full justify-start gap-0 overflow-x-auto [scrollbar-width:thin] rounded-none border-b p-0 pb-px **:data-[slot=tabs-trigger]:h-10 **:data-[slot=tabs-trigger]:flex-none **:data-[slot=tabs-trigger]:px-3 **:data-[slot=tabs-trigger]:after:bottom-0 **:data-[slot=tabs-trigger]:after:bg-primary">
@@ -194,7 +315,10 @@ export default function ContractDetailPage() {
 
         <TabsContent value="overview" className="mt-4 grid gap-4 lg:grid-cols-3">
           <Card className="lg:col-span-2">
-            <CardHeader><CardTitle className="text-base">Thông tin chung</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-base">Thông tin chung</CardTitle>
+              {editInfo}
+            </CardHeader>
             <CardContent>
               <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <Info label={isOrder ? 'Số đơn hàng' : 'Mã hợp đồng'}>{c.code}</Info>
@@ -230,7 +354,10 @@ export default function ContractDetailPage() {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle className="text-base">Giá trị & thời hạn</CardTitle></CardHeader>
+            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
+              <CardTitle className="text-base">Giá trị & thời hạn</CardTitle>
+              {editInfo}
+            </CardHeader>
             <CardContent>
               <dl className="grid gap-4">
                 <Info label={isOrder ? 'Giá trị đơn (chưa VAT)' : 'Giá trị hợp đồng'}><span className="text-lg font-semibold">{formatMoney(c.value, c.currency)}</span></Info>
