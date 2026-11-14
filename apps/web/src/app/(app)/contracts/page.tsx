@@ -38,6 +38,7 @@ import {
   RotateCcw,
   Search,
   Trash2,
+  SlidersHorizontal,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
@@ -46,7 +47,7 @@ import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { ContractStatusBadge, contractRowAccent } from '@/components/status-badge';
+import { ContractStatusBadge, contractAccentColor, contractRowAccent } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -168,19 +169,19 @@ function Kpi({ icon: Icon, label, value, tone, dot, active, onClick }: { icon: t
       type="button"
       onClick={onClick}
       className={cn(
-        'flex items-center gap-4 rounded-xl border bg-card p-4 text-left shadow-[0_1px_3px_0_rgb(15_23_42/0.05)] transition-all hover:-translate-y-0.5 hover:shadow-md',
+        'flex items-center gap-3 rounded-xl border bg-card p-3 text-left sm:gap-4 sm:p-4 shadow-[0_1px_3px_0_rgb(15_23_42/0.05)] transition-all hover:-translate-y-0.5 hover:shadow-md',
         active && 'border-primary/40 ring-2 ring-primary/15',
       )}
     >
-      <span className={cn('flex size-12 shrink-0 items-center justify-center rounded-xl', tone)}>
+      <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-12', tone)}>
         <Icon className="size-6" />
       </span>
       <span className="min-w-0">
-        <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+        <span className="flex items-center gap-1.5 text-xs text-muted-foreground sm:text-sm">
           {dot && <span className={cn('size-2 rounded-full', dot)} />}
           {label}
         </span>
-        <span className="mt-0.5 block text-[1.75rem] leading-tight font-bold tracking-tight tabular-nums">{value ?? '–'}</span>
+        <span className="mt-0.5 block text-2xl leading-tight font-bold tracking-tight tabular-nums sm:text-[1.75rem]">{value ?? '–'}</span>
       </span>
     </button>
   );
@@ -277,6 +278,7 @@ export default function ContractsPage() {
 
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [quickView, setQuickView] = useState<ContractListItem | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
 
   const invalidate = () => {
     qc.invalidateQueries({ queryKey: ['contracts'] });
@@ -545,7 +547,7 @@ export default function ContractsPage() {
         }
       />
 
-      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="mb-4 grid grid-cols-2 gap-3 xl:grid-cols-4">
         <Kpi icon={FileText} label="Tổng hợp đồng" value={counts.all} tone="bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300" active={view === 'all'} onClick={() => setParams({ view: 'all' })} />
         <Kpi icon={FileCheck2} label="Đang hiệu lực" value={counts.active} dot="bg-green-500" tone="bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300" active={view === 'active'} onClick={() => setParams({ view: 'active' })} />
         <Kpi icon={Clock} label="Chờ duyệt / chờ ký" value={pendingSign} dot="bg-amber-500" tone="bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300" active={view === 'pending_approval' || view === 'pending_signature'} onClick={() => setParams({ view: 'pending_approval' })} />
@@ -609,27 +611,33 @@ export default function ContractsPage() {
 
         {/* Bộ lọc */}
         <div className="flex flex-wrap items-center gap-2 border-b px-3 py-3">
-          <div className="relative min-w-56 flex-1 basis-64">
+          <div className="relative min-w-0 flex-1 basis-48 md:min-w-56 md:basis-64">
             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input className="h-9 pl-9" placeholder="Tìm mã, tên hợp đồng, đối tác, tag…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm kiếm" />
           </div>
+          {/* Điện thoại: các bộ lọc thu gọn sau nút "Bộ lọc". */}
+          <Button variant={showFilters || hasFilters ? 'secondary' : 'outline'} className="h-9 md:hidden" onClick={() => setShowFilters((v) => !v)} aria-expanded={showFilters}>
+            <SlidersHorizontal /> Bộ lọc{hasFilters && <span className="size-1.5 rounded-full bg-primary" />}
+          </Button>
+          <div className={cn('w-full flex-wrap items-center gap-2 *:max-md:w-[calc(50%-0.25rem)] md:contents', showFilters ? 'flex' : 'hidden')}>
           <FilterSelect allLabel="Loại hợp đồng" className="h-9 w-44" value={query.contractTypeId} onChange={(v) => setParams({ contractTypeId: v })} options={(lookups.data?.contractTypes ?? []).map((t) => ({ value: t.id, label: t.name }))} ariaLabel="Loại hợp đồng" />
           <FilterSelect allLabel="Trạng thái" className="h-9 w-40" value={query.status} onChange={(v) => setParams({ status: v })} options={CONTRACT_STATUSES.map((s) => ({ value: s, label: CONTRACT_STATUS_LABELS[s] }))} ariaLabel="Trạng thái" />
           <FilterSelect allLabel="Người phụ trách" className="h-9 w-44" value={query.ownerId} onChange={(v) => setParams({ ownerId: v })} options={(lookups.data?.users ?? []).map((u) => ({ value: u.id, label: u.fullName }))} ariaLabel="Người phụ trách" />
           <FilterSelect allLabel="Phòng ban" className="h-9 w-40" value={query.departmentId} onChange={(v) => setParams({ departmentId: v })} options={(lookups.data?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} ariaLabel="Phòng ban" />
           <FilterSelect allLabel="Phân loại" className="h-9 w-48" value={query.category} onChange={(v) => setParams({ category: v })} options={[...CONTRACT_CATEGORIES.map((c) => ({ value: c, label: CONTRACT_CATEGORY_LABELS[c] })), { value: 'NONE', label: 'Hợp đồng chưa phân loại' }]} ariaLabel="Phân loại hợp đồng" />
-          <div className="flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 shadow-xs" title="Lọc theo ngày tạo">
+          <div className="flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-2.5 shadow-xs max-md:w-full!" title="Lọc theo ngày tạo">
             <CalendarRange className="size-4 shrink-0 text-muted-foreground" />
-            <input type="date" aria-label="Từ ngày" className="w-[7.4rem] bg-transparent text-sm outline-none" value={query.createdFrom ?? ''} onChange={(e) => setParams({ createdFrom: e.target.value || undefined })} />
+            <input type="date" aria-label="Từ ngày" className="min-w-0 flex-1 bg-transparent text-sm outline-none md:w-[7.4rem] md:flex-none" value={query.createdFrom ?? ''} onChange={(e) => setParams({ createdFrom: e.target.value || undefined })} />
             <span className="text-muted-foreground">–</span>
-            <input type="date" aria-label="Đến ngày" className="w-[7.4rem] bg-transparent text-sm outline-none" value={query.createdTo ?? ''} onChange={(e) => setParams({ createdTo: e.target.value || undefined })} />
+            <input type="date" aria-label="Đến ngày" className="min-w-0 flex-1 bg-transparent text-sm outline-none md:w-[7.4rem] md:flex-none" value={query.createdTo ?? ''} onChange={(e) => setParams({ createdTo: e.target.value || undefined })} />
           </div>
           {hasFilters && (
             <Button variant="ghost" size="sm" onClick={() => setParams({ q: undefined, status: undefined, contractTypeId: undefined, departmentId: undefined, ownerId: undefined, createdFrom: undefined, createdTo: undefined })}>
               Xóa lọc
             </Button>
           )}
-          <div className="ml-auto flex items-center gap-2">
+          </div>
+          <div className="ml-auto hidden items-center gap-2 md:flex">
             {selectedIds.length > 0 && view !== 'trash' && (
               <>
                 <span className="text-sm text-muted-foreground">Đã chọn {selectedIds.length}</span>
@@ -683,6 +691,60 @@ export default function ContractsPage() {
             <ErrorState error={list.error} onRetry={() => list.refetch()} />
           </div>
         ) : (
+          <>
+          {/* Điện thoại: mỗi hợp đồng một thẻ */}
+          <ul className="divide-y md:hidden">
+            {list.isPending ? (
+              Array.from({ length: 4 }).map((_, i) => (
+                <li key={i} className="p-3">
+                  <Skeleton className="h-20" />
+                </li>
+              ))
+            ) : !list.data?.items.length ? (
+              <li className="p-3">
+                <EmptyState title="Không có hợp đồng phù hợp" description={query.q ? `Không tìm thấy kết quả cho "${query.q}".` : 'Thử đổi bộ lọc hoặc tạo hợp đồng mới.'} />
+              </li>
+            ) : (
+              list.data.items.map((c) => (
+                <li key={c.id} style={{ boxShadow: `inset 4px 0 0 ${contractAccentColor(c.status)}` }}>
+                  <div className="flex items-start gap-3 px-4 py-3">
+                    <Link href={`/contracts/${c.id}`} className="min-w-0 flex-1 space-y-1.5">
+                      <span className="flex items-start justify-between gap-2">
+                        <span className="min-w-0">
+                          <span className="line-clamp-2 leading-snug font-semibold">{c.title}</span>
+                          <span className="block text-xs text-muted-foreground">{c.code}</span>
+                        </span>
+                        <ContractStatusBadge status={c.status} className="shrink-0" />
+                      </span>
+                      {c.parties[0]?.name && <span className="line-clamp-1 block text-sm text-muted-foreground">{c.parties[0].name}</span>}
+                      <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+                        <span className="font-semibold tabular-nums">{formatMoney(c.value, c.currency)}</span>
+                        {(c.effectiveDate || c.expiryDate) && (
+                          <span className="text-xs text-muted-foreground tabular-nums">
+                            {shortDate(c.effectiveDate)} – {shortDate(c.expiryDate)}
+                          </span>
+                        )}
+                        {c.owner && (
+                          <span className="ml-auto flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <Avatar name={c.owner.fullName} /> {c.owner.fullName}
+                          </span>
+                        )}
+                      </span>
+                    </Link>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon-sm" aria-label="Thao tác" className="-mr-2">
+                          <MoreHorizontal />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="min-w-40">{rowActions(c)}</DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </li>
+              ))
+            )}
+          </ul>
+          <div className="hidden md:block">
           <Table>
             <TableHeader>
               {table.getHeaderGroups().map((hg) => (
@@ -730,6 +792,8 @@ export default function ContractsPage() {
               )}
             </TableBody>
           </Table>
+          </div>
+          </>
         )}
 
         {data && data.total > 0 && (

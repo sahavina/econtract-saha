@@ -73,3 +73,6 @@ export function ClauseStatusBadge({ status }: { status: keyof typeof CLAUSE_STAT
     </span>
   );
 }
+
+/** Màu vạch trạng thái (biến màu Tailwind) – dùng cho thẻ hợp đồng trên điện thoại. */
+export const contractAccentColor = (status: ContractStatus) => ROW_TONE[status].match(/var\(--color-[a-z]+-\d+\)/)?.[0] ?? 'transparent';

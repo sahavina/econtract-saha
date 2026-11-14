@@ -116,14 +116,14 @@ function activityIcon(action: string): { icon: LucideIcon; tone: string } {
 
 function Kpi({ icon: Icon, label, value, sub, tone, href }: { icon: LucideIcon; label: string; value: React.ReactNode; sub?: React.ReactNode; tone: string; href?: string }) {
   const body = (
-    <div className={cn('flex h-full items-start gap-4 rounded-xl border bg-card p-5 shadow-[0_1px_3px_0_rgb(15_23_42/0.05)] transition-all', href && 'hover:-translate-y-0.5 hover:shadow-md')}>
-      <span className={cn('flex size-12 shrink-0 items-center justify-center rounded-xl', tone)}>
+    <div className={cn('flex h-full flex-col items-start gap-2.5 rounded-xl border bg-card p-3.5 sm:flex-row sm:gap-4 sm:p-5 shadow-[0_1px_3px_0_rgb(15_23_42/0.05)] transition-all', href && 'hover:-translate-y-0.5 hover:shadow-md')}>
+      <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-12', tone)}>
         <Icon className="size-6" />
       </span>
       <div className="min-w-0">
-        <p className="text-sm font-medium text-muted-foreground">{label}</p>
-        <p className="mt-0.5 text-[1.7rem] leading-tight font-bold tracking-tight break-words tabular-nums">{value}</p>
-        {sub && <div className="mt-1 text-sm">{sub}</div>}
+        <p className="text-xs font-medium text-muted-foreground sm:text-sm">{label}</p>
+        <p className="mt-0.5 text-xl leading-tight font-bold sm:text-[1.7rem] tracking-tight break-words tabular-nums">{value}</p>
+        {sub && <div className="mt-1 text-xs sm:text-sm">{sub}</div>}
       </div>
     </div>
   );
@@ -133,14 +133,14 @@ function Kpi({ icon: Icon, label, value, sub, tone, href }: { icon: LucideIcon; 
 function Panel({ icon: Icon, title, action, children, className }: { icon: LucideIcon; title: React.ReactNode; action?: React.ReactNode; children: React.ReactNode; className?: string }) {
   return (
     <Card className={cn('gap-0 py-0', className)}>
-      <CardHeader className="flex flex-row items-center justify-between gap-3 py-4">
+      <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-4 sm:px-5">
         <CardTitle className="flex items-center gap-2.5 text-base">
           <Icon className="size-5 text-primary" />
           {title}
         </CardTitle>
         {action}
       </CardHeader>
-      <CardContent className="px-5 pb-5">{children}</CardContent>
+      <CardContent className="px-4 pb-5 sm:px-5">{children}</CardContent>
     </Card>
   );
 }
@@ -224,7 +224,7 @@ export default function DashboardPage() {
       />
 
       {can('contract.view_all') && (
-        <div className="-mt-2 mb-5 flex flex-wrap items-center justify-end gap-2">
+        <div className="-mt-2 mb-5 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap sm:items-center sm:justify-end">
           <FilterSelect allLabel="Tất cả phòng ban" className="h-8 w-44" value={filters.departmentId} onChange={(v) => set({ departmentId: v })} options={(lookups.data?.departments ?? []).map((x) => ({ value: x.id, label: x.name }))} ariaLabel="Phòng ban" />
           <FilterSelect allLabel="Tất cả loại HĐ" className="h-8 w-44" value={filters.contractTypeId} onChange={(v) => set({ contractTypeId: v })} options={(lookups.data?.contractTypes ?? []).map((x) => ({ value: x.id, label: x.name }))} ariaLabel="Loại hợp đồng" />
           <FilterSelect allLabel="Tất cả nhân viên" className="h-8 w-44" value={filters.ownerId} onChange={(v) => set({ ownerId: v })} options={(lookups.data?.users ?? []).map((u) => ({ value: u.id, label: u.fullName }))} ariaLabel="Nhân viên" />
@@ -235,7 +235,7 @@ export default function DashboardPage() {
         <ErrorState error={summary.error} onRetry={() => summary.refetch()} />
       ) : (
         <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 xl:grid-cols-4">
             {!k ? (
               Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)
             ) : (
