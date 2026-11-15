@@ -282,7 +282,7 @@ export function QuoteForm({ quote, partnerParam = '', readOnly = false }: { quot
       </Card>
 
       {!readOnly && (
-        <div className="flex items-center justify-end gap-2">
+        <div className="sticky bottom-3 z-20 flex items-center justify-end gap-2 rounded-xl border bg-card/95 p-3 shadow-lg shadow-slate-900/10 backdrop-blur">
           {!valid && <span className="text-xs text-muted-foreground">Nhập tên khách hàng và ít nhất một dòng hàng.</span>}
           <Button disabled={!valid || save.isPending} onClick={() => save.mutate()}>
             {save.isPending ? <Loader2 className="animate-spin" /> : <Save />} {quote ? 'Lưu thay đổi' : 'Lưu báo giá'}

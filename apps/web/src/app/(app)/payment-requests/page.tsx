@@ -1,12 +1,12 @@
 'use client';
 
-import { PAYMENT_REQUEST_STATUS_LABELS, PAYMENT_REQUEST_STATUSES, type PaymentRequestStatus } from '@saha/shared';
+import { PAYMENT_REQUEST_STATUS_LABELS, PAYMENT_REQUEST_STATUSES } from '@saha/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Receipt } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { DateRange, ListCard, ListState, SearchBox, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { DateRange, ListCard, ListState, SearchBox, StatusPill, Th, TitleCell } from '@/components/list-ui';
 import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
 import { PaymentRequestActions } from '@/components/payment-request-actions';
@@ -16,14 +16,8 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
+import { PAYMENT_REQUEST_TONE } from '@/lib/status-tones';
 import type { PaymentRequestListItem } from '@/lib/types';
-
-const STATUS_TONE: Record<PaymentRequestStatus, Tone> = {
-  DRAFT: 'gray',
-  SENT: 'sky',
-  PAID: 'green',
-  CANCELLED: 'red',
-};
 
 /** Danh sách đề nghị thanh toán đã lưu: tìm theo số, khách hàng, hồ sơ; lọc trạng thái và ngày. */
 export default function PaymentRequestsPage() {
@@ -85,7 +79,7 @@ export default function PaymentRequestsPage() {
                           {r.number} · {formatDate(r.date)}
                         </span>
                       </span>
-                      <StatusPill tone={STATUS_TONE[r.status]} className="shrink-0">
+                      <StatusPill tone={PAYMENT_REQUEST_TONE[r.status]} className="shrink-0">
                         {PAYMENT_REQUEST_STATUS_LABELS[r.status]}
                       </StatusPill>
                     </span>
@@ -128,7 +122,7 @@ export default function PaymentRequestsPage() {
                       </TableCell>
                       <TableCell>{r.createdBy.fullName}</TableCell>
                       <TableCell>
-                        <StatusPill tone={STATUS_TONE[r.status]}>{PAYMENT_REQUEST_STATUS_LABELS[r.status]}</StatusPill>
+                        <StatusPill tone={PAYMENT_REQUEST_TONE[r.status]}>{PAYMENT_REQUEST_STATUS_LABELS[r.status]}</StatusPill>
                         <PaymentRequestProgress request={r} className="mt-1 max-w-52 text-xs whitespace-normal" />
                       </TableCell>
                       <TableCell>

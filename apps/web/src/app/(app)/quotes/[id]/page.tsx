@@ -7,17 +7,19 @@ import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ErrorState, PageHeader } from '@/components/page-header';
+import { DetailHeader } from '@/components/detail-header';
+import { StatusPill } from '@/components/list-ui';
+import { ErrorState } from '@/components/page-header';
 import { displayStatus, QuoteActions } from '@/components/quote-actions';
 import { QuoteForm } from '@/components/quote-form';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useCompanyProfile } from '@/lib/company';
-import { formatDate } from '@/lib/format';
+import { formatDate, formatMoney } from '@/lib/format';
 import { downloadQuotePdf, downloadQuoteWord } from '@/lib/quote';
+import { QUOTE_TONE } from '@/lib/status-tones';
 import type { QuoteDetail } from '@/lib/types';
 
 export default function QuoteDetailPage() {
@@ -46,14 +48,12 @@ export default function QuoteDetailPage() {
 
   return (
     <>
-      <PageHeader
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            Báo giá {q.code} <Badge variant={shown === 'REJECTED' || shown === 'EXPIRED' ? 'destructive' : 'secondary'}>{QUOTE_STATUS_LABELS[shown]}</Badge>
-          </span>
-        }
-        description={`Ngày ${formatDate(q.date)} · Người lập: ${q.createdBy.fullName}`}
-        crumbs={[{ label: 'Báo giá', href: '/quotes' }, { label: q.code }]}
+      <DetailHeader
+        crumbs={[{ label: 'Đơn đặt hàng', href: '/orders' }, { label: 'Báo giá', href: '/quotes' }, { label: q.code }]}
+        icon={FileText}
+        title={`Báo giá ${q.code}`}
+        status={<StatusPill tone={QUOTE_TONE[shown]}>{QUOTE_STATUS_LABELS[shown]}</StatusPill>}
+        meta={<span>Ngày {formatDate(q.date)} · Người lập: {q.createdBy.fullName}</span>}
         actions={
           <>
             <QuoteActions quote={q} variant="buttons" />
@@ -65,19 +65,24 @@ export default function QuoteDetailPage() {
             </Button>
           </>
         }
-      />
-      <div className="mb-4 space-y-0.5 text-sm text-muted-foreground">
-        {q.sentAt && (
-          <div>
-            {[`Gửi ${formatDate(q.sentAt)}`, q.sentMethod && PAYMENT_SEND_METHOD_LABELS[q.sentMethod], q.sentTo, q.sentBy?.fullName, q.sentNote].filter(Boolean).join(' · ')}
-          </div>
-        )}
-        {q.order && (
-          <div>
-            Đã chuyển thành đơn <Link href={`/contracts/${q.order.id}`} className="text-primary hover:underline">{q.order.code}</Link>
-          </div>
-        )}
-      </div>
+        facts={[
+          { label: 'Khách hàng', value: q.customerName },
+          { label: 'Tổng tiền', value: <span className="tabular-nums">{formatMoney(q.total)}</span> },
+          { label: 'Hiệu lực đến', value: formatDate(q.validUntil) },
+          {
+            label: 'Đơn đặt hàng',
+            value: q.order ? (
+              <Link href={`/contracts/${q.order.id}`} className="text-primary hover:underline">
+                {q.order.code}
+              </Link>
+            ) : (
+              'Chưa chuyển thành đơn'
+            ),
+          },
+        ]}
+      >
+        {q.sentAt ? [`Đã gửi ${formatDate(q.sentAt)}`, q.sentMethod && PAYMENT_SEND_METHOD_LABELS[q.sentMethod], q.sentTo, q.sentBy?.fullName, q.sentNote].filter(Boolean).join(' · ') : null}
+      </DetailHeader>
       {/* key: dữ liệu đổi trạng thái sửa/chỉ xem thì nạp lại form. */}
       <QuoteForm key={`${q.id}-${readOnly}`} quote={q} readOnly={readOnly} />
     </>

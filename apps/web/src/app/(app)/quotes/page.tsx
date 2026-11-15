@@ -1,12 +1,12 @@
 'use client';
 
-import { PAYMENT_SEND_METHOD_LABELS, QUOTE_FILTER_STATUSES, QUOTE_STATUS_LABELS, type QuoteDisplayStatus } from '@saha/shared';
+import { PAYMENT_SEND_METHOD_LABELS, QUOTE_FILTER_STATUSES, QUOTE_STATUS_LABELS } from '@saha/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { DateRange, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { DateRange, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell } from '@/components/list-ui';
 import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
 import { displayStatus, QuoteActions } from '@/components/quote-actions';
@@ -15,15 +15,8 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
+import { QUOTE_TONE } from '@/lib/status-tones';
 import type { QuoteListItem } from '@/lib/types';
-
-const QUOTE_TONE: Record<QuoteDisplayStatus, Tone> = {
-  DRAFT: 'gray',
-  SENT: 'sky',
-  ACCEPTED: 'green',
-  REJECTED: 'red',
-  EXPIRED: 'orange',
-};
 
 /** Danh sách báo giá: tìm theo số, khách hàng, hàng hóa; lọc trạng thái và ngày. */
 export default function QuotesPage() {

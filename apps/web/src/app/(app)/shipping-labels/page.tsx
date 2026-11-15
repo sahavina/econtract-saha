@@ -1,12 +1,12 @@
 'use client';
 
-import { formatQtyVi, SHIPPING_NOTE_STATUS_LABELS, SHIPPING_NOTE_STATUSES, type ShippingNoteStatus } from '@saha/shared';
+import { formatQtyVi, SHIPPING_NOTE_STATUS_LABELS, SHIPPING_NOTE_STATUSES } from '@saha/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { DateRange, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { DateRange, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell } from '@/components/list-ui';
 import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
 import { Button } from '@/components/ui/button';
@@ -14,14 +14,8 @@ import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate } from '@/lib/format';
+import { SHIPPING_NOTE_TONE } from '@/lib/status-tones';
 import type { ShippingNoteListItem } from '@/lib/types';
-
-const STATUS_TONE: Record<ShippingNoteStatus, Tone> = {
-  DRAFT: 'gray',
-  SENT: 'sky',
-  DELIVERED: 'green',
-  CANCELLED: 'red',
-};
 
 /** Danh sách phiếu gửi hàng đã lưu: tìm theo người nhận, chành xe, mã vận đơn; lọc trạng thái và ngày gửi. */
 export default function ShippingLabelsPage() {
@@ -82,7 +76,7 @@ export default function ShippingLabelsPage() {
                   href={`/shipping-labels/${n.id}`}
                   title={n.toCompany}
                   sub={`${n.code} · ${formatDate(n.sendDate)}`}
-                  status={<StatusPill tone={STATUS_TONE[n.status]}>{SHIPPING_NOTE_STATUS_LABELS[n.status]}</StatusPill>}
+                  status={<StatusPill tone={SHIPPING_NOTE_TONE[n.status]}>{SHIPPING_NOTE_STATUS_LABELS[n.status]}</StatusPill>}
                 >
                   <span className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
                     <span>{n.boxes} thùng</span>
@@ -136,7 +130,7 @@ export default function ShippingLabelsPage() {
                         {!n.order && !n.stockIssue && <span className="text-muted-foreground">—</span>}
                       </TableCell>
                       <TableCell>
-                        <StatusPill tone={STATUS_TONE[n.status]}>{SHIPPING_NOTE_STATUS_LABELS[n.status]}</StatusPill>
+                        <StatusPill tone={SHIPPING_NOTE_TONE[n.status]}>{SHIPPING_NOTE_STATUS_LABELS[n.status]}</StatusPill>
                         {when(n) && <div className="mt-1 text-xs text-muted-foreground">{when(n)}</div>}
                       </TableCell>
                     </TableRow>

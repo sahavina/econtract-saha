@@ -2,12 +2,15 @@
 
 import { formatQtyVi, SHIPPING_NOTE_STATUS_LABELS, STOCK_ISSUE_STATUS_LABELS } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Ban, Download, Loader2, Printer, Truck } from 'lucide-react';
+import { Ban, Download, Loader2, PackageMinus, Printer, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ErrorState, PageHeader } from '@/components/page-header';
+import { DetailHeader } from '@/components/detail-header';
+import { StatusPill } from '@/components/list-ui';
+import { ErrorState } from '@/components/page-header';
+import { stockIssueTone } from '@/lib/status-tones';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -69,15 +72,27 @@ export default function StockIssueDetailPage() {
 
   return (
     <>
-      <PageHeader
-        title={
-          <span className="flex flex-wrap items-center gap-2">
-            Phiếu xuất kho {s.code}
-            <Badge variant={cancelled ? 'destructive' : 'secondary'}>{STOCK_ISSUE_STATUS_LABELS[s.status]}</Badge>
-          </span>
-        }
-        description={`Ngày xuất ${formatDate(s.issueDate)} · Người lập: ${s.createdBy.fullName}`}
-        crumbs={[{ label: 'Phiếu xuất kho', href: '/stock-issues' }, { label: s.code }]}
+      <DetailHeader
+        crumbs={[{ label: 'Đơn đặt hàng', href: '/orders' }, { label: 'Phiếu xuất kho', href: '/stock-issues' }, { label: s.code }]}
+        icon={PackageMinus}
+        title={`Phiếu xuất kho ${s.code}`}
+        status={<StatusPill tone={stockIssueTone(s.status)}>{STOCK_ISSUE_STATUS_LABELS[s.status]}</StatusPill>}
+        meta={<span>Ngày xuất {formatDate(s.issueDate)} · Người lập: {s.createdBy.fullName}</span>}
+        facts={[
+          { label: 'Người nhận', value: s.receiverName },
+          {
+            label: 'Đơn đặt hàng',
+            value: s.order ? (
+              <Link href={`/contracts/${s.order.id}`} className="text-primary hover:underline">
+                {s.order.code}
+              </Link>
+            ) : (
+              '—'
+            ),
+          },
+          { label: 'Thành tiền', value: <span className="tabular-nums">{formatMoney(s.totalAmount)}</span> },
+          { label: 'Lý do xuất', value: s.reason ?? '—' },
+        ]}
         actions={
           <>
             <Button onClick={() => pdf('print')} disabled={!!busy || !company.data}>

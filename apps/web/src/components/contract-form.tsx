@@ -1208,7 +1208,7 @@ export function ContractForm({
       {!isEdit && !fromFile && filesPicker}
       {!isEdit && !fromFile && importedCard}
 
-      <div className="flex justify-end gap-2">
+      <div className="sticky bottom-3 z-20 flex items-center justify-end gap-2 rounded-xl border bg-card/95 p-3 shadow-lg shadow-slate-900/10 backdrop-blur">
         <Button type="button" variant="outline" onClick={() => router.back()}>
           Hủy
         </Button>
