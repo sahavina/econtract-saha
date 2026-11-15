@@ -2,16 +2,16 @@
 
 import { CLAUSE_CATEGORIES, CLAUSE_CATEGORY_LABELS, CLAUSE_STATUS_LABELS } from '@saha/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Plus, ScrollText } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { ListCard, ListState, MobileCard, SearchBox, Th, TitleCell } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
 import { ClauseStatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
@@ -47,7 +47,7 @@ export default function ClausesPage() {
         crumbs={[{ label: 'Soạn thảo' }, { label: 'Thư viện điều khoản' }]}
         actions={
           can('template.manage') && (
-            <Button asChild>
+            <Button asChild className="h-9">
               <Link href="/clauses/new">
                 <Plus /> Thêm điều khoản
               </Link>
@@ -55,77 +55,65 @@ export default function ClausesPage() {
           )
         }
       />
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Input className="w-64" placeholder="Tìm tiêu đề, mã, nội dung…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm điều khoản" />
-        <FilterSelect allLabel="Mọi nhóm" value={category} onChange={(v) => { setCategory(v); setPage(1); }} options={CLAUSE_CATEGORIES.map((c) => ({ value: c, label: CLAUSE_CATEGORY_LABELS[c] }))} />
-        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={(Object.keys(CLAUSE_STATUS_LABELS) as ClauseStatus[]).map((s) => ({ value: s, label: CLAUSE_STATUS_LABELS[s] }))} />
-      </div>
-
-      {list.isError ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã</TableHead>
-                <TableHead>Tiêu đề</TableHead>
-                <TableHead>Nhóm</TableHead>
-                <TableHead>Phiên bản</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Người soạn</TableHead>
-                <TableHead>Người duyệt</TableHead>
-                <TableHead>Cập nhật</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.isPending ? (
-                <TableRow>
-                  <TableCell colSpan={8}>
-                    <Skeleton className="h-24" />
-                  </TableCell>
-                </TableRow>
-              ) : !list.data.items.length ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="p-4">
-                    <EmptyState title="Không có điều khoản phù hợp" />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                list.data.items.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell>
-                      <Link href={`/clauses/${c.id}`} className="font-medium whitespace-nowrap text-primary hover:underline">
-                        {c.code}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{c.title}</TableCell>
-                    <TableCell>{CLAUSE_CATEGORY_LABELS[c.category]}</TableCell>
-                    <TableCell>v{c.version}</TableCell>
-                    <TableCell>
-                      <ClauseStatusBadge status={c.status} />
-                    </TableCell>
-                    <TableCell>{c.createdBy.fullName}</TableCell>
-                    <TableCell>{c.approvedBy?.fullName ?? '—'}</TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDateTime(c.updatedAt)}</TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={search} onChange={setSearch} placeholder="Tìm tiêu đề, mã, nội dung…" ariaLabel="Tìm điều khoản" />
+            <FilterSelect className="h-9 w-44" allLabel="Mọi nhóm" value={category} onChange={(v) => { setCategory(v); setPage(1); }} options={CLAUSE_CATEGORIES.map((c) => ({ value: c, label: CLAUSE_CATEGORY_LABELS[c] }))} ariaLabel="Nhóm điều khoản" />
+            <FilterSelect className="h-9 w-40" allLabel="Mọi trạng thái" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={(Object.keys(CLAUSE_STATUS_LABELS) as ClauseStatus[]).map((s) => ({ value: s, label: CLAUSE_STATUS_LABELS[s] }))} ariaLabel="Trạng thái" />
+          </>
+        }
+      >
+        <ListState query={list} empty={{ title: 'Không có điều khoản phù hợp' }} />
+        {!!list.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {list.data.items.map((c) => (
+                <MobileCard key={c.id} href={`/clauses/${c.id}`} title={c.title} sub={`${c.code} · v${c.version}`} status={<ClauseStatusBadge status={c.status} />}>
+                  <span className="block text-xs text-muted-foreground">
+                    {CLAUSE_CATEGORY_LABELS[c.category]} · {c.createdBy.fullName} · {formatDateTime(c.updatedAt)}
+                  </span>
+                </MobileCard>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Điều khoản</Th>
+                    <Th>Nhóm</Th>
+                    <Th>Phiên bản</Th>
+                    <Th>Trạng thái</Th>
+                    <Th>Người soạn</Th>
+                    <Th>Người duyệt</Th>
+                    <Th>Cập nhật</Th>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-      {list.data && list.data.totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            <ChevronLeft />
-          </Button>
-          Trang {list.data.page}/{list.data.totalPages}
-          <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={page >= list.data.totalPages} onClick={() => setPage(page + 1)}>
-            <ChevronRight />
-          </Button>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {list.data.items.map((c) => (
+                    <TableRow key={c.id}>
+                      <TableCell className="pl-4">
+                        <TitleCell icon={ScrollText} href={`/clauses/${c.id}`} title={c.title} sub={c.code} />
+                      </TableCell>
+                      <TableCell>{CLAUSE_CATEGORY_LABELS[c.category]}</TableCell>
+                      <TableCell>
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums">v{c.version}</span>
+                      </TableCell>
+                      <TableCell>
+                        <ClauseStatusBadge status={c.status} />
+                      </TableCell>
+                      <TableCell>{c.createdBy.fullName}</TableCell>
+                      <TableCell>{c.approvedBy?.fullName ?? '—'}</TableCell>
+                      <TableCell className="tabular-nums">{formatDateTime(c.updatedAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={list.data.page} totalPages={list.data.totalPages} total={list.data.total} pageSize={30} unit="điều khoản" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
     </>
   );
 }

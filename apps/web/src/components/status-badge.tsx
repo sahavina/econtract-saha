@@ -1,4 +1,5 @@
 import { CLAUSE_STATUS_LABELS, CONTRACT_STATUS_LABELS, type ContractStatus, TEMPLATE_STATUS_LABELS } from '@saha/shared';
+import { StatusPill, type Tone } from '@/components/list-ui';
 import { cn } from '@/lib/utils';
 
 /** Mỗi trạng thái hợp đồng một màu riêng (nền, chữ, viền, chấm) để nhìn danh sách phân biệt ngay. */
@@ -44,34 +45,16 @@ export function ContractStatusBadge({ status, className }: { status: ContractSta
   );
 }
 
-const TEMPLATE_TONE: Record<keyof typeof TEMPLATE_STATUS_LABELS, string> = {
-  DRAFT: 'bg-muted text-muted-foreground',
-  ACTIVE: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-  ARCHIVED: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
-};
+const TEMPLATE_TONE: Record<keyof typeof TEMPLATE_STATUS_LABELS, Tone> = { DRAFT: 'gray', ACTIVE: 'green', ARCHIVED: 'orange' };
 
 export function TemplateStatusBadge({ status }: { status: keyof typeof TEMPLATE_STATUS_LABELS }) {
-  return (
-    <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap', TEMPLATE_TONE[status])}>
-      {TEMPLATE_STATUS_LABELS[status]}
-    </span>
-  );
+  return <StatusPill tone={TEMPLATE_TONE[status]}>{TEMPLATE_STATUS_LABELS[status]}</StatusPill>;
 }
 
-const CLAUSE_TONE: Record<keyof typeof CLAUSE_STATUS_LABELS, string> = {
-  DRAFT: 'bg-muted text-muted-foreground',
-  PENDING_APPROVAL: 'bg-amber-500/15 text-amber-700 dark:text-amber-400',
-  APPROVED: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
-  REJECTED: 'bg-rose-500/15 text-rose-700 dark:text-rose-400',
-  ARCHIVED: 'bg-slate-500/15 text-slate-700 dark:text-slate-300',
-};
+const CLAUSE_TONE: Record<keyof typeof CLAUSE_STATUS_LABELS, Tone> = { DRAFT: 'gray', PENDING_APPROVAL: 'amber', APPROVED: 'green', REJECTED: 'red', ARCHIVED: 'orange' };
 
 export function ClauseStatusBadge({ status }: { status: keyof typeof CLAUSE_STATUS_LABELS }) {
-  return (
-    <span className={cn('inline-flex items-center rounded-md px-2 py-0.5 text-xs font-medium whitespace-nowrap', CLAUSE_TONE[status])}>
-      {CLAUSE_STATUS_LABELS[status]}
-    </span>
-  );
+  return <StatusPill tone={CLAUSE_TONE[status]}>{CLAUSE_STATUS_LABELS[status]}</StatusPill>;
 }
 
 /** Màu vạch trạng thái (biến màu Tailwind) – dùng cho thẻ hợp đồng trên điện thoại. */

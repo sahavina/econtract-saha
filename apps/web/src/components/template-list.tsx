@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { TEMPLATE_STATUS_LABELS } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Eye, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { Eye, FileStack, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -12,15 +12,15 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { ListCard, ListState, MobileCard, SearchBox, Th, TitleCell } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
 import { TemplateStatusBadge } from '@/components/status-badge';
 import { TemplatePreviewDialog } from '@/components/template-preview-dialog';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
@@ -143,6 +143,45 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
   });
 
   const kindTypes = (lookups.data?.contractTypes ?? []).filter((t) => t.kind === kind);
+  /** Nút thao tác của một mẫu (bảng và thẻ điện thoại). */
+  const rowActions = (t: TemplateListItem) => (
+    <span className="inline-flex justify-end gap-1">
+      <Button variant="ghost" size="icon-sm" aria-label={`Xem trước mẫu ${t.code}`} title="Xem trước với dữ liệu mẫu" onClick={() => setPreviewId(t.id)}>
+        <Eye />
+      </Button>
+      {manage && (
+        <>
+          {t.status !== 'ARCHIVED' && (
+            <Button variant="ghost" size="icon-sm" asChild aria-label={`Sửa mẫu ${t.code}`} title="Sửa nội dung, thông tin mẫu">
+              <Link href={`/templates/${t.id}`}>
+                <Pencil />
+              </Link>
+            </Button>
+          )}
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="text-destructive"
+            aria-label={`Xóa mẫu ${t.code}`}
+            title="Xóa mẫu"
+            disabled={remove.isPending}
+            onClick={() =>
+              setConfirm({
+                title: `Xóa mẫu ${t.code}?`,
+                description: templateDeleteNote(t._count.contracts),
+                destructive: true,
+                confirmLabel: 'Xóa',
+                onConfirm: () => remove.mutateAsync(t).then(() => undefined),
+              })
+            }
+          >
+            <Trash2 />
+          </Button>
+        </>
+      )}
+    </span>
+  );
+
   const deptName = (id: string) => lookups.data?.departments.find((d) => d.id === id)?.name ?? '…';
 
   return (
@@ -159,104 +198,73 @@ export function TemplateList({ kind }: { kind: ContractKind }) {
           )
         }
       />
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Input className="w-64" placeholder="Tìm theo tên, mã mẫu…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm mẫu" />
-        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={setStatus} options={(Object.keys(TEMPLATE_STATUS_LABELS) as TemplateStatus[]).map((s) => ({ value: s, label: TEMPLATE_STATUS_LABELS[s] }))} />
-        {kindTypes.length > 1 && <FilterSelect allLabel={text.typeFilter} value={contractTypeId} onChange={setContractTypeId} options={kindTypes.map((t) => ({ value: t.id, label: t.name }))} />}
-      </div>
-
-      {list.isError ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã mẫu</TableHead>
-                <TableHead>Tên mẫu</TableHead>
-                <TableHead>{text.typeColumn}</TableHead>
-                <TableHead>Phiên bản</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Phòng ban được dùng</TableHead>
-                <TableHead className="text-right">Đã dùng</TableHead>
-                <TableHead>Cập nhật</TableHead>
-                <TableHead className="text-right">Thao tác</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.isPending ? (
-                <TableRow>
-                  <TableCell colSpan={9}>
-                    <Skeleton className="h-24" />
-                  </TableCell>
-                </TableRow>
-              ) : !list.data.items.length ? (
-                <TableRow>
-                  <TableCell colSpan={9} className="p-4">
-                    <EmptyState title={`Chưa có ${text.noun}`} />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                list.data.items.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell>
-                      <Link href={`/templates/${t.id}`} className="font-medium text-primary hover:underline" onMouseEnter={() => qc.prefetchQuery({ queryKey: ['template', t.id], queryFn: () => api(`/templates/${t.id}`) })}>
-                        {t.code}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{t.name}</TableCell>
-                    <TableCell>{t.contractType?.name ?? '—'}</TableCell>
-                    <TableCell>v{t.version}</TableCell>
-                    <TableCell>
-                      <TemplateStatusBadge status={t.status} />
-                    </TableCell>
-                    <TableCell className="text-sm">{t.departmentIds.length ? t.departmentIds.map(deptName).join(', ') : 'Tất cả'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDateTime(t.updatedAt)}</TableCell>
-                    <TableCell>
-                      <div className="flex justify-end gap-1">
-                        <Button variant="ghost" size="icon-sm" aria-label={`Xem trước mẫu ${t.code}`} title="Xem trước với dữ liệu mẫu" onClick={() => setPreviewId(t.id)}>
-                          <Eye />
-                        </Button>
-                    {manage && (
-                        <>
-                          {t.status !== 'ARCHIVED' && (
-                            <Button variant="ghost" size="icon-sm" asChild aria-label={`Sửa mẫu ${t.code}`} title="Sửa nội dung, thông tin mẫu">
-                              <Link href={`/templates/${t.id}`}>
-                                <Pencil />
-                              </Link>
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            className="text-destructive"
-                            aria-label={`Xóa mẫu ${t.code}`}
-                            title="Xóa mẫu"
-                            disabled={remove.isPending}
-                            onClick={() =>
-                              setConfirm({
-                                title: `Xóa mẫu ${t.code}?`,
-                                description: templateDeleteNote(t._count.contracts),
-                                destructive: true,
-                                confirmLabel: 'Xóa',
-                                onConfirm: () => remove.mutateAsync(t).then(() => undefined),
-                              })
-                            }
-                          >
-                            <Trash2 />
-                          </Button>
-                        </>
-                    )}
-                      </div>
-                    </TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={search} onChange={setSearch} placeholder="Tìm theo tên, mã mẫu…" ariaLabel="Tìm mẫu" />
+            <FilterSelect className="h-9 w-40" allLabel="Mọi trạng thái" value={status} onChange={setStatus} options={(Object.keys(TEMPLATE_STATUS_LABELS) as TemplateStatus[]).map((s) => ({ value: s, label: TEMPLATE_STATUS_LABELS[s] }))} ariaLabel="Trạng thái" />
+            {kindTypes.length > 1 && <FilterSelect className="h-9 w-44" allLabel={text.typeFilter} value={contractTypeId} onChange={setContractTypeId} options={kindTypes.map((t) => ({ value: t.id, label: t.name }))} ariaLabel={text.typeColumn} />}
+          </>
+        }
+      >
+        <ListState query={list} empty={{ title: `Chưa có ${text.noun}` }} />
+        {!!list.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {list.data.items.map((t) => (
+                <MobileCard
+                  key={t.id}
+                  href={`/templates/${t.id}`}
+                  title={t.name}
+                  sub={`${t.code} · v${t.version}`}
+                  status={<TemplateStatusBadge status={t.status} />}
+                  footer={rowActions(t)}
+                >
+                  <span className="block text-xs text-muted-foreground">
+                    {t.contractType?.name ?? '—'} · Đã dùng {t._count.contracts} lần · {formatDateTime(t.updatedAt)}
+                  </span>
+                </MobileCard>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Mẫu</Th>
+                    <Th>{text.typeColumn}</Th>
+                    <Th>Phiên bản</Th>
+                    <Th>Trạng thái</Th>
+                    <Th>Phòng ban được dùng</Th>
+                    <Th className="text-right">Đã dùng</Th>
+                    <Th>Cập nhật</Th>
+                    <Th className="text-right">Thao tác</Th>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {list.data.items.map((t) => (
+                    <TableRow key={t.id} onMouseEnter={() => qc.prefetchQuery({ queryKey: ['template', t.id], queryFn: () => api(`/templates/${t.id}`) })}>
+                      <TableCell className="pl-4">
+                        <TitleCell icon={FileStack} href={`/templates/${t.id}`} title={t.name} sub={t.code} />
+                      </TableCell>
+                      <TableCell>{t.contractType?.name ?? '—'}</TableCell>
+                      <TableCell>
+                        <span className="rounded-md bg-muted px-1.5 py-0.5 text-xs font-medium tabular-nums">v{t.version}</span>
+                      </TableCell>
+                      <TableCell>
+                        <TemplateStatusBadge status={t.status} />
+                      </TableCell>
+                      <TableCell className="max-w-56 text-sm whitespace-normal">{t.departmentIds.length ? t.departmentIds.map(deptName).join(', ') : 'Tất cả'}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
+                      <TableCell className="tabular-nums">{formatDateTime(t.updatedAt)}</TableCell>
+                      <TableCell className="text-right">{rowActions(t)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
+      </ListCard>
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
       {previewId && <TemplatePreviewDialog templateId={previewId} kind={kind} open onClose={() => setPreviewId(null)} />}
       <CreateTemplateDialog open={creating} onClose={() => setCreating(false)} kind={kind} contractTypeId={kind === 'ORDER' ? kindTypes[0]?.id : undefined} />

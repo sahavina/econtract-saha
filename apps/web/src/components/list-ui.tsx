@@ -97,6 +97,17 @@ export function Th({ children, className }: { children?: React.ReactNode; classN
   return <TableHead className={cn('h-11 text-[13px] tracking-normal text-foreground/80 normal-case', className)}>{children}</TableHead>;
 }
 
+/** Liên kết khi có href, ngược lại khối thường. */
+function Wrap({ href, className, children }: { href?: string; className: string; children: React.ReactNode }) {
+  return href ? (
+    <Link href={href} className={className}>
+      {children}
+    </Link>
+  ) : (
+    <div className={className}>{children}</div>
+  );
+}
+
 /** Thẻ một bản ghi trên điện thoại. */
 export function MobileCard({
   href,
@@ -107,7 +118,8 @@ export function MobileCard({
   actions,
   footer,
 }: {
-  href: string;
+  /** Không có ⇒ thẻ không bấm được (vd danh mục sửa bằng hộp thoại). */
+  href?: string;
   title: React.ReactNode;
   sub?: React.ReactNode;
   status?: React.ReactNode;
@@ -120,7 +132,7 @@ export function MobileCard({
   return (
     <li className="px-4 py-3">
       <div className="flex items-start gap-2">
-        <Link href={href} className="block min-w-0 flex-1 space-y-1.5">
+        <Wrap href={href} className="block min-w-0 flex-1 space-y-1.5">
           <span className="flex items-start justify-between gap-2">
             <span className="min-w-0 flex-1">
               <span className="line-clamp-2 leading-snug font-semibold">{title}</span>
@@ -129,7 +141,7 @@ export function MobileCard({
             {status && <span className="shrink-0">{status}</span>}
           </span>
           {children && <span className="block text-sm">{children}</span>}
-        </Link>
+        </Wrap>
         {actions && <span className="-mr-2 shrink-0">{actions}</span>}
       </div>
       {footer && <div className="-mr-2 -mb-1 flex justify-end">{footer}</div>}

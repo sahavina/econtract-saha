@@ -2,18 +2,17 @@
 
 import { formatQtyVi } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus } from 'lucide-react';
+import { Box, Loader2, Pencil, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
+import { ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -45,6 +44,13 @@ export default function ProductsPage() {
     placeholderData: keepPreviousData,
   });
 
+  const editButton = (p: Product) =>
+    manage ? (
+      <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${p.name}`} onClick={() => setEditing(toDraft(p))}>
+        <Pencil />
+      </Button>
+    ) : null;
+
   return (
     <>
       <PageHeader
@@ -53,63 +59,74 @@ export default function ProductsPage() {
         crumbs={[{ label: 'Đơn đặt hàng', href: '/orders' }, { label: 'Sản phẩm' }]}
         actions={
           manage && (
-            <Button onClick={() => setEditing(toDraft())}>
+            <Button className="h-9" onClick={() => setEditing(toDraft())}>
               <Plus /> Thêm sản phẩm
             </Button>
           )
         }
       />
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <Input className="w-72" placeholder="Tìm mã hoặc tên sản phẩm…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Tìm sản phẩm" />
-        <label className="flex items-center gap-2 text-sm">
-          <Checkbox checked={all} onCheckedChange={(v) => setAll(!!v)} /> Hiện cả sản phẩm ngừng kinh doanh
-        </label>
-      </div>
-      {products.isError ? (
-        <ErrorState error={products.error} onRetry={() => products.refetch()} />
-      ) : !products.data ? (
-        <Skeleton className="h-64" />
-      ) : products.data.items.length === 0 ? (
-        <EmptyState title="Chưa có sản phẩm" description={manage ? 'Bấm “Thêm sản phẩm” để tạo danh mục.' : undefined} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã</TableHead>
-                <TableHead>Tên sản phẩm</TableHead>
-                <TableHead>ĐVT</TableHead>
-                <TableHead className="text-right">Đơn giá</TableHead>
-                <TableHead className="text-right">VAT</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={q} onChange={setQ} placeholder="Tìm mã hoặc tên sản phẩm…" ariaLabel="Tìm sản phẩm" />
+            <label className="flex h-9 items-center gap-2 px-1 text-sm">
+              <Checkbox checked={all} onCheckedChange={(v) => setAll(!!v)} /> Hiện cả sản phẩm ngừng kinh doanh
+            </label>
+          </>
+        }
+      >
+        <ListState query={products} empty={{ title: 'Chưa có sản phẩm', description: manage ? 'Bấm “Thêm sản phẩm” để tạo danh mục.' : undefined }} />
+        {!!products.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
               {products.data.items.map((p) => (
-                <TableRow key={p.id}>
-                  <TableCell className="font-medium">{p.code}</TableCell>
-                  <TableCell>
-                    {p.name}
-                    {p.description && <p className="max-w-96 truncate text-xs text-muted-foreground">{p.description}</p>}
-                  </TableCell>
-                  <TableCell>{p.unit}</TableCell>
-                  <TableCell className="text-right tabular-nums">{formatQtyVi(p.unitPrice)}</TableCell>
-                  <TableCell className="text-right">{p.vatRate ? `${Number(p.vatRate)}%` : '—'}</TableCell>
-                  <TableCell>{p.isActive ? <Badge variant="secondary">Đang kinh doanh</Badge> : <Badge variant="outline">Ngừng</Badge>}</TableCell>
-                  <TableCell className="text-right">
-                    {manage && (
-                      <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${p.name}`} onClick={() => setEditing(toDraft(p))}>
-                        <Pencil />
-                      </Button>
-                    )}
-                  </TableCell>
-                </TableRow>
+                <MobileCard
+                  key={p.id}
+                  title={p.name}
+                  sub={`${p.code} · ${p.unit}`}
+                  status={<StatusPill tone={p.isActive ? 'green' : 'gray'}>{p.isActive ? 'Đang kinh doanh' : 'Ngừng'}</StatusPill>}
+                  actions={editButton(p)}
+                >
+                  <span className="flex items-center justify-between gap-2">
+                    <span className="font-semibold tabular-nums">{formatQtyVi(p.unitPrice)} đ</span>
+                    <span className="text-xs text-muted-foreground">VAT {p.vatRate ? `${Number(p.vatRate)}%` : '—'}</span>
+                  </span>
+                </MobileCard>
               ))}
-            </TableBody>
-          </Table>
-        </div>
-      )}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Sản phẩm</Th>
+                    <Th>ĐVT</Th>
+                    <Th className="text-right">Đơn giá</Th>
+                    <Th className="text-right">VAT</Th>
+                    <Th>Trạng thái</Th>
+                    <Th />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {products.data.items.map((p) => (
+                    <TableRow key={p.id}>
+                      <TableCell className="pl-4">
+                        <TitleCell icon={Box} title={p.name} sub={p.description ? `${p.code} · ${p.description}` : p.code} />
+                      </TableCell>
+                      <TableCell>{p.unit}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">{formatQtyVi(p.unitPrice)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{p.vatRate ? `${Number(p.vatRate)}%` : '—'}</TableCell>
+                      <TableCell>
+                        <StatusPill tone={p.isActive ? 'green' : 'gray'}>{p.isActive ? 'Đang kinh doanh' : 'Ngừng'}</StatusPill>
+                      </TableCell>
+                      <TableCell className="text-right">{editButton(p)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
+      </ListCard>
       {editing && <ProductDialog key={editing.id ?? 'new'} draft={editing} onClose={() => setEditing(null)} />}
     </>
   );

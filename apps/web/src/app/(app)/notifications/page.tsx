@@ -1,17 +1,22 @@
 'use client';
 
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCheck, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Bell, CheckCheck } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { ListCard, ListState } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { api, type Paginated } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
-import { cn } from '@/lib/utils';
 import type { AppNotification } from '@/lib/types';
+import { cn } from '@/lib/utils';
+
+const TABS = [
+  { value: false, label: 'Tất cả' },
+  { value: true, label: 'Chưa đọc' },
+] as const;
 
 export default function NotificationsPage() {
   const qc = useQueryClient();
@@ -30,67 +35,69 @@ export default function NotificationsPage() {
     <>
       <PageHeader
         title="Thông báo"
-        crumbs={[{ label: 'Tổng quan' }, { label: 'Thông báo' }]}
+        description="Yêu cầu phê duyệt, ký, góp ý của khách hàng và các nhắc hạn"
+        crumbs={[{ label: 'Tổng quan', href: '/' }, { label: 'Thông báo' }]}
         actions={
-          <Button variant="outline" onClick={() => readAll.mutate()} disabled={readAll.isPending}>
+          <Button variant="outline" className="h-9" onClick={() => readAll.mutate()} disabled={readAll.isPending}>
             <CheckCheck /> Đánh dấu đã đọc tất cả
           </Button>
         }
       />
-      <div className="mb-3">
-        <FilterSelect
-          allLabel="Tất cả"
-          value={unreadOnly ? 'unread' : undefined}
-          onChange={(v) => {
-            setUnreadOnly(v === 'unread');
-            setPage(1);
-          }}
-          options={[{ value: 'unread', label: 'Chưa đọc' }]}
-          ariaLabel="Lọc thông báo"
-        />
-      </div>
-      {q.isError ? (
-        <ErrorState error={q.error} onRetry={() => q.refetch()} />
-      ) : !q.data ? (
-        <Skeleton className="h-64" />
-      ) : q.data.items.length === 0 ? (
-        <EmptyState title="Không có thông báo" />
-      ) : (
-        <ul className="divide-y rounded-lg border">
-          {q.data.items.map((n) => (
-            <li key={n.id} className={cn('flex items-start gap-3 px-4 py-3', !n.readAt && 'bg-primary/5')}>
-              <span className={cn('mt-2 size-2 shrink-0 rounded-full', n.readAt ? 'bg-muted' : 'bg-primary')} />
-              <div className="min-w-0 flex-1">
-                {n.link ? (
-                  <Link href={n.link} onClick={() => !n.readAt && read.mutate(n.id)} className="font-medium hover:underline">
-                    {n.title}
-                  </Link>
-                ) : (
-                  <p className="font-medium">{n.title}</p>
+      <ListCard className="mx-auto max-w-4xl">
+        <div className="flex items-end gap-1 border-b px-3">
+          {TABS.map((t) => {
+            const active = unreadOnly === t.value;
+            return (
+              <button
+                key={t.label}
+                type="button"
+                onClick={() => {
+                  setUnreadOnly(t.value);
+                  setPage(1);
+                }}
+                className={cn(
+                  'relative shrink-0 px-3 py-3.5 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground',
+                  active && 'text-primary after:absolute after:inset-x-2 after:bottom-0 after:h-0.5 after:rounded-full after:bg-primary hover:text-primary',
                 )}
-                {n.body && <p className="text-sm text-muted-foreground">{n.body}</p>}
-                <p className="text-xs text-muted-foreground">{formatDateTime(n.createdAt)}</p>
-              </div>
-              {!n.readAt && (
-                <Button variant="ghost" size="sm" onClick={() => read.mutate(n.id)}>
-                  Đã đọc
-                </Button>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
-      {q.data && q.data.totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            <ChevronLeft />
-          </Button>
-          Trang {q.data.page}/{q.data.totalPages}
-          <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={page >= q.data.totalPages} onClick={() => setPage(page + 1)}>
-            <ChevronRight />
-          </Button>
+              >
+                {t.label}
+              </button>
+            );
+          })}
         </div>
-      )}
+        <ListState query={q} empty={{ title: unreadOnly ? 'Không có thông báo chưa đọc' : 'Không có thông báo' }} />
+        {!!q.data?.items.length && (
+          <>
+            <ul className="divide-y">
+              {q.data.items.map((n) => (
+                <li key={n.id} className={cn('flex items-start gap-3 px-4 py-3.5', !n.readAt && 'bg-primary/[0.04]')}>
+                  <span className={cn('relative flex size-9 shrink-0 items-center justify-center rounded-full', n.readAt ? 'bg-muted text-muted-foreground' : 'bg-primary/10 text-primary')}>
+                    <Bell className="size-4" />
+                    {!n.readAt && <span className="absolute -top-0.5 -right-0.5 size-2.5 rounded-full border-2 border-card bg-primary" />}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    {n.link ? (
+                      <Link href={n.link} onClick={() => !n.readAt && read.mutate(n.id)} className={cn('hover:text-primary hover:underline', !n.readAt ? 'font-semibold' : 'font-medium')}>
+                        {n.title}
+                      </Link>
+                    ) : (
+                      <p className={!n.readAt ? 'font-semibold' : 'font-medium'}>{n.title}</p>
+                    )}
+                    {n.body && <p className="text-sm text-muted-foreground">{n.body}</p>}
+                    <p className="mt-0.5 text-xs text-muted-foreground">{formatDateTime(n.createdAt)}</p>
+                  </div>
+                  {!n.readAt && (
+                    <Button variant="ghost" size="sm" onClick={() => read.mutate(n.id)}>
+                      Đã đọc
+                    </Button>
+                  )}
+                </li>
+              ))}
+            </ul>
+            <Pager className="mt-0 border-t px-4 py-3" page={q.data.page} totalPages={q.data.totalPages} total={q.data.total} pageSize={30} unit="thông báo" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
     </>
   );
 }
