@@ -1,14 +1,13 @@
 'use client';
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { InitialsAvatar, ListCard, ListState, PersonCell, Th } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { AUDIT_ACTION_LABELS, formatDateTime } from '@/lib/format';
@@ -34,61 +33,73 @@ export default function AuditLogsPage() {
 
   if (!can('audit.view')) return <p className="text-sm text-muted-foreground">Bạn không có quyền xem nhật ký hoạt động.</p>;
 
+  /** Đối tượng: hợp đồng có liên kết, còn lại ghi loại. */
+  const target = (r: AuditRow) =>
+    r.entityType === 'contract' && r.entityId ? (
+      <Link className="font-medium text-primary hover:underline" href={`/contracts/${r.entityId}`}>
+        {String((r.data as { code?: string } | null)?.code ?? 'Hợp đồng')}
+      </Link>
+    ) : (
+      (ENTITY_LABELS[r.entityType] ?? r.entityType)
+    );
+
   return (
     <>
-      <PageHeader title="Nhật ký hoạt động" description="Ghi nhận từ backend, không thể chỉnh sửa hay xóa." crumbs={[{ label: 'Quản trị' }, { label: 'Nhật ký hoạt động' }]} />
-      <div className="mb-3">
-        <FilterSelect allLabel="Mọi đối tượng" value={entityType} onChange={(v) => { setEntityType(v); setPage(1); }} options={Object.entries(ENTITY_LABELS).map(([value, label]) => ({ value, label }))} />
-      </div>
-      {q.isError ? (
-        <ErrorState error={q.error} onRetry={() => q.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Thời gian</TableHead>
-                <TableHead>Người thực hiện</TableHead>
-                <TableHead>Hành động</TableHead>
-                <TableHead>Đối tượng</TableHead>
-                <TableHead>IP</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {q.isPending ? (
-                <TableRow><TableCell colSpan={5}><Skeleton className="h-24" /></TableCell></TableRow>
-              ) : !q.data?.items.length ? (
-                <TableRow><TableCell colSpan={5} className="p-4"><EmptyState title="Chưa có nhật ký" /></TableCell></TableRow>
-              ) : (
-                q.data.items.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="whitespace-nowrap">{formatDateTime(r.createdAt)}</TableCell>
-                    <TableCell>{r.actorName ?? '—'}</TableCell>
-                    <TableCell>{AUDIT_ACTION_LABELS[r.action] ?? r.action}</TableCell>
-                    <TableCell>
-                      {r.entityType === 'contract' && r.entityId ? (
-                        <Link className="text-primary hover:underline" href={`/contracts/${r.entityId}`}>
-                          {String((r.data as { code?: string } | null)?.code ?? 'Hợp đồng')}
-                        </Link>
-                      ) : (
-                        ENTITY_LABELS[r.entityType] ?? r.entityType
-                      )}
-                    </TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.ip ?? '—'}</TableCell>
+      <PageHeader title="Nhật ký hoạt động" description="Ghi nhận từ máy chủ, không thể chỉnh sửa hay xóa" crumbs={[{ label: 'Quản trị' }, { label: 'Nhật ký hoạt động' }]} />
+      <ListCard
+        toolbar={
+          <FilterSelect className="h-9 w-44" allLabel="Mọi đối tượng" value={entityType} onChange={(v) => { setEntityType(v); setPage(1); }} options={Object.entries(ENTITY_LABELS).map(([value, label]) => ({ value, label }))} ariaLabel="Đối tượng" />
+        }
+      >
+        <ListState query={q} empty={{ title: 'Chưa có nhật ký' }} />
+        {!!q.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {q.data.items.map((r) => (
+                <li key={r.id} className="flex items-start gap-3 px-4 py-3">
+                  <InitialsAvatar name={r.actorName ?? 'Hệ thống'} />
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p>
+                      <span className="font-semibold">{r.actorName ?? 'Hệ thống'}</span> <span className="text-muted-foreground">{(AUDIT_ACTION_LABELS[r.action] ?? r.action).toLowerCase()}</span> {target(r)}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDateTime(r.createdAt)}
+                      {r.ip && ` · ${r.ip}`}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Người thực hiện</Th>
+                    <Th>Hành động</Th>
+                    <Th>Đối tượng</Th>
+                    <Th>Thời gian</Th>
+                    <Th>IP</Th>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-      {q.data && q.data.totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft /></Button>
-          Trang {q.data.page}/{q.data.totalPages}
-          <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={page >= q.data.totalPages} onClick={() => setPage(page + 1)}><ChevronRight /></Button>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {q.data.items.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="pl-4">
+                        <PersonCell name={r.actorName ?? 'Hệ thống'} />
+                      </TableCell>
+                      <TableCell className="max-w-80 whitespace-normal">{AUDIT_ACTION_LABELS[r.action] ?? r.action}</TableCell>
+                      <TableCell>{target(r)}</TableCell>
+                      <TableCell className="tabular-nums">{formatDateTime(r.createdAt)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{r.ip ?? '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={q.data.page} totalPages={q.data.totalPages} total={q.data.total} pageSize={50} unit="bản ghi" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
     </>
   );
 }

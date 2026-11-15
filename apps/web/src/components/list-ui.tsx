@@ -173,3 +173,26 @@ export function ListState({ query, empty }: { query: { isError: boolean; error: 
     );
   return null;
 }
+
+const AVATAR_TONES = ['bg-indigo-100 text-indigo-700', 'bg-sky-100 text-sky-700', 'bg-emerald-100 text-emerald-700', 'bg-violet-100 text-violet-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700'];
+
+/** Ảnh đại diện chữ viết tắt (màu cố định theo tên). */
+export function InitialsAvatar({ name, className }: { name: string; className?: string }) {
+  const parts = name.trim().split(/\s+/);
+  const text = ((parts[0]?.[0] ?? '') + (parts.length > 1 ? parts[parts.length - 1][0] : '')).toUpperCase();
+  const tone = AVATAR_TONES[Array.from(name).reduce((s, ch) => s + ch.charCodeAt(0), 0) % AVATAR_TONES.length];
+  return <span className={cn('flex size-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold', tone, className)}>{text}</span>;
+}
+
+/** Ô người dùng: ảnh chữ viết tắt + họ tên + dòng phụ. */
+export function PersonCell({ name, sub }: { name: string; sub?: React.ReactNode }) {
+  return (
+    <span className="flex min-w-48 items-center gap-3">
+      <InitialsAvatar name={name} />
+      <span className="min-w-0">
+        <span className="block font-semibold">{name}</span>
+        {sub && <span className="line-clamp-1 block text-xs text-muted-foreground">{sub}</span>}
+      </span>
+    </span>
+  );
+}

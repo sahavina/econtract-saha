@@ -2,12 +2,13 @@
 
 import { isStrongPassword, PASSWORD_RULE_MESSAGE } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, KeyRound, Loader2, Pencil, Plus } from 'lucide-react';
+import { KeyRound, Loader2, Pencil, Plus } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
+import { InitialsAvatar, ListCard, ListState, PersonCell, SearchBox, StatusPill, Th, type Tone } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -15,18 +16,17 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, ApiError, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDateTime } from '@/lib/format';
 import type { AdminBranch, AdminDepartment, AdminRole, AdminUser, UserStatus } from '@/lib/types';
 
-const STATUS: Record<UserStatus, { label: string; variant: 'default' | 'secondary' | 'outline' | 'destructive' }> = {
-  ACTIVE: { label: 'Hoạt động', variant: 'default' },
-  INVITED: { label: 'Đã mời', variant: 'secondary' },
-  LOCKED: { label: 'Tạm khóa', variant: 'destructive' },
-  DISABLED: { label: 'Vô hiệu', variant: 'outline' },
+const STATUS: Record<UserStatus, { label: string; tone: Tone }> = {
+  ACTIVE: { label: 'Hoạt động', tone: 'green' },
+  INVITED: { label: 'Đã mời', tone: 'sky' },
+  LOCKED: { label: 'Tạm khóa', tone: 'red' },
+  DISABLED: { label: 'Vô hiệu', tone: 'gray' },
 };
 
 interface Draft {
@@ -266,6 +266,19 @@ export default function AdminUsersPage() {
 
   if (!can('user.view')) return <p className="text-sm text-muted-foreground">Bạn không có quyền xem người dùng.</p>;
 
+  /** Nút sửa / đặt lại mật khẩu của một người dùng. */
+  const userActions = (u: AdminUser) =>
+    manage ? (
+      <span className="inline-flex whitespace-nowrap">
+        <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${u.fullName}`} disabled={!ready} onClick={() => setEditing(toDraft(u))}>
+          <Pencil />
+        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label={`Đặt lại mật khẩu ${u.fullName}`} onClick={() => setResetting(u)}>
+          <KeyRound />
+        </Button>
+      </span>
+    ) : null;
+
   return (
     <>
       <PageHeader
@@ -273,91 +286,89 @@ export default function AdminUsersPage() {
         crumbs={[{ label: 'Quản trị' }, { label: 'Người dùng' }]}
         actions={
           manage && (
-            <Button onClick={() => setEditing(toDraft())} disabled={!ready}>
+            <Button className="h-9" onClick={() => setEditing(toDraft())} disabled={!ready}>
               <Plus /> Thêm người dùng
             </Button>
           )
         }
       />
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Input className="w-64" placeholder="Tìm tên, email, chức danh…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm người dùng" />
-        <FilterSelect allLabel="Mọi phòng ban" value={departmentId} onChange={(v) => { setDepartmentId(v); setPage(1); }} options={(departments.data ?? []).map((x) => ({ value: x.id, label: x.name }))} />
-        <FilterSelect allLabel="Mọi vai trò" value={roleId} onChange={(v) => { setRoleId(v); setPage(1); }} options={(roles.data ?? []).map((x) => ({ value: x.id, label: x.name }))} />
-        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={(Object.keys(STATUS) as UserStatus[]).map((s) => ({ value: s, label: STATUS[s].label }))} />
-      </div>
-      {list.isError ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Họ tên</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Phòng ban</TableHead>
-                <TableHead>Vai trò</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Đăng nhập gần nhất</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.isPending ? (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <Skeleton className="h-24" />
-                  </TableCell>
-                </TableRow>
-              ) : !list.data.items.length ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="p-4">
-                    <EmptyState title="Không có người dùng phù hợp" />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                list.data.items.map((u) => (
-                  <TableRow key={u.id}>
-                    <TableCell>
-                      <p className="font-medium">{u.fullName}</p>
-                      {u.jobTitle && <p className="text-xs text-muted-foreground">{u.jobTitle}</p>}
-                    </TableCell>
-                    <TableCell>{u.email}</TableCell>
-                    <TableCell>{u.department?.name ?? '—'}</TableCell>
-                    <TableCell className="text-sm">{u.roles.map((r) => r.name).join(', ')}</TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS[u.status].variant}>{STATUS[u.status].label}</Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDateTime(u.lastLoginAt)}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap">
-                      {manage && (
-                        <>
-                          <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${u.fullName}`} disabled={!ready} onClick={() => setEditing(toDraft(u))}>
-                            <Pencil />
-                          </Button>
-                          <Button variant="ghost" size="icon-sm" aria-label={`Đặt lại mật khẩu ${u.fullName}`} onClick={() => setResetting(u)}>
-                            <KeyRound />
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={search} onChange={setSearch} placeholder="Tìm tên, email, chức danh…" ariaLabel="Tìm người dùng" />
+            <FilterSelect className="h-9 w-44" allLabel="Mọi phòng ban" value={departmentId} onChange={(v) => { setDepartmentId(v); setPage(1); }} options={(departments.data ?? []).map((x) => ({ value: x.id, label: x.name }))} ariaLabel="Phòng ban" />
+            <FilterSelect className="h-9 w-40" allLabel="Mọi vai trò" value={roleId} onChange={(v) => { setRoleId(v); setPage(1); }} options={(roles.data ?? []).map((x) => ({ value: x.id, label: x.name }))} ariaLabel="Vai trò" />
+            <FilterSelect className="h-9 w-40" allLabel="Mọi trạng thái" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={(Object.keys(STATUS) as UserStatus[]).map((s) => ({ value: s, label: STATUS[s].label }))} ariaLabel="Trạng thái" />
+          </>
+        }
+      >
+        <ListState query={list} empty={{ title: 'Không có người dùng phù hợp' }} />
+        {!!list.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {list.data.items.map((u) => (
+                <li key={u.id} className="flex items-start gap-3 px-4 py-3">
+                  <InitialsAvatar name={u.fullName} />
+                  <div className="min-w-0 flex-1 space-y-1">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold">{u.fullName}</p>
+                        <p className="truncate text-xs text-muted-foreground">{u.email}</p>
+                      </div>
+                      <StatusPill tone={STATUS[u.status].tone} className="shrink-0">
+                        {STATUS[u.status].label}
+                      </StatusPill>
+                    </div>
+                    <p className="text-xs text-muted-foreground">{[u.department?.name, u.roles.map((r) => r.name).join(', ')].filter(Boolean).join(' · ')}</p>
+                    {manage && <div className="-mr-2 flex justify-end">{userActions(u)}</div>}
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Người dùng</Th>
+                    <Th>Email</Th>
+                    <Th>Phòng ban</Th>
+                    <Th>Vai trò</Th>
+                    <Th>Trạng thái</Th>
+                    <Th>Đăng nhập gần nhất</Th>
+                    <Th />
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-      {list.data && list.data.totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            <ChevronLeft />
-          </Button>
-          Trang {list.data.page}/{list.data.totalPages}
-          <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={page >= list.data.totalPages} onClick={() => setPage(page + 1)}>
-            <ChevronRight />
-          </Button>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {list.data.items.map((u) => (
+                    <TableRow key={u.id}>
+                      <TableCell className="pl-4">
+                        <PersonCell name={u.fullName} sub={u.jobTitle} />
+                      </TableCell>
+                      <TableCell>{u.email}</TableCell>
+                      <TableCell>{u.department?.name ?? '—'}</TableCell>
+                      <TableCell className="max-w-56 whitespace-normal">
+                        <span className="flex flex-wrap gap-1">
+                          {u.roles.map((r) => (
+                            <span key={r.name} className="rounded-md bg-muted px-1.5 py-0.5 text-xs">
+                              {r.name}
+                            </span>
+                          ))}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusPill tone={STATUS[u.status].tone}>{STATUS[u.status].label}</StatusPill>
+                      </TableCell>
+                      <TableCell className="tabular-nums">{formatDateTime(u.lastLoginAt)}</TableCell>
+                      <TableCell className="text-right">{userActions(u)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={list.data.page} totalPages={list.data.totalPages} total={list.data.total} pageSize={30} unit="người dùng" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
       {editing && ready && (
         <UserSheet draft={editing} roles={roles.data} departments={departments.data} branches={branches.data} isSelf={editing.id === me?.id} onClose={() => setEditing(null)} />
       )}
