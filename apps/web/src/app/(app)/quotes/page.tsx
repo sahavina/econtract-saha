@@ -6,25 +6,23 @@ import { FileText } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { DateRange, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
 import { displayStatus, QuoteActions } from '@/components/quote-actions';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
 import type { QuoteListItem } from '@/lib/types';
 
-const QUOTE_VARIANT: Record<QuoteDisplayStatus, 'outline' | 'secondary' | 'default' | 'destructive'> = {
-  DRAFT: 'outline',
-  SENT: 'secondary',
-  ACCEPTED: 'default',
-  REJECTED: 'destructive',
-  EXPIRED: 'destructive',
+const QUOTE_TONE: Record<QuoteDisplayStatus, Tone> = {
+  DRAFT: 'gray',
+  SENT: 'sky',
+  ACCEPTED: 'green',
+  REJECTED: 'red',
+  EXPIRED: 'orange',
 };
 
 /** Danh sách báo giá: tìm theo số, khách hàng, hàng hóa; lọc trạng thái và ngày. */
@@ -45,16 +43,18 @@ export default function QuotesPage() {
     fn(v);
     setPage(1);
   };
+  const sentLine = (r: QuoteListItem) =>
+    r.sentAt ? [`Gửi ${formatDate(r.sentAt)}`, r.sentMethod && PAYMENT_SEND_METHOD_LABELS[r.sentMethod], r.sentBy?.fullName].filter(Boolean).join(' · ') : null;
 
   return (
     <>
       <PageHeader
         title="Báo giá"
-        description="Lập báo giá gửi khách, theo dõi đã gửi, khách đồng ý hay từ chối, rồi chuyển thành đơn đặt hàng."
+        description="Lập báo giá gửi khách, theo dõi đã gửi, khách đồng ý hay từ chối, rồi chuyển thành đơn đặt hàng"
         crumbs={[{ label: 'Đơn đặt hàng', href: '/orders' }, { label: 'Báo giá' }]}
         actions={
           canManage && (
-            <Button asChild>
+            <Button asChild className="h-9">
               <Link href="/quotes/new">
                 <FileText /> Lập báo giá
               </Link>
@@ -62,75 +62,90 @@ export default function QuotesPage() {
           )
         }
       />
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input className="w-72" placeholder="Tìm số báo giá, khách hàng, hàng hóa…" value={q} onChange={(e) => reset(setQ)(e.target.value)} aria-label="Tìm báo giá" />
-        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={reset(setStatus)} options={QUOTE_FILTER_STATUSES.map((s) => ({ value: s, label: QUOTE_STATUS_LABELS[s] }))} />
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Từ <Input type="date" className="w-40" value={from} onChange={(e) => reset(setFrom)(e.target.value)} aria-label="Từ ngày" />
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          đến <Input type="date" className="w-40" value={to} onChange={(e) => reset(setTo)(e.target.value)} aria-label="Đến ngày" />
-        </label>
-      </div>
-      {quotes.isError ? (
-        <ErrorState error={quotes.error} onRetry={() => quotes.refetch()} />
-      ) : !quotes.data ? (
-        <Skeleton className="h-64" />
-      ) : quotes.data.items.length === 0 ? (
-        <EmptyState title="Chưa có báo giá" description={canManage ? 'Bấm “Lập báo giá” để tạo báo giá đầu tiên.' : undefined} />
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Số báo giá</TableHead>
-                  <TableHead>Ngày</TableHead>
-                  <TableHead>Khách hàng</TableHead>
-                  <TableHead>Hiệu lực đến</TableHead>
-                  <TableHead className="text-right">Tổng tiền</TableHead>
-                  <TableHead>Đơn hàng</TableHead>
-                  <TableHead>Người lập</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead />
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {quotes.data.items.map((r) => {
-                  const shown = displayStatus(r);
-                  return (
-                    <TableRow key={r.id}>
-                      <TableCell>
-                        <Link href={`/quotes/${r.id}`} className="font-medium whitespace-nowrap text-primary hover:underline">{r.code}</Link>
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{formatDate(r.date)}</TableCell>
-                      <TableCell className="font-medium">{r.customerName}</TableCell>
-                      <TableCell className="whitespace-nowrap">{formatDate(r.validUntil)}</TableCell>
-                      <TableCell className="text-right whitespace-nowrap tabular-nums">{formatMoney(r.total)}</TableCell>
-                      <TableCell className="whitespace-nowrap text-sm">
-                        {r.order ? <Link href={`/contracts/${r.order.id}`} className="hover:underline">{r.order.code}</Link> : '—'}
-                      </TableCell>
-                      <TableCell className="whitespace-nowrap">{r.createdBy.fullName}</TableCell>
-                      <TableCell>
-                        <Badge variant={QUOTE_VARIANT[shown]}>{QUOTE_STATUS_LABELS[shown]}</Badge>
-                        {r.sentAt && (
-                          <div className="mt-0.5 text-xs whitespace-nowrap text-muted-foreground">
-                            {[`Gửi ${formatDate(r.sentAt)}`, r.sentMethod && PAYMENT_SEND_METHOD_LABELS[r.sentMethod], r.sentBy?.fullName].filter(Boolean).join(' · ')}
-                          </div>
-                        )}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <QuoteActions quote={r} variant="menu" />
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
-          </div>
-          <Pager page={quotes.data.page} totalPages={quotes.data.totalPages} total={quotes.data.total} unit="báo giá" onPage={setPage} />
-        </>
-      )}
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={q} onChange={reset(setQ)} placeholder="Tìm số báo giá, khách hàng, hàng hóa…" ariaLabel="Tìm báo giá" />
+            <FilterSelect className="h-9 w-40" allLabel="Mọi trạng thái" value={status} onChange={reset(setStatus)} options={QUOTE_FILTER_STATUSES.map((s) => ({ value: s, label: QUOTE_STATUS_LABELS[s] }))} ariaLabel="Trạng thái" />
+            <DateRange from={from} to={to} onFrom={reset(setFrom)} onTo={reset(setTo)} title="Lọc theo ngày báo giá" />
+          </>
+        }
+      >
+        <ListState query={quotes} empty={{ title: 'Chưa có báo giá', description: canManage ? 'Bấm “Lập báo giá” để tạo báo giá đầu tiên.' : undefined }} />
+        {!!quotes.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {quotes.data.items.map((r) => {
+                const shown = displayStatus(r);
+                return (
+                  <MobileCard
+                    key={r.id}
+                    href={`/quotes/${r.id}`}
+                    title={r.customerName}
+                    sub={`${r.code} · ${formatDate(r.date)}`}
+                    status={<StatusPill tone={QUOTE_TONE[shown]}>{QUOTE_STATUS_LABELS[shown]}</StatusPill>}
+                    actions={<QuoteActions quote={r} variant="menu" />}
+                  >
+                    <span className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-semibold tabular-nums">{formatMoney(r.total)}</span>
+                      <span className="text-xs text-muted-foreground">Hiệu lực đến {formatDate(r.validUntil)}</span>
+                    </span>
+                  </MobileCard>
+                );
+              })}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Báo giá</Th>
+                    <Th>Ngày</Th>
+                    <Th>Hiệu lực đến</Th>
+                    <Th className="text-right">Tổng tiền</Th>
+                    <Th>Đơn hàng</Th>
+                    <Th>Người lập</Th>
+                    <Th>Trạng thái</Th>
+                    <Th />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {quotes.data.items.map((r) => {
+                    const shown = displayStatus(r);
+                    return (
+                      <TableRow key={r.id}>
+                        <TableCell className="pl-4">
+                          <TitleCell icon={FileText} href={`/quotes/${r.id}`} title={r.customerName} sub={r.code} />
+                        </TableCell>
+                        <TableCell className="tabular-nums">{formatDate(r.date)}</TableCell>
+                        <TableCell className="tabular-nums">{formatDate(r.validUntil)}</TableCell>
+                        <TableCell className="text-right font-medium tabular-nums">{formatMoney(r.total)}</TableCell>
+                        <TableCell>
+                          {r.order ? (
+                            <Link href={`/contracts/${r.order.id}`} className="block max-w-44 break-all whitespace-normal hover:text-primary hover:underline">
+                              {r.order.code}
+                            </Link>
+                          ) : (
+                            <span className="text-muted-foreground">—</span>
+                          )}
+                        </TableCell>
+                        <TableCell>{r.createdBy.fullName}</TableCell>
+                        <TableCell>
+                          <StatusPill tone={QUOTE_TONE[shown]}>{QUOTE_STATUS_LABELS[shown]}</StatusPill>
+                          {sentLine(r) && <div className="mt-1 max-w-48 text-xs whitespace-normal text-muted-foreground">{sentLine(r)}</div>}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <QuoteActions quote={r} variant="menu" />
+                        </TableCell>
+                      </TableRow>
+                    );
+                  })}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={quotes.data.page} totalPages={quotes.data.totalPages} total={quotes.data.total} pageSize={20} unit="báo giá" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
     </>
   );
 }

@@ -6,13 +6,11 @@ import { PackageMinus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { DateRange, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
@@ -35,16 +33,17 @@ export default function StockIssuesPage() {
     fn(v);
     setPage(1);
   };
+  const pill = (i: StockIssueListItem) => <StatusPill tone={i.status === 'CANCELLED' ? 'red' : 'green'}>{STOCK_ISSUE_STATUS_LABELS[i.status]}</StatusPill>;
 
   return (
     <>
       <PageHeader
         title="Phiếu xuất kho"
-        description="Phiếu xuất kho theo mẫu 02-VT. Phiếu lập từ đơn đặt hàng tự cộng số lượng đã giao của đơn; hủy phiếu thì trừ lại."
+        description="Phiếu xuất kho theo mẫu 02-VT. Phiếu lập từ đơn đặt hàng tự cộng số lượng đã giao của đơn; hủy phiếu thì trừ lại"
         crumbs={[{ label: 'Đơn đặt hàng', href: '/orders' }, { label: 'Phiếu xuất kho' }]}
         actions={
           can('delivery.manage') && (
-            <Button asChild>
+            <Button asChild className="h-9">
               <Link href="/stock-issues/new">
                 <PackageMinus /> Lập phiếu xuất kho
               </Link>
@@ -52,79 +51,77 @@ export default function StockIssuesPage() {
           )
         }
       />
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input className="w-72" placeholder="Tìm số phiếu, người nhận, số đơn…" value={q} onChange={(e) => reset(setQ)(e.target.value)} aria-label="Tìm phiếu xuất kho" />
-        <FilterSelect
-          allLabel="Mọi trạng thái"
-          value={status}
-          onChange={reset(setStatus)}
-          options={Object.entries(STOCK_ISSUE_STATUS_LABELS).map(([value, label]) => ({ value, label }))}
-        />
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Từ <Input type="date" className="w-40" value={from} onChange={(e) => reset(setFrom)(e.target.value)} aria-label="Từ ngày" />
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          đến <Input type="date" className="w-40" value={to} onChange={(e) => reset(setTo)(e.target.value)} aria-label="Đến ngày" />
-        </label>
-      </div>
-      {issues.isError ? (
-        <ErrorState error={issues.error} onRetry={() => issues.refetch()} />
-      ) : !issues.data ? (
-        <Skeleton className="h-64" />
-      ) : issues.data.items.length === 0 ? (
-        <EmptyState title="Chưa có phiếu xuất kho" description={can('delivery.manage') ? 'Lập phiếu từ một đơn đặt hàng hoặc bấm “Lập phiếu xuất kho”.' : undefined} />
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Số phiếu</TableHead>
-                  <TableHead>Ngày xuất</TableHead>
-                  <TableHead>Người nhận / đơn vị</TableHead>
-                  <TableHead>Đơn đặt hàng</TableHead>
-                  <TableHead>Lý do</TableHead>
-                  <TableHead className="text-right">Thành tiền</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead>Người lập</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {issues.data.items.map((i) => (
-                  <TableRow key={i.id}>
-                    <TableCell>
-                      <Link href={`/stock-issues/${i.id}`} className="font-medium whitespace-nowrap text-primary hover:underline">
-                        {i.code}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDate(i.issueDate)}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">{i.receiverName}</div>
-                      {i.receiverUnit && <div className="text-xs text-muted-foreground">{i.receiverUnit}</div>}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">
-                      {i.order ? (
-                        <Link href={`/contracts/${i.order.id}`} className="hover:underline">
-                          {i.order.code}
-                        </Link>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell className="max-w-56 truncate">{i.reason ?? '—'}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap tabular-nums">{formatMoney(i.totalAmount)}</TableCell>
-                    <TableCell>
-                      <Badge variant={i.status === 'CANCELLED' ? 'destructive' : 'secondary'}>{STOCK_ISSUE_STATUS_LABELS[i.status]}</Badge>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{i.createdBy.fullName}</TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={q} onChange={reset(setQ)} placeholder="Tìm số phiếu, người nhận, số đơn…" ariaLabel="Tìm phiếu xuất kho" />
+            <FilterSelect
+              className="h-9 w-40"
+              allLabel="Mọi trạng thái"
+              value={status}
+              onChange={reset(setStatus)}
+              options={Object.entries(STOCK_ISSUE_STATUS_LABELS).map(([value, label]) => ({ value, label }))}
+              ariaLabel="Trạng thái"
+            />
+            <DateRange from={from} to={to} onFrom={reset(setFrom)} onTo={reset(setTo)} title="Lọc theo ngày xuất" />
+          </>
+        }
+      >
+        <ListState query={issues} empty={{ title: 'Chưa có phiếu xuất kho', description: can('delivery.manage') ? 'Lập phiếu từ một đơn đặt hàng hoặc bấm “Lập phiếu xuất kho”.' : undefined }} />
+        {!!issues.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {issues.data.items.map((i) => (
+                <MobileCard key={i.id} href={`/stock-issues/${i.id}`} title={i.receiverName} sub={`${i.code} · ${formatDate(i.issueDate)}`} status={pill(i)}>
+                  <span className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="font-semibold tabular-nums">{formatMoney(i.totalAmount)}</span>
+                    {i.order && <span className="text-xs text-muted-foreground">Đơn {i.order.code}</span>}
+                  </span>
+                </MobileCard>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Phiếu xuất</Th>
+                    <Th>Ngày xuất</Th>
+                    <Th>Đơn đặt hàng</Th>
+                    <Th>Lý do</Th>
+                    <Th className="text-right">Thành tiền</Th>
+                    <Th>Trạng thái</Th>
+                    <Th>Người lập</Th>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <Pager page={issues.data.page} totalPages={issues.data.totalPages} total={issues.data.total} unit="phiếu" onPage={setPage} />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {issues.data.items.map((i) => (
+                    <TableRow key={i.id}>
+                      <TableCell className="pl-4">
+                        <TitleCell icon={PackageMinus} href={`/stock-issues/${i.id}`} title={i.receiverName} sub={i.receiverUnit ? `${i.code} · ${i.receiverUnit}` : i.code} />
+                      </TableCell>
+                      <TableCell className="tabular-nums">{formatDate(i.issueDate)}</TableCell>
+                      <TableCell>
+                        {i.order ? (
+                          <Link href={`/contracts/${i.order.id}`} className="hover:text-primary hover:underline">
+                            {i.order.code}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell className="max-w-56 truncate">{i.reason ?? '—'}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">{formatMoney(i.totalAmount)}</TableCell>
+                      <TableCell>{pill(i)}</TableCell>
+                      <TableCell>{i.createdBy.fullName}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={issues.data.page} totalPages={issues.data.totalPages} total={issues.data.total} pageSize={20} unit="phiếu" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
     </>
   );
 }

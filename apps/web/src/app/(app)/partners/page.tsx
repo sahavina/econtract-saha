@@ -2,8 +2,7 @@
 
 import { PARTNER_TYPE_LABELS, PARTNER_TYPES, type PartnerType } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, CloudDownload, Link2, Loader2, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react';
-import Link from 'next/link';
+import { Building2, CloudDownload, Link2, Loader2, Pencil, Plus, RefreshCw, Trash2, User } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
@@ -11,16 +10,19 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
 import { PartnerDialog } from '@/components/partner-dialog';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { isOdooPartner, odooReady, useOdooConfig } from '@/lib/odoo';
 import type { Partner } from '@/lib/types';
+
+const TYPE_TONE: Record<PartnerType, Tone> = { CUSTOMER: 'sky', SUPPLIER: 'violet', BOTH: 'teal', OTHER: 'gray' };
+const typeTone = (t: PartnerType) => TYPE_TONE[t];
 
 export default function PartnersPage() {
   const router = useRouter();
@@ -95,6 +97,32 @@ export default function PartnersPage() {
     },
   });
 
+  /** Nút thao tác trên một đối tác (bảng và thẻ điện thoại). */
+  const partnerActions = (p: Partner) =>
+    can('partner.manage') ? (
+      <span className="inline-flex items-center whitespace-nowrap">
+        <Button variant="ghost" size="icon-sm" aria-label="Sửa" onClick={() => setDialog({ partner: p })}><Pencil /></Button>
+        {isOdooPartner(p) && odooReady(odoo.data) && (
+          <Button variant="ghost" size="icon-sm" aria-label={`Cập nhật ${p.code} từ Odoo`} disabled={syncOdoo.isPending} onClick={() => syncOdoo.mutate(p.id)}>
+            <RefreshCw className={syncOdoo.isPending && syncOdoo.variables === p.id ? 'animate-spin' : undefined} />
+          </Button>
+        )}
+        {!isOdooPartner(p) && odooReady(odoo.data) && (
+          <Button variant="ghost" size="icon-sm" aria-label={`Ánh xạ ${p.code} với Odoo`} title="Ánh xạ với đối tác Odoo" onClick={() => setLinking(p)}>
+            <Link2 />
+          </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Xóa"
+          onClick={() => setConfirm({ title: `Xóa đối tác ${p.name}?`, description: 'Hợp đồng đã tạo vẫn giữ thông tin các bên.', destructive: true, confirmLabel: 'Xóa', onConfirm: () => remove.mutateAsync(p.id).then(() => undefined) })}
+        >
+          <Trash2 />
+        </Button>
+      </span>
+    ) : null;
+
   const title = type ? PARTNER_TYPE_LABELS[type] : 'Tất cả đối tác';
   const data = list.data;
 
@@ -121,99 +149,88 @@ export default function PartnersPage() {
           )
         }
       />
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Input className="w-72" placeholder="Tìm theo tên, mã, MST, email…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm đối tác" />
-        <FilterSelect allLabel="Mọi phân loại" value={type} onChange={(v) => { router.replace(v ? `${pathname}?type=${v}` : pathname); }} options={PARTNER_TYPES.map((t) => ({ value: t, label: PARTNER_TYPE_LABELS[t] }))} />
-      </div>
-
-      {list.isError ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Mã</TableHead>
-                <TableHead>Tên đối tác</TableHead>
-                <TableHead>Phân loại</TableHead>
-                <TableHead>Mã số thuế</TableHead>
-                <TableHead>Người đại diện</TableHead>
-                <TableHead>Liên hệ</TableHead>
-                <TableHead className="text-right">Hợp đồng</TableHead>
-                <TableHead />
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.isPending ? (
-                <TableRow><TableCell colSpan={8}><Skeleton className="h-24" /></TableCell></TableRow>
-              ) : !data?.items.length ? (
-                <TableRow>
-                  <TableCell colSpan={8} className="p-4">
-                    <EmptyState title="Chưa có đối tác" description="Thêm khách hàng, nhà cung cấp để dùng khi tạo hợp đồng." />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                data.items.map((p) => (
-                  <TableRow
-                    key={p.id}
-                    className="cursor-pointer"
-                    onClick={() => {
-                      // Đang bôi đen để sao chép (MST, tên…) thì không mở trang.
-                      if (!window.getSelection()?.toString()) router.push(`/partners/${p.id}`);
-                    }}
-                  >
-                    <TableCell className="font-medium">{p.code}</TableCell>
-                    <TableCell>
-                      <Link href={`/partners/${p.id}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
-                        {p.name}
-                      </Link>
-                      {isOdooPartner(p) && <Badge variant="outline" className="ml-1.5 text-[10px]">Odoo</Badge>}
-                    </TableCell>
-                    <TableCell><Badge variant="secondary">{PARTNER_TYPE_LABELS[p.type]}</Badge></TableCell>
-                    <TableCell>{p.taxCode ?? '—'}</TableCell>
-                    <TableCell>{p.representative ? `${p.representative}${p.position ? ` (${p.position})` : ''}` : '—'}</TableCell>
-                    <TableCell className="text-xs">{[p.email, p.phone].filter(Boolean).join(' · ') || '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{p._count?.contractParties ?? 0}</TableCell>
-                    <TableCell className="text-right whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
-                      {can('partner.manage') && (
-                        <>
-                          <Button variant="ghost" size="icon-sm" aria-label="Sửa" onClick={() => setDialog({ partner: p })}><Pencil /></Button>
-                          {isOdooPartner(p) && odooReady(odoo.data) && (
-                            <Button variant="ghost" size="icon-sm" aria-label={`Cập nhật ${p.code} từ Odoo`} disabled={syncOdoo.isPending} onClick={() => syncOdoo.mutate(p.id)}>
-                              <RefreshCw className={syncOdoo.isPending && syncOdoo.variables === p.id ? 'animate-spin' : undefined} />
-                            </Button>
-                          )}
-                          {!isOdooPartner(p) && odooReady(odoo.data) && (
-                            <Button variant="ghost" size="icon-sm" aria-label={`Ánh xạ ${p.code} với Odoo`} title="Ánh xạ với đối tác Odoo" onClick={() => setLinking(p)}>
-                              <Link2 />
-                            </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label="Xóa"
-                            onClick={() => setConfirm({ title: `Xóa đối tác ${p.name}?`, description: 'Hợp đồng đã tạo vẫn giữ thông tin các bên.', destructive: true, confirmLabel: 'Xóa', onConfirm: () => remove.mutateAsync(p.id).then(() => undefined) })}
-                          >
-                            <Trash2 />
-                          </Button>
-                        </>
-                      )}
-                    </TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={search} onChange={setSearch} placeholder="Tìm theo tên, mã, MST, email…" ariaLabel="Tìm đối tác" />
+            <FilterSelect className="h-9 w-44" allLabel="Mọi phân loại" value={type} onChange={(v) => { router.replace(v ? `${pathname}?type=${v}` : pathname); }} options={PARTNER_TYPES.map((t) => ({ value: t, label: PARTNER_TYPE_LABELS[t] }))} ariaLabel="Phân loại" />
+          </>
+        }
+      >
+        <ListState query={list} empty={{ title: 'Chưa có đối tác', description: 'Thêm khách hàng, nhà cung cấp để dùng khi tạo hợp đồng.' }} />
+        {!!data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {data.items.map((p) => (
+                <MobileCard
+                  key={p.id}
+                  href={`/partners/${p.id}`}
+                  title={p.name}
+                  sub={[p.code, p.taxCode && `MST ${p.taxCode}`].filter(Boolean).join(' · ')}
+                  status={<StatusPill tone={typeTone(p.type)}>{PARTNER_TYPE_LABELS[p.type]}</StatusPill>}
+                  footer={partnerActions(p)}
+                >
+                  <span className="block text-xs text-muted-foreground">
+                    {[p.representative, p.phone, p.email].filter(Boolean).join(' · ') || '—'} · {p._count?.contractParties ?? 0} hợp đồng
+                  </span>
+                </MobileCard>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Đối tác</Th>
+                    <Th>Phân loại</Th>
+                    <Th>Mã số thuế</Th>
+                    <Th>Người đại diện</Th>
+                    <Th>Liên hệ</Th>
+                    <Th className="text-right">Hợp đồng</Th>
+                    <Th />
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-
-      {data && data.totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={page <= 1} onClick={() => setPage(page - 1)}><ChevronLeft /></Button>
-          Trang {data.page}/{data.totalPages}
-          <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={page >= data.totalPages} onClick={() => setPage(page + 1)}><ChevronRight /></Button>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {data.items.map((p) => (
+                    <TableRow
+                      key={p.id}
+                      className="cursor-pointer"
+                      onClick={() => {
+                        // Đang bôi đen để sao chép (MST, tên…) thì không mở trang.
+                        if (!window.getSelection()?.toString()) router.push(`/partners/${p.id}`);
+                      }}
+                    >
+                      <TableCell className="pl-4">
+                        <span className="flex items-center gap-2">
+                          <TitleCell icon={p.entityType === 'INDIVIDUAL' ? User : Building2} title={p.name} sub={p.code} />
+                          {isOdooPartner(p) && <Badge variant="outline" className="text-[10px]">Odoo</Badge>}
+                        </span>
+                      </TableCell>
+                      <TableCell>
+                        <StatusPill tone={typeTone(p.type)}>{PARTNER_TYPE_LABELS[p.type]}</StatusPill>
+                      </TableCell>
+                      <TableCell className="tabular-nums">{p.taxCode ?? '—'}</TableCell>
+                      <TableCell>
+                        {p.representative ?? '—'}
+                        {p.position && <div className="text-xs text-muted-foreground">{p.position}</div>}
+                      </TableCell>
+                      <TableCell className="text-xs">
+                        {p.phone && <div>{p.phone}</div>}
+                        {p.email && <div className="text-muted-foreground">{p.email}</div>}
+                        {!p.phone && !p.email && '—'}
+                      </TableCell>
+                      <TableCell className="text-right tabular-nums">{p._count?.contractParties ?? 0}</TableCell>
+                      <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
+                        {partnerActions(p)}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={data.page} totalPages={data.totalPages} total={data.total} pageSize={20} unit="đối tác" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
 
       <PartnerDialog open={!!dialog} partner={dialog?.partner} defaultType={type} onClose={() => setDialog(null)} />
       {linking && (

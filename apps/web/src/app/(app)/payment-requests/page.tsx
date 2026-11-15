@@ -6,25 +6,23 @@ import { Receipt } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { DateRange, ListCard, ListState, SearchBox, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
 import { PaymentRequestActions } from '@/components/payment-request-actions';
 import { PaymentRequestProgress } from '@/components/payment-request-progress';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
 import type { PaymentRequestListItem } from '@/lib/types';
 
-const STATUS_VARIANT: Record<PaymentRequestStatus, 'outline' | 'secondary' | 'default' | 'destructive'> = {
-  DRAFT: 'outline',
-  SENT: 'secondary',
-  PAID: 'default',
-  CANCELLED: 'destructive',
+const STATUS_TONE: Record<PaymentRequestStatus, Tone> = {
+  DRAFT: 'gray',
+  SENT: 'sky',
+  PAID: 'green',
+  CANCELLED: 'red',
 };
 
 /** Danh sách đề nghị thanh toán đã lưu: tìm theo số, khách hàng, hồ sơ; lọc trạng thái và ngày. */
@@ -50,87 +48,101 @@ export default function PaymentRequestsPage() {
     <>
       <PageHeader
         title="Đề nghị thanh toán"
-        description="Giấy đề nghị thanh toán đã lưu: in lại, theo dõi đã gửi khách hay đã thanh toán."
+        description="Giấy đề nghị thanh toán đã lưu: in lại, theo dõi đã gửi khách hay đã thanh toán"
         crumbs={[{ label: 'Đơn đặt hàng', href: '/orders' }, { label: 'Đề nghị thanh toán' }]}
         actions={
-          <Button asChild>
+          <Button asChild className="h-9">
             <Link href="/payment-requests/new">
               <Receipt /> Lập đề nghị thanh toán
             </Link>
           </Button>
         }
       />
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <Input className="w-72" placeholder="Tìm số đề nghị, kính gửi, căn cứ, số hồ sơ…" value={q} onChange={(e) => reset(setQ)(e.target.value)} aria-label="Tìm đề nghị thanh toán" />
-        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={reset(setStatus)} options={PAYMENT_REQUEST_STATUSES.map((s) => ({ value: s, label: PAYMENT_REQUEST_STATUS_LABELS[s] }))} />
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          Từ <Input type="date" className="w-40" value={from} onChange={(e) => reset(setFrom)(e.target.value)} aria-label="Từ ngày" />
-        </label>
-        <label className="flex items-center gap-1.5 text-sm text-muted-foreground">
-          đến <Input type="date" className="w-40" value={to} onChange={(e) => reset(setTo)(e.target.value)} aria-label="Đến ngày" />
-        </label>
-      </div>
-      {requests.isError ? (
-        <ErrorState error={requests.error} onRetry={() => requests.refetch()} />
-      ) : !requests.data ? (
-        <Skeleton className="h-64" />
-      ) : requests.data.items.length === 0 ? (
-        <EmptyState title="Chưa có đề nghị thanh toán đã lưu" description={canManage ? 'Bấm “Lập đề nghị thanh toán”, hoặc lập từ một đơn đặt hàng / hợp đồng rồi bấm “Lưu đề nghị”.' : undefined} />
-      ) : (
-        <>
-          <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Số đề nghị</TableHead>
-                  <TableHead>Ngày</TableHead>
-                  <TableHead>Kính gửi</TableHead>
-                  <TableHead className="text-right">Số tiền</TableHead>
-                  <TableHead>Đơn / hợp đồng</TableHead>
-                  <TableHead>Người lập</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead>Thao tác</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {requests.data.items.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell>
-                      <Link href={`/payment-requests/${r.id}`} className="font-medium whitespace-nowrap text-primary hover:underline">
-                        {r.number}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDate(r.date)}</TableCell>
-                    <TableCell>
-                      <div className="font-medium">{r.recipient}</div>
-                      {r.basis && <div className="line-clamp-1 max-w-96 text-xs text-muted-foreground">{r.basis}</div>}
-                    </TableCell>
-                    <TableCell className="text-right whitespace-nowrap tabular-nums">{formatMoney(r.amount)}</TableCell>
-                    <TableCell className="whitespace-nowrap text-sm">
-                      {r.contract ? (
-                        <Link href={`/contracts/${r.contract.id}`} className="hover:underline">
-                          {r.contract.code}
-                        </Link>
-                      ) : (
-                        '—'
-                      )}
-                    </TableCell>
-                    <TableCell className="whitespace-nowrap">{r.createdBy.fullName}</TableCell>
-                    <TableCell>
-                      <Badge variant={STATUS_VARIANT[r.status]}>{PAYMENT_REQUEST_STATUS_LABELS[r.status]}</Badge>
-                      <PaymentRequestProgress request={r} className="mt-0.5 text-xs" />
-                    </TableCell>
-                    <TableCell>
-                      <PaymentRequestActions request={r} size="sm" />
-                    </TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={q} onChange={reset(setQ)} placeholder="Tìm số đề nghị, kính gửi, căn cứ, số hồ sơ…" ariaLabel="Tìm đề nghị thanh toán" />
+            <FilterSelect className="h-9 w-40" allLabel="Mọi trạng thái" value={status} onChange={reset(setStatus)} options={PAYMENT_REQUEST_STATUSES.map((s) => ({ value: s, label: PAYMENT_REQUEST_STATUS_LABELS[s] }))} ariaLabel="Trạng thái" />
+            <DateRange from={from} to={to} onFrom={reset(setFrom)} onTo={reset(setTo)} title="Lọc theo ngày đề nghị" />
+          </>
+        }
+      >
+        <ListState
+          query={requests}
+          empty={{ title: 'Chưa có đề nghị thanh toán đã lưu', description: canManage ? 'Bấm “Lập đề nghị thanh toán”, hoặc lập từ một đơn đặt hàng / hợp đồng rồi bấm “Lưu đề nghị”.' : undefined }}
+        />
+        {!!requests.data?.items.length && (
+          <>
+            {/* Điện thoại: thẻ; nút thao tác nằm dưới thông tin. */}
+            <ul className="divide-y md:hidden">
+              {requests.data.items.map((r) => (
+                <li key={r.id} className="space-y-2 px-4 py-3">
+                  <Link href={`/payment-requests/${r.id}`} className="block space-y-1">
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="min-w-0">
+                        <span className="line-clamp-2 leading-snug font-semibold">{r.recipient}</span>
+                        <span className="block text-xs text-muted-foreground">
+                          {r.number} · {formatDate(r.date)}
+                        </span>
+                      </span>
+                      <StatusPill tone={STATUS_TONE[r.status]} className="shrink-0">
+                        {PAYMENT_REQUEST_STATUS_LABELS[r.status]}
+                      </StatusPill>
+                    </span>
+                    <span className="block font-semibold tabular-nums">{formatMoney(r.amount)}</span>
+                  </Link>
+                  <PaymentRequestProgress request={r} className="text-xs" />
+                  <PaymentRequestActions request={r} size="sm" />
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Đề nghị</Th>
+                    <Th>Ngày</Th>
+                    <Th className="text-right">Số tiền</Th>
+                    <Th>Đơn / hợp đồng</Th>
+                    <Th>Người lập</Th>
+                    <Th>Trạng thái</Th>
+                    <Th>Thao tác</Th>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-          <Pager page={requests.data.page} totalPages={requests.data.totalPages} total={requests.data.total} unit="đề nghị" onPage={setPage} />
-        </>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {requests.data.items.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="pl-4">
+                        <TitleCell icon={Receipt} href={`/payment-requests/${r.id}`} title={r.recipient} sub={r.basis ? `${r.number} · ${r.basis}` : r.number} />
+                      </TableCell>
+                      <TableCell className="tabular-nums">{formatDate(r.date)}</TableCell>
+                      <TableCell className="text-right font-medium tabular-nums">{formatMoney(r.amount)}</TableCell>
+                      <TableCell>
+                        {r.contract ? (
+                          <Link href={`/contracts/${r.contract.id}`} className="hover:text-primary hover:underline">
+                            {r.contract.code}
+                          </Link>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
+                      </TableCell>
+                      <TableCell>{r.createdBy.fullName}</TableCell>
+                      <TableCell>
+                        <StatusPill tone={STATUS_TONE[r.status]}>{PAYMENT_REQUEST_STATUS_LABELS[r.status]}</StatusPill>
+                        <PaymentRequestProgress request={r} className="mt-1 max-w-52 text-xs whitespace-normal" />
+                      </TableCell>
+                      <TableCell>
+                        <PaymentRequestActions request={r} size="sm" />
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={requests.data.page} totalPages={requests.data.totalPages} total={requests.data.total} pageSize={20} unit="đề nghị" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
     </>
   );
 }
