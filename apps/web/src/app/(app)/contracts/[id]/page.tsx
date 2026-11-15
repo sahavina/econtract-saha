@@ -1,6 +1,6 @@
 'use client';
 
-import { CONTRACT_CATEGORY_LABELS, type ContractStatus } from '@saha/shared';
+import { type ContractStatus } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Archive, ArchiveRestore, CheckCircle2, ChevronRight, Copy, FileText, FileX2, MoreHorizontal, Package, PackageMinus, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
@@ -14,6 +14,7 @@ import { ContractDocumentsTab } from '@/components/contract-documents-tab';
 import { ContractFeedbackTab, useContractFeedback } from '@/components/contract-feedback-tab';
 import { ContractLifecycleTab } from '@/components/contract-lifecycle-tab';
 import { ContractOrdersTab, OrderItemsTab } from '@/components/contract-orders';
+import { ContractOverview } from '@/components/contract-overview';
 import { OrderDeliveries } from '@/components/order-deliveries';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
@@ -33,7 +34,6 @@ import type { ContractDetail, TimelineEntry } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const ROLE_LABELS = { PARTY_A: 'Bên A', PARTY_B: 'Bên B', PARTY_C: 'Bên C', RELATED: 'Bên liên quan' } as const;
-const CONF_LABELS = { PUBLIC: 'Công khai', INTERNAL: 'Nội bộ', CONFIDENTIAL: 'Mật', SECRET: 'Tối mật' } as const;
 
 const APPROVAL_LABELS: Record<string, string> = {
   NOT_SUBMITTED: 'Chưa gửi duyệt',
@@ -111,6 +111,12 @@ export default function ContractDetailPage() {
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [liquidating, setLiquidating] = useState(false);
+  const [tab, setTab] = useState(initialTab);
+  /** Mở một tab từ nút trong tab Tổng quan và cuộn tới thanh tab. */
+  const openTab = (value: string) => {
+    setTab(value);
+    document.querySelector('[data-slot=tabs-list]')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const q = useQuery({ queryKey: ['contract', id], queryFn: () => api<ContractDetail>(`/contracts/${id}`) });
   const timeline = useQuery({ queryKey: ['contract', id, 'timeline'], queryFn: () => api<TimelineEntry[]>(`/contracts/${id}/timeline`) });
@@ -294,7 +300,7 @@ export default function ContractDetailPage() {
         </dl>
       </div>
 
-      <Tabs defaultValue={initialTab}>
+      <Tabs value={tab} onValueChange={setTab}>
         <TabsList variant="line" className="h-auto w-full justify-start gap-0 overflow-x-auto [scrollbar-width:thin] rounded-none border-b p-0 pb-px **:data-[slot=tabs-trigger]:h-10 **:data-[slot=tabs-trigger]:flex-none **:data-[slot=tabs-trigger]:px-3 **:data-[slot=tabs-trigger]:after:bottom-0 **:data-[slot=tabs-trigger]:after:bg-primary">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
           {isOrder && <TabsTrigger value="items">Hàng hóa & giao hàng ({c.items.length})</TabsTrigger>}
@@ -313,69 +319,8 @@ export default function ContractDetailPage() {
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="overview" className="mt-4 grid gap-4 lg:grid-cols-3">
-          <Card className="lg:col-span-2">
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-base">Thông tin chung</CardTitle>
-              {editInfo}
-            </CardHeader>
-            <CardContent>
-              <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Info label={isOrder ? 'Số đơn hàng' : 'Mã hợp đồng'}>{c.code}</Info>
-                <Info label={isOrder ? 'Loại đơn' : 'Loại hợp đồng'}>{c.contractType?.name}</Info>
-                {isOrder ? (
-                  <Info label="Hợp đồng nguyên tắc">
-                    {c.parentContract && (
-                      <Link href={`/contracts/${c.parentContract.id}`} className="text-primary hover:underline">
-                        {c.parentContract.code}
-                      </Link>
-                    )}
-                  </Info>
-                ) : (
-                  <>
-                    <Info label="Phân loại">{c.category ? CONTRACT_CATEGORY_LABELS[c.category] : 'Chưa phân loại'}</Info>
-                    <Info label="Nhóm hợp đồng">{c.group}</Info>
-                  </>
-                )}
-                <Info label="Phòng ban">{c.department?.name}</Info>
-                <Info label="Người phụ trách">{c.owner?.fullName}</Info>
-                <Info label="Người tạo">{c.createdBy.fullName}</Info>
-                <Info label="Mức độ bảo mật">{CONF_LABELS[c.confidentiality]}</Info>
-                <Info label="Ngày tạo">{formatDateTime(c.createdAt)}</Info>
-                <Info label="Cập nhật lần cuối">{formatDateTime(c.updatedAt)}</Info>
-                <div className="sm:col-span-2 lg:col-span-3"><Info label="Mô tả">{c.description}</Info></div>
-                <div className="sm:col-span-2 lg:col-span-3"><Info label="Ghi chú">{c.note}</Info></div>
-                <div className="sm:col-span-2 lg:col-span-3">
-                  <Info label="Tags">
-                    {c.tags.length ? <span className="flex flex-wrap gap-1">{c.tags.map((t) => <Badge key={t} variant="secondary">{t}</Badge>)}</span> : null}
-                  </Info>
-                </div>
-              </dl>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
-              <CardTitle className="text-base">Giá trị & thời hạn</CardTitle>
-              {editInfo}
-            </CardHeader>
-            <CardContent>
-              <dl className="grid gap-4">
-                <Info label={isOrder ? 'Giá trị đơn (chưa VAT)' : 'Giá trị hợp đồng'}><span className="text-lg font-semibold">{formatMoney(c.value, c.currency)}</span></Info>
-                <Info label="Thuế VAT">{c.vatRate ? `${Number(c.vatRate)}%` : null}</Info>
-                <Info label={isOrder ? 'Ngày đặt hàng' : 'Ngày dự kiến ký'}>{formatDate(c.expectedSignDate)}</Info>
-                <Info label="Ngày ký">{formatDate(c.signedDate)}</Info>
-                {isOrder ? (
-                  <>
-                    <Info label="Ngày giao hàng">{formatDate(c.deliveryDate)}</Info>
-                    <Info label="Địa điểm giao hàng">{c.deliveryAddress}</Info>
-                    <Info label="Điều kiện thanh toán">{c.paymentTerms}</Info>
-                  </>
-                ) : (
-                  <Info label="Hiệu lực">{formatDate(c.effectiveDate)} → {formatDate(c.expiryDate)}</Info>
-                )}
-              </dl>
-            </CardContent>
-          </Card>
+        <TabsContent value="overview" className="mt-4">
+          <ContractOverview contract={c} editInfo={editInfo} onOpenTab={openTab} />
         </TabsContent>
 
         {isOrder && (
