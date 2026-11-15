@@ -2,7 +2,7 @@
 
 import { fromScaled, ORDER_FULFILLMENT_LABELS, PARTNER_TYPE_LABELS, SHIPPING_NOTE_STATUS_LABELS, STOCK_ISSUE_STATUS_LABELS, toScaled } from '@saha/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, ExternalLink, FileUp, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ExternalLink, FileUp, Pencil, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -10,6 +10,7 @@ import { ContractDownloadButton } from '@/components/contract-download-button';
 import { ContractFilesButton } from '@/components/contract-files-button';
 import { FileArchiveButton } from '@/components/file-archive-button';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { PartnerDialog } from '@/components/partner-dialog';
 import { ContractStatusBadge } from '@/components/status-badge';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -99,6 +100,7 @@ export default function PartnerDetailPage() {
   const [orderPage, setOrderPage] = useState(1);
   const [issuePage, setIssuePage] = useState(1);
   const [notePage, setNotePage] = useState(1);
+  const [editing, setEditing] = useState(false);
 
   const partner = useQuery({ queryKey: ['partners', 'detail', id], queryFn: () => api<PartnerDetail>(`/partners/${id}`) });
   const odoo = useOdooConfig();
@@ -165,11 +167,24 @@ export default function PartnerDetailPage() {
           </>
         }
         crumbs={[{ label: 'Đối tác', href: '/partners' }, { label: typeLabel, href: `/partners?type=${p.type}` }, { label: p.code }]}
+        actions={
+          can('partner.manage') && (
+            <Button onClick={() => setEditing(true)}>
+              <Pencil /> Sửa thông tin
+            </Button>
+          )
+        }
       />
+      <PartnerDialog open={editing} partner={p} onClose={() => setEditing(false)} />
 
       <Card className="mb-4">
-        <CardHeader>
+        <CardHeader className="flex flex-row flex-wrap items-center justify-between gap-2">
           <CardTitle className="text-base">Thông tin chung</CardTitle>
+          {can('partner.manage') && (
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>
+              <Pencil /> Sửa thông tin
+            </Button>
+          )}
         </CardHeader>
         <CardContent>
           <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
