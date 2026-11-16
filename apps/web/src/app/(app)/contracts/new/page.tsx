@@ -4,6 +4,7 @@ import { FilePen, FileUp } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { PartnerContractForm } from '@/components/contract-form';
+import { CreateSteps } from '@/components/create-steps';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
@@ -16,11 +17,11 @@ export default function NewContractPage() {
   return (
     <>
       <PageHeader
-        title={fromFile ? 'Tạo hợp đồng từ file' : 'Tạo hợp đồng'}
+        title={fromFile ? 'Tạo hợp đồng từ file' : 'Tạo hợp đồng mới'}
         description={
           fromFile
             ? 'Tải lên bản hợp đồng có sẵn, nhập thông tin chung và các bên; sau đó gửi phê duyệt và ký như hợp đồng soạn trong hệ thống.'
-            : 'Lưu nháp thông tin chung và các bên. Nội dung, tài liệu, phê duyệt và ký sẽ bổ sung ở các bước tiếp theo.'
+            : 'Nhập thông tin chung, các bên và giá trị. Lưu bản nháp để soạn tiếp nội dung, hoặc gửi phê duyệt ngay.'
         }
         crumbs={[{ label: 'Quản lý hợp đồng', href: '/contracts' }, { label: fromFile ? 'Tạo hợp đồng từ file' : 'Tạo hợp đồng' }]}
         actions={
@@ -37,6 +38,7 @@ export default function NewContractPage() {
           </Button>
         }
       />
+      <CreateSteps />
       {can('contract.create') ? (
         // key: đổi chế độ/đối tác thì dựng lại form, không giữ tệp/giá trị của chế độ trước.
         <PartnerContractForm key={`${partner}-${fromFile}`} partnerId={partner} fromFile={fromFile} />

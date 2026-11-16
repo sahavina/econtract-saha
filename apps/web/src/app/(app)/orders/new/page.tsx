@@ -4,6 +4,7 @@ import { FilePen, FileUp } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { PartnerContractForm } from '@/components/contract-form';
+import { CreateSteps } from '@/components/create-steps';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
@@ -40,6 +41,7 @@ export default function NewOrderPage() {
           </Button>
         }
       />
+      <CreateSteps />
       {can('contract.create') ? (
         // key: đổi chế độ/hợp đồng nguyên tắc/đối tác thì dựng lại form.
         <PartnerContractForm key={`${parent}-${partner}-${quote}-${fromFile}`} kind="ORDER" parentId={parent} partnerId={partner} quoteId={quote} fromFile={fromFile} />
