@@ -3,7 +3,7 @@
 import { amountInWordsVnd, formatQtyVi } from '@saha/shared';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { setupPdfFonts } from '@/lib/pdf-fonts';
-import type { PaymentRequestDetail } from '@/lib/types';
+import type { PaymentRequestDetail, TemplateListItem } from '@/lib/types';
 
 /** Giấy đề nghị thanh toán gửi khách hàng (theo mẫu SAHA): kính gửi, căn cứ, số tiền, tài khoản thụ hưởng. */
 export interface PaymentRequest {
@@ -99,6 +99,9 @@ ${p('Trân trọng cảm ơn!')}
 </tr></tbody></table>
 </div>`;
 }
+
+/** Mẫu dành cho đề nghị thanh toán: mã có "DNTT" hoặc tên có "đề nghị thanh toán" (không dùng cho hợp đồng/đơn). */
+export const isPaymentTemplate = (t: Pick<TemplateListItem, 'code' | 'name'>) => /DNTT/i.test(t.code) || /đề nghị thanh toán/i.test(t.name);
 
 const MM = 72 / 25.4;
 

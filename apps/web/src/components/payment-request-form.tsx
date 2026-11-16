@@ -24,6 +24,7 @@ import {
   downloadPaymentRequestPdf,
   downloadPaymentRequestWord,
   fileBase,
+  isPaymentTemplate,
   openPaymentRequestPdf,
   paymentRequestHtml,
   paymentValues,
@@ -35,8 +36,6 @@ import type { ContractDetail, PaymentRequestDetail, QuoteDetail, TemplateDetail,
 /** Mẫu dựng sẵn theo giấy đề nghị SAHA (không thuộc thư viện mẫu). */
 const BUILT_IN = '';
 const MISSING_MARK = /<mark data-missing="(?:empty|unknown)">\{\{[^<]*?\}\}<\/mark>/g;
-/** Chỉ mẫu dành cho đề nghị thanh toán: mã có "DNTT" hoặc tên có "đề nghị thanh toán". */
-const isPaymentTemplate = (t: TemplateListItem) => /DNTT/i.test(t.code) || /đề nghị thanh toán/i.test(t.name);
 
 const today = () => {
   const d = new Date();

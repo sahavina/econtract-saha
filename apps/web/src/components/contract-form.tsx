@@ -77,6 +77,7 @@ import { readXlsx } from '@/lib/xlsx';
 import { attachMainDocument, DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
 import { formatMoney, toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
+import { isPaymentTemplate } from '@/lib/payment-request';
 import { useLookups } from '@/lib/queries';
 import type { ContractDetail, ContractDocument, ContractKind, ContractListItem, Partner, Product, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
 
@@ -886,10 +887,11 @@ export function ContractForm({
     queryFn: () => api<Paginated<TemplateListItem>>('/templates', { query: { usable: true, pageSize: 100 } }),
     enabled: !isEdit,
   });
-  // Loại và mẫu theo đúng loại chứng từ: đơn chỉ thấy loại/mẫu "Đơn đặt hàng"; mẫu chưa gắn loại dùng được cho cả hai.
+  // Loại và mẫu theo đúng loại chứng từ: đơn chỉ thấy loại/mẫu "Đơn đặt hàng"; mẫu chưa gắn loại dùng được cho cả hai,
+  // trừ mẫu đề nghị thanh toán (chỉ dùng ở trang Đề nghị thanh toán).
   const kindTypes = (lookups.data?.contractTypes ?? []).filter((t) => (t.kind ?? 'CONTRACT') === kind);
   const typeKind = (id?: string) => lookups.data?.contractTypes.find((t) => t.id === id)?.kind ?? 'CONTRACT';
-  const kindTemplates = (templates.data?.items ?? []).filter((t) => !t.contractType || typeKind(t.contractType.id) === kind);
+  const kindTemplates = (templates.data?.items ?? []).filter((t) => (t.contractType ? typeKind(t.contractType.id) === kind : !isPaymentTemplate(t)));
   const selectedTemplate = templates.data?.items.find((t) => t.id === templateId);
   const selectedType =
     lookups.data?.contractTypes.find((t) => t.id === contractTypeId) ??
