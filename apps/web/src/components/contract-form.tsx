@@ -14,21 +14,25 @@ import {
   itemAmount,
   orderTotals,
   renderTemplate,
+  variableLabel,
 } from '@saha/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   ArrowRight,
   Check,
+  CircleCheck,
   ChevronDown,
   ChevronRight,
   CloudDownload,
   CloudUpload,
   Coins,
   Eye,
+  FilePlus2,
   FileText,
   FolderOpen,
   Info,
+  LayoutTemplate,
   Loader2,
   type LucideIcon,
   PackagePlus,
@@ -551,7 +555,9 @@ export function ContractForm({
   const [files, setFiles] = useState<File[]>([]);
   const [moreOpen, setMoreOpen] = useState(isEdit);
   const moreRef = useRef<HTMLDivElement>(null);
-  const [previewTemplate, setPreviewTemplate] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [templateSearch, setTemplateSearch] = useState('');
+  const templateRef = useRef<HTMLDivElement>(null);
   const [previewImported, setPreviewImported] = useState(false);
   const [editingImported, setEditingImported] = useState(false);
   /** Nội dung hợp đồng chuyển từ file Word (chỉ khi lập mới, không chọn mẫu). */
@@ -902,10 +908,7 @@ export function ContractForm({
               <button
                 type="button"
                 className="font-medium text-primary hover:underline"
-                onClick={() => {
-                  setMoreOpen(true);
-                  requestAnimationFrame(() => moreRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
-                }}
+                onClick={() => templateRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
               >
                 Chưa có file? Chọn mẫu {isOrder ? 'đơn' : 'hợp đồng'}
               </button>
@@ -1052,41 +1055,98 @@ export function ContractForm({
     return type === 'CUSTOMER' ? 'Bên mua' : type === 'SUPPLIER' ? 'Bên bán' : '';
   };
 
+  /** Chọn mẫu: đổi mẫu ⇒ gợi ý phân loại bên; mẫu gắn loại hợp đồng mà form chưa chọn loại ⇒ điền loại theo mẫu. */
+  const pickTemplate = (id: string) => {
+    setValue('templateId', id, { shouldDirty: true });
+    const t = kindTemplates.find((x) => x.id === id);
+    if (t?.contractType && !form.getValues('contractTypeId') && kindTypes.some((k) => k.id === t.contractType?.id)) {
+      setValue('contractTypeId', t.contractType.id, { shouldDirty: true });
+    }
+    suggestEmptyPartyTypes();
+  };
+  const templateQuery = foldVi(templateSearch.trim());
+  const shownTemplates = templateQuery
+    ? kindTemplates.filter((t) => foldVi(`${t.name} ${t.code} ${t.description ?? ''} ${t.contractType?.name ?? ''}`).includes(templateQuery))
+    : kindTemplates;
+
   const templatePicker = !isEdit && (!fromFile || isOrder) && (
-    <div className="space-y-2 md:col-span-2">
-      <Label>{isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}</Label>
-      <div className="flex flex-wrap items-center gap-2">
-        <Controller
-          control={control}
-          name="templateId"
-          render={({ field }) => (
-            <FilterSelect
-              className="w-full md:w-96"
-              allLabel={isOrder ? '— Không dùng mẫu (nội dung đơn mặc định) —' : '— Không dùng mẫu (soạn từ đầu) —'}
-              value={field.value}
-              onChange={(v) => {
-                field.onChange(v ?? '');
-                suggestEmptyPartyTypes();
-              }}
-              options={kindTemplates.map((t) => ({ value: t.id, label: `${t.name} · v${t.version}` }))}
-              ariaLabel={isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}
+    <div ref={templateRef} className="scroll-mt-20">
+      <FormSection
+        icon={LayoutTemplate}
+        title={isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}
+        action={
+          kindTemplates.length > 4 && (
+            <Input
+              value={templateSearch}
+              onChange={(e) => setTemplateSearch(e.target.value)}
+              placeholder="Tìm mẫu…"
+              className="hidden h-8 w-48 sm:block"
+              aria-label="Tìm mẫu"
             />
-          )}
-        />
-        {templateId && (
-          <Button type="button" variant="outline" onClick={() => setPreviewTemplate(true)}>
-            <Eye /> Xem trước mẫu
-          </Button>
+          )
+        }
+      >
+        <p className="mb-3 text-sm text-muted-foreground">
+          {isOrder
+            ? 'Chọn mẫu đơn có sẵn, hoặc dùng nội dung đơn mặc định có sẵn bảng hàng hóa. Bấm “Xem trước” để xem mẫu trên trang A4.'
+            : 'Chọn mẫu để sao chép sẵn nội dung và loại hợp đồng; bấm “Xem trước” để xem mẫu trên trang A4 trước khi chọn. Có thể soạn lại nội dung sau khi tạo.'}
+        </p>
+        {kindTemplates.length > 4 && (
+          <Input value={templateSearch} onChange={(e) => setTemplateSearch(e.target.value)} placeholder="Tìm mẫu…" className="mb-3 sm:hidden" aria-label="Tìm mẫu" />
         )}
-      </div>
-      {previewTemplate && templateId && <TemplatePreviewDialog templateId={templateId} kind={kind} open onClose={() => setPreviewTemplate(false)} />}
-      <p className="text-xs text-muted-foreground">
-        {selectedTemplate
-          ? `${selectedTemplate.description ?? selectedTemplate.name}${selectedTemplate.requiredVariables.length > 0 ? ` · Dữ liệu bắt buộc: ${selectedTemplate.requiredVariables.map((k) => `{{${k}}}`).join(', ')}` : ''}`
-          : isOrder
-            ? 'Chọn mẫu đơn có sẵn, hoặc dùng nội dung đơn mặc định có sẵn bảng hàng hóa – sửa tiếp ở tab Nội dung sau khi tạo.'
-            : 'Chọn mẫu để sao chép sẵn nội dung và loại hợp đồng; có thể soạn lại sau khi tạo.'}
-      </p>
+        {templates.isPending ? (
+          <Skeleton className="h-28" />
+        ) : (
+          <div className="grid max-h-[26rem] gap-3 overflow-y-auto p-0.5 sm:grid-cols-2" role="radiogroup" aria-label={isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}>
+            <TemplateChoice
+              selected={!templateId}
+              onSelect={() => pickTemplate('')}
+              icon={FilePlus2}
+              title={isOrder ? 'Nội dung đơn mặc định' : 'Soạn từ đầu'}
+              description={isOrder ? 'Đơn đặt hàng chuẩn có sẵn bảng hàng hóa.' : 'Không dùng mẫu; soạn nội dung ở bước tiếp theo.'}
+            />
+            {shownTemplates.map((t) => (
+              <TemplateChoice
+                key={t.id}
+                selected={templateId === t.id}
+                onSelect={() => pickTemplate(t.id)}
+                icon={FileText}
+                title={t.name}
+                sub={`${t.code} · v${t.version}`}
+                badge={t.contractType?.name}
+                description={t.description ?? undefined}
+                onPreview={() => setPreviewId(t.id)}
+              />
+            ))}
+            {templateQuery && shownTemplates.length === 0 && <p className="py-4 text-sm text-muted-foreground sm:col-span-2">Không tìm thấy mẫu phù hợp “{templateSearch}”.</p>}
+          </div>
+        )}
+        {selectedTemplate && selectedTemplate.requiredVariables.length > 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Mẫu cần dữ liệu: {selectedTemplate.requiredVariables.map((k) => variableLabel(k)).join(', ')}
+          </p>
+        )}
+        {!templates.isPending && kindTemplates.length === 0 && (
+          <p className="mt-3 text-xs text-muted-foreground">Chưa có mẫu đang dùng được – tạo mẫu ở Soạn thảo → Mẫu hợp đồng.</p>
+        )}
+      </FormSection>
+      {previewId && (
+        <TemplatePreviewDialog
+          templateId={previewId}
+          kind={kind}
+          open
+          onClose={() => setPreviewId(null)}
+          onUse={
+            templateId === previewId
+              ? undefined
+              : () => {
+                  pickTemplate(previewId);
+                  setPreviewId(null);
+                  toast.success('Đã chọn mẫu');
+                }
+          }
+        />
+      )}
     </div>
   );
 
@@ -1121,6 +1181,7 @@ export function ContractForm({
       )}
       <form id="contract-form" onSubmit={submit(isEdit ? 'draft' : 'continue')} className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start" noValidate>
         <div className="min-w-0 space-y-5">
+          {templatePicker}
           <FormSection icon={FileText} title={isOrder ? 'Thông tin đơn hàng' : 'Thông tin hợp đồng'}>
             <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
               <Field label={req(isOrder ? 'Tên đơn hàng' : 'Tên hợp đồng')} error={errors.title?.message}>
@@ -1388,7 +1449,6 @@ export function ContractForm({
               }
             >
               <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
-                {templatePicker}
                 {!isOrder && (
                   <Field label="Phân loại hợp đồng">
                     <Controller
@@ -1556,6 +1616,74 @@ function FormSection({
       </header>
       {!collapsed && <div className={bodyClassName ?? 'p-5'}>{children}</div>}
     </section>
+  );
+}
+
+/** Một lựa chọn mẫu dạng thẻ: bấm để chọn, nút "Xem trước" mở mẫu trên trang A4. */
+function TemplateChoice({
+  selected,
+  onSelect,
+  icon: Icon,
+  title,
+  sub,
+  badge,
+  description,
+  onPreview,
+}: {
+  selected: boolean;
+  onSelect: () => void;
+  icon: LucideIcon;
+  title: string;
+  sub?: string;
+  badge?: string;
+  description?: string;
+  onPreview?: () => void;
+}) {
+  return (
+    <div
+      role="radio"
+      aria-checked={selected}
+      tabIndex={0}
+      onClick={onSelect}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          onSelect();
+        }
+      }}
+      className={`flex cursor-pointer flex-col gap-2 rounded-lg border p-3 text-left transition-colors outline-none hover:border-primary/50 focus-visible:ring-2 focus-visible:ring-ring ${selected ? 'border-primary bg-primary/[0.04] ring-1 ring-primary' : 'bg-card'}`}
+    >
+      <div className="flex items-start gap-3">
+        <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${selected ? 'bg-primary text-primary-foreground' : 'bg-primary/10 text-primary'}`}>
+          <Icon className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <p className="line-clamp-2 text-sm leading-snug font-semibold">{title}</p>
+          {sub && <p className="text-xs text-muted-foreground">{sub}</p>}
+        </div>
+        {selected ? <CircleCheck className="size-5 shrink-0 text-primary" aria-hidden /> : <span className="size-5 shrink-0 rounded-full border-2 border-muted-foreground/30" aria-hidden />}
+      </div>
+      {description && <p className="line-clamp-2 text-xs text-muted-foreground">{description}</p>}
+      {(badge || onPreview) && (
+        <div className="mt-auto flex items-center gap-2">
+          {badge && <StatusPill tone="indigo">{badge}</StatusPill>}
+          {onPreview && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="ml-auto h-7 text-primary hover:text-primary"
+              onClick={(e) => {
+                e.stopPropagation();
+                onPreview();
+              }}
+            >
+              <Eye /> Xem trước
+            </Button>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 

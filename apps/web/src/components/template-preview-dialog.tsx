@@ -2,7 +2,7 @@
 
 import { buildTemplateValues, renderTemplate, type TemplateContract, variableLabel } from '@saha/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Download, Loader2 } from 'lucide-react';
+import { Check, Download, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { FilterSelect } from '@/components/filter-select';
@@ -75,12 +75,15 @@ export function TemplatePreviewDialog({
   kind,
   open,
   onClose,
+  onUse,
 }: {
   templateId: string;
   html?: string;
   kind: ContractKind;
   open: boolean;
   onClose: () => void;
+  /** Mở từ form tạo hồ sơ: nút "Dùng mẫu này" chọn mẫu đang xem. */
+  onUse?: () => void;
 }) {
   const company = useCompanyProfile(open);
   const [sourceId, setSourceId] = useState(SAMPLE);
@@ -144,6 +147,11 @@ export function TemplatePreviewDialog({
               <Button variant="outline" size="sm" disabled={!rendered || exporting} onClick={exportPdf}>
                 {exporting ? <Loader2 className="animate-spin" /> : <Download />} Tải PDF xem trước
               </Button>
+              {onUse && (
+                <Button size="sm" className="sm:ml-auto" onClick={onUse}>
+                  <Check /> Dùng mẫu này
+                </Button>
+              )}
             </div>
             {rendered && rendered.missing.length + rendered.unknown.length > 0 && (
               <p className="pt-1 text-xs text-amber-700 dark:text-amber-400">
