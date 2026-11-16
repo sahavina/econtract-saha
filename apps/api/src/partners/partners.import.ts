@@ -29,6 +29,7 @@ export interface ImportRowResult {
 export interface PlannedRow {
   action: 'create' | 'update';
   existingId?: string;
+  /** Cập nhật: chỉ gồm mã và các cột có giá trị trong file. */
   data: PartnerInput;
 }
 
@@ -123,7 +124,14 @@ export function planPartnerImport(
       return;
     }
     const action = found ? 'update' : 'create';
-    planned.push({ action, existingId: found?.id, data: parsed.data });
+    // Cập nhật: chỉ ghi các cột có giá trị trong file – ô trống / thiếu cột giữ nguyên dữ liệu đang có
+    // (kể cả Phân loại, Loại pháp nhân: không đặt lại về mặc định).
+    const data = found
+      ? (Object.fromEntries(
+          Object.entries(parsed.data).filter(([k]) => k === 'code' || (k === 'ownerId' ? !!ownerId : !!text(raw[k]))),
+        ) as PartnerInput)
+      : parsed.data;
+    planned.push({ action, existingId: found?.id, data });
     results.push({ row, code, name, action, errors: [] });
   });
 

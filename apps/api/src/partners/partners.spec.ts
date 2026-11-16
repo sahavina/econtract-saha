@@ -111,4 +111,9 @@ describe('planPartnerImport – nhập đối tác từ Excel', () => {
     expect(r.rows[5].errors[0]).toContain('dòng 2');
     expect(r.rows[1].row).toBe(3);
   });
+
+  it('cập nhật chỉ ghi các cột có giá trị – ô trống giữ nguyên, không đặt lại phân loại', () => {
+    const r = planPartnerImport({ updateExisting: true, rows: [{ code: 'KH01', name: 'Tên mới', phone: '0912', email: '' }] }, existing, users);
+    expect(r.planned[0].data).toEqual({ code: 'KH01', name: 'Tên mới', phone: '0912' });
+  });
 });

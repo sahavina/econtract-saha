@@ -191,7 +191,7 @@ export function PartnerImportDialog({ open, onClose }: { open: boolean; onClose:
 
           <label className="flex items-center gap-2 text-sm">
             <Checkbox checked={updateExisting} disabled={busy} onCheckedChange={(v) => toggleUpdate(!!v)} />
-            Cập nhật đối tác đã có (trùng mã) theo dữ liệu trong file
+            Cập nhật đối tác đã có (trùng mã) theo dữ liệu trong file – ô để trống giữ nguyên thông tin cũ
           </label>
 
           {error && (
