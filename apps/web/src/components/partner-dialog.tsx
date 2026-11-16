@@ -8,6 +8,7 @@ import { useEffect } from 'react';
 import { Controller, useForm } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
+import { FilterSelect } from '@/components/filter-select';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -15,6 +16,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError } from '@/lib/api';
+import { useLookups } from '@/lib/queries';
 import type { Partner } from '@/lib/types';
 
 /** Thêm / sửa đối tác (dùng ở danh sách đối tác và trang chi tiết đối tác). */
@@ -31,6 +33,7 @@ const schema = z.object({
   representative: z.string(),
   position: z.string(),
   note: z.string(),
+  ownerId: z.string(),
 });
 type FormValues = z.infer<typeof schema>;
 
@@ -47,6 +50,7 @@ const toForm = (p?: Partner, type?: PartnerType): FormValues => ({
   representative: p?.representative ?? '',
   position: p?.position ?? '',
   note: p?.note ?? '',
+  ownerId: p?.ownerId ?? '',
 });
 
 export function PartnerDialog({ open, partner, defaultType, onClose }: { open: boolean; partner?: Partner; defaultType?: PartnerType; onClose: () => void }) {
@@ -54,6 +58,7 @@ export function PartnerDialog({ open, partner, defaultType, onClose }: { open: b
   const form = useForm<FormValues>({ resolver: zodResolver(schema), defaultValues: toForm(partner, defaultType) });
   useEffect(() => form.reset(toForm(partner, defaultType)), [open, partner, defaultType, form]);
   const errors = form.formState.errors;
+  const users = useLookups().data?.users ?? [];
 
   const save = useMutation({
     meta: { silent: true },
@@ -122,6 +127,24 @@ export function PartnerDialog({ open, partner, defaultType, onClose }: { open: b
           {F({ name: "phone", label: "Điện thoại" })}
           {F({ name: "representative", label: "Người đại diện" })}
           {F({ name: "position", label: "Chức vụ" })}
+          <div className="space-y-1.5">
+            <Label>Người phụ trách</Label>
+            <Controller
+              control={form.control}
+              name="ownerId"
+              render={({ field }) => (
+                <FilterSelect
+                  value={field.value}
+                  onChange={(v) => field.onChange(v ?? '')}
+                  options={users.map((u) => ({ value: u.id, label: u.fullName }))}
+                  allLabel="— Không —"
+                  ariaLabel="Người phụ trách"
+                  className="w-full"
+                />
+              )}
+            />
+            {errors.ownerId && <p className="text-xs text-destructive">{errors.ownerId.message}</p>}
+          </div>
           <div className="space-y-1.5 sm:col-span-2">
             <Label htmlFor="p-note">Ghi chú</Label>
             <Textarea id="p-note" rows={2} {...form.register('note')} />

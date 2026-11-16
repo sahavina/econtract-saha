@@ -137,7 +137,16 @@ export interface Partner {
   note: string | null;
   createdAt: string;
   _count?: { contractParties: number };
+  /** Nhân viên phụ trách đối tác. */
+  ownerId?: string | null;
+  owner?: { id: string; fullName: string } | null;
+  /** Chỉ có ở danh sách: tổng giá trị, số hợp đồng (trong phạm vi được xem), tình trạng hợp tác. */
+  totalValue?: string;
+  contractCount?: number;
+  cooperation?: PartnerCooperation;
 }
+
+export type PartnerCooperation = 'ACTIVE' | 'NEGOTIATING' | 'ENDED' | 'NONE';
 
 export interface PartnerContact {
   id: string;

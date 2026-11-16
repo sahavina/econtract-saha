@@ -24,6 +24,8 @@ const partnerFields = z.object({
   position: nullableText(255),
   externalRef: nullableText(100),
   note: nullableText(2000),
+  /** Nhân viên phụ trách đối tác; '' ⇒ bỏ chọn. */
+  ownerId: z.preprocess((v) => (v === '' ? null : v), z.uuid('Người phụ trách không hợp lệ').nullable().optional()),
 });
 
 export const partnerInputSchema = partnerFields.extend({
@@ -38,5 +40,6 @@ export type PartnerUpdate = z.infer<typeof partnerUpdateSchema>;
 export const partnerQuerySchema = paginationSchema.extend({
   q: optionalString,
   type: z.preprocess((v) => (v === '' ? undefined : v), z.enum(PARTNER_TYPES).optional()),
+  ownerId: z.preprocess((v) => (v === '' ? undefined : v), z.uuid().optional()),
 });
 export type PartnerQuery = z.infer<typeof partnerQuerySchema>;

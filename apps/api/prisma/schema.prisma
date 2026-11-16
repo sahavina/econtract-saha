@@ -191,6 +191,7 @@ model User {
   roles               UserRole[]
   sessions            Session[]
   ownedContracts      Contract[]                @relation("ContractOwner")
+  ownedPartners       Partner[]                 @relation("PartnerOwner")
   createdContracts    Contract[]                @relation("ContractCreator")
   stockIssues         StockIssue[]
   shippingNotes       ShippingNote[]
@@ -331,10 +332,13 @@ model Partner {
   position        String?
   externalRef     String?
   note            String?
+  /// Nhân viên phụ trách quan hệ với đối tác (tùy chọn)
+  ownerId         String?          @db.Uuid
   deletedAt       DateTime?
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
   tenant          Tenant           @relation(fields: [tenantId], references: [id])
+  owner           User?            @relation("PartnerOwner", fields: [ownerId], references: [id], onDelete: SetNull)
   contacts        PartnerContact[]
   contractParties ContractParty[]
   quotes          Quote[]
@@ -343,6 +347,7 @@ model Partner {
   /// Liên kết hệ thống ngoài, ví dụ "odoo:1831" – mỗi bản ghi ngoài chỉ nhập một lần.
   @@unique([tenantId, externalRef])
   @@index([tenantId, type])
+  @@index([tenantId, ownerId])
 }
 
 model PartnerContact {
@@ -621,7 +626,7 @@ model ContractTemplate {
   createdBy         User                      @relation("TemplateCreator", fields: [createdById], references: [id])
   versions          ContractTemplateVersion[]
   contracts         Contract[]
-  paymentRequests PaymentRequest[]
+  paymentRequests   PaymentRequest[]
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
@@ -1163,18 +1168,18 @@ model ContractFeedback {
 
 /// Danh mục sản phẩm/hàng hóa dùng cho dòng hàng của đơn đặt hàng.
 model Product {
-  id          String         @id @default(uuid()) @db.Uuid
-  tenantId    String         @db.Uuid
+  id          String           @id @default(uuid()) @db.Uuid
+  tenantId    String           @db.Uuid
   code        String
   name        String
   unit        String?
-  unitPrice   Decimal        @default(0) @db.Decimal(20, 2)
-  vatRate     Decimal?       @db.Decimal(5, 2)
+  unitPrice   Decimal          @default(0) @db.Decimal(20, 2)
+  vatRate     Decimal?         @db.Decimal(5, 2)
   description String?
-  isActive    Boolean        @default(true)
-  createdAt   DateTime       @default(now())
-  updatedAt   DateTime       @updatedAt
-  tenant      Tenant         @relation(fields: [tenantId], references: [id])
+  isActive    Boolean          @default(true)
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+  tenant      Tenant           @relation(fields: [tenantId], references: [id])
   items       ContractItem[]
   issueItems  StockIssueItem[]
   quoteItems  QuoteItem[]

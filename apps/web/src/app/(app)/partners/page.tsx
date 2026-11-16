@@ -22,6 +22,7 @@ import {
   Trash2,
   Truck,
   User,
+  UserCheck,
   Users,
   X,
 } from 'lucide-react';
@@ -30,7 +31,8 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
-import { ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, type Tone } from '@/components/list-ui';
+import { FilterSelect } from '@/components/filter-select';
+import { InitialsAvatar, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, type Tone } from '@/components/list-ui';
 import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
 import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
@@ -46,7 +48,8 @@ import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import { isOdooPartner, odooReady, useOdooConfig } from '@/lib/odoo';
-import type { ContractListItem, Partner } from '@/lib/types';
+import { useLookups } from '@/lib/queries';
+import type { ContractListItem, Partner, PartnerCooperation } from '@/lib/types';
 import { cn } from '@/lib/utils';
 
 const TYPE_TONE: Record<PartnerType, Tone> = { CUSTOMER: 'sky', SUPPLIER: 'violet', BOTH: 'teal', OTHER: 'gray' };
@@ -57,6 +60,14 @@ const TABS: { value: PartnerType | undefined; label: string }[] = [
   { value: 'BOTH', label: 'KH & NCC' },
   { value: 'OTHER', label: 'Khác' },
 ];
+/** Tình trạng hợp tác (suy ra từ hợp đồng người dùng được xem). */
+const COOPERATION: Record<PartnerCooperation, { label: string; tone: Tone }> = {
+  ACTIVE: { label: 'Đang hợp tác', tone: 'green' },
+  NEGOTIATING: { label: 'Đang đàm phán', tone: 'amber' },
+  ENDED: { label: 'Đã kết thúc', tone: 'gray' },
+  NONE: { label: 'Chưa có hợp đồng', tone: 'gray' },
+};
+const contractCountOf = (p: Partner) => p.contractCount ?? p._count?.contractParties ?? 0;
 const AVATAR_TONES = ['bg-indigo-100 text-indigo-700', 'bg-sky-100 text-sky-700', 'bg-emerald-100 text-emerald-700', 'bg-violet-100 text-violet-700', 'bg-amber-100 text-amber-700', 'bg-rose-100 text-rose-700'];
 
 /** Chữ viết tắt tên công ty: bỏ "Công ty", "TNHH", "Cổ phần"… lấy 2 chữ đầu của tên riêng. */
@@ -113,6 +124,7 @@ function PartnerPanel({ partner: p, onClose, onEdit, canCreate }: { partner: Par
   });
   const rows: { icon: typeof Users; label: string; value: React.ReactNode }[] = [
     { icon: IdCard, label: 'Mã số thuế', value: p.taxCode },
+    { icon: UserCheck, label: 'Người phụ trách', value: p.owner?.fullName },
     { icon: User, label: 'Người đại diện', value: p.representative && `${p.representative}${p.position ? ` · ${p.position}` : ''}` },
     { icon: Mail, label: 'Email', value: p.email },
     { icon: Phone, label: 'Điện thoại', value: p.phone },
@@ -127,6 +139,7 @@ function PartnerPanel({ partner: p, onClose, onEdit, canCreate }: { partner: Par
             <p className="text-lg leading-snug font-semibold">{p.name}</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <StatusPill tone={TYPE_TONE[p.type]}>{PARTNER_TYPE_LABELS[p.type]}</StatusPill>
+              {p.cooperation && <StatusPill tone={COOPERATION[p.cooperation].tone}>{COOPERATION[p.cooperation].label}</StatusPill>}
               <span className="text-xs text-muted-foreground">{p.code}</span>
               {isOdooPartner(p) && (
                 <Badge variant="outline" className="text-[10px]">
@@ -141,6 +154,18 @@ function PartnerPanel({ partner: p, onClose, onEdit, canCreate }: { partner: Par
         </Button>
       </div>
       <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5">
+        {p.totalValue !== undefined && (
+          <div className="grid grid-cols-2 gap-2">
+            <div className="rounded-xl bg-muted/50 p-3">
+              <p className="text-xs text-muted-foreground">Tổng giá trị hợp đồng</p>
+              <p className="mt-0.5 font-semibold tabular-nums">{formatMoney(p.totalValue)}</p>
+            </div>
+            <div className="rounded-xl bg-muted/50 p-3">
+              <p className="text-xs text-muted-foreground">Số hợp đồng</p>
+              <p className="mt-0.5 font-semibold tabular-nums">{contractCountOf(p)}</p>
+            </div>
+          </div>
+        )}
         <dl className="space-y-3 text-sm">
           {rows.map((r) => (
             <div key={r.label} className="grid grid-cols-[1.25rem_7rem_1fr] items-start gap-2">
@@ -232,6 +257,8 @@ export default function PartnersPage() {
   /** Đối tác đang ánh xạ với Odoo (mở hộp thoại tìm trên Odoo). */
   const [linking, setLinking] = useState<Partner | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [ownerId, setOwnerId] = useState<string | undefined>();
+  const users = useLookups().data?.users ?? [];
   const odoo = useOdooConfig();
   const setType = (v: PartnerType | undefined) => router.replace(v ? `${pathname}?type=${v}` : pathname);
 
@@ -245,8 +272,8 @@ export default function PartnersPage() {
   }, [search]);
 
   const list = useQuery({
-    queryKey: ['partners', { type, q: debounced, page }],
-    queryFn: () => api<Paginated<Partner>>('/partners', { query: { type, q: debounced, page, pageSize: 20 } }),
+    queryKey: ['partners', { type, q: debounced, ownerId, page }],
+    queryFn: () => api<Paginated<Partner>>('/partners', { query: { type, q: debounced, ownerId, page, pageSize: 20 } }),
     placeholderData: keepPreviousData,
   });
   // Số đối tác theo từng phân loại (thẻ số liệu, tab).
@@ -404,6 +431,17 @@ export default function PartnersPage() {
           <ListCard>
             <div className="flex flex-wrap items-center gap-2 border-b px-3 py-3">
               <SearchBox value={search} onChange={setSearch} placeholder="Tìm đối tác theo tên, mã, mã số thuế, email…" ariaLabel="Tìm đối tác" />
+              <FilterSelect
+                value={ownerId}
+                onChange={(v) => {
+                  setOwnerId(v);
+                  setPage(1);
+                }}
+                options={users.map((u) => ({ value: u.id, label: u.fullName }))}
+                allLabel="Tất cả người phụ trách"
+                ariaLabel="Lọc theo người phụ trách"
+                className="w-full sm:w-56"
+              />
             </div>
             <div className="flex items-end gap-1 overflow-x-auto border-b px-3 [scrollbar-width:thin]">
               {TABS.map((t) => {
@@ -436,11 +474,15 @@ export default function PartnersPage() {
                       href={`/partners/${p.id}`}
                       title={p.name}
                       sub={[p.code, p.taxCode && `MST ${p.taxCode}`].filter(Boolean).join(' · ')}
-                      status={<StatusPill tone={TYPE_TONE[p.type]}>{PARTNER_TYPE_LABELS[p.type]}</StatusPill>}
+                      status={p.cooperation ? <StatusPill tone={COOPERATION[p.cooperation].tone}>{COOPERATION[p.cooperation].label}</StatusPill> : <StatusPill tone={TYPE_TONE[p.type]}>{PARTNER_TYPE_LABELS[p.type]}</StatusPill>}
                       actions={partnerMenu(p)}
                     >
                       <span className="block text-xs text-muted-foreground">
-                        {[p.representative, p.phone, p.email].filter(Boolean).join(' · ') || '—'} · {p._count?.contractParties ?? 0} hợp đồng
+                        {[p.representative, p.phone, p.email].filter(Boolean).join(' · ') || '—'} · {contractCountOf(p)} hợp đồng
+                      </span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">
+                        {PARTNER_TYPE_LABELS[p.type]} · <span className="font-medium text-foreground tabular-nums">{formatMoney(p.totalValue ?? '0')}</span>
+                        {p.owner && <> · Phụ trách: {p.owner.fullName}</>}
                       </span>
                     </MobileCard>
                   ))}
@@ -451,9 +493,11 @@ export default function PartnersPage() {
                       <TableRow className="hover:bg-transparent">
                         <Th className="pl-4">Tên đối tác</Th>
                         <Th className={cn(compact && 'hidden')}>Người liên hệ</Th>
-                        <Th className={cn(compact && 'hidden')}>Email / Điện thoại</Th>
+                        <Th className={cn('hidden', !compact && '2xl:table-cell')}>Email / Điện thoại</Th>
                         <Th>Phân loại</Th>
-                        <Th className="text-right">Hợp đồng</Th>
+                        <Th className="text-right">Tổng giá trị</Th>
+                        <Th>Trạng thái hợp tác</Th>
+                        <Th className={cn(compact && 'hidden')}>Người phụ trách</Th>
                         <Th className="text-right">Thao tác</Th>
                       </TableRow>
                     </TableHeader>
@@ -486,7 +530,7 @@ export default function PartnersPage() {
                             <span className="block font-medium">{p.representative ?? '—'}</span>
                             {p.position && <span className="block text-xs text-muted-foreground">{p.position}</span>}
                           </TableCell>
-                          <TableCell className={cn('text-sm', compact && 'hidden')}>
+                          <TableCell className={cn('hidden text-sm', !compact && '2xl:table-cell')}>
                             {p.email && (
                               <span className="flex items-center gap-1.5">
                                 <Mail className="size-3.5 text-muted-foreground" /> {p.email}
@@ -502,7 +546,21 @@ export default function PartnersPage() {
                           <TableCell>
                             <StatusPill tone={TYPE_TONE[p.type]}>{PARTNER_TYPE_LABELS[p.type]}</StatusPill>
                           </TableCell>
-                          <TableCell className="text-right font-medium tabular-nums">{p._count?.contractParties ?? 0}</TableCell>
+                          <TableCell className="text-right whitespace-nowrap">
+                            <span className="block font-semibold tabular-nums">{formatMoney(p.totalValue ?? '0')}</span>
+                            <span className="block text-xs text-muted-foreground">{contractCountOf(p)} hợp đồng</span>
+                          </TableCell>
+                          <TableCell>{p.cooperation && <StatusPill tone={COOPERATION[p.cooperation].tone}>{COOPERATION[p.cooperation].label}</StatusPill>}</TableCell>
+                          <TableCell className={cn(compact && 'hidden')}>
+                            {p.owner ? (
+                              <span className="flex items-center gap-2 whitespace-nowrap">
+                                <InitialsAvatar name={p.owner.fullName} className="size-7 text-[10px]" />
+                                <span className="text-sm font-medium">{p.owner.fullName}</span>
+                              </span>
+                            ) : (
+                              <span className="text-muted-foreground">—</span>
+                            )}
+                          </TableCell>
                           <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
                             {partnerMenu(p)}
                           </TableCell>

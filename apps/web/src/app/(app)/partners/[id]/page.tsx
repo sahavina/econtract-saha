@@ -194,6 +194,7 @@ export default function PartnerDetailPage() {
             <Info label="Tên viết tắt">{p.shortName}</Info>
             <Info label="Mã số thuế">{p.taxCode}</Info>
             {p.idNumber && <Info label="Số giấy tờ">{p.idNumber}</Info>}
+            <Info label="Người phụ trách">{p.owner?.fullName}</Info>
             <Info label="Người đại diện">{p.representative && `${p.representative}${p.position ? ` (${p.position})` : ''}`}</Info>
             <Info label="Email">{p.email}</Info>
             <Info label="Điện thoại">{p.phone}</Info>
