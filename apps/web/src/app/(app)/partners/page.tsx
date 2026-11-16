@@ -8,6 +8,7 @@ import {
   CloudDownload,
   Eye,
   FilePlus2,
+  FileSpreadsheet,
   FileText,
   IdCard,
   Link2,
@@ -34,6 +35,7 @@ import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { InitialsAvatar, ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, type Tone } from '@/components/list-ui';
 import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
+import { PartnerImportDialog } from '@/components/partner-import-dialog';
 import { PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
 import { PartnerDialog } from '@/components/partner-dialog';
@@ -254,6 +256,7 @@ export default function PartnersPage() {
   const [dialog, setDialog] = useState<{ partner?: Partner } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [odooOpen, setOdooOpen] = useState(false);
+  const [excelOpen, setExcelOpen] = useState(false);
   /** Đối tác đang ánh xạ với Odoo (mở hộp thoại tìm trên Odoo). */
   const [linking, setLinking] = useState<Partner | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -411,6 +414,9 @@ export default function PartnersPage() {
                   </Button>
                 </>
               )}
+              <Button variant="outline" className="h-9" onClick={() => setExcelOpen(true)}>
+                <FileSpreadsheet /> Nhập Excel
+              </Button>
               <Button className="h-9" onClick={() => setDialog({})}>
                 <Plus /> Thêm đối tác
               </Button>
@@ -600,6 +606,7 @@ export default function PartnersPage() {
           initialQuery={linking.taxCode || linking.name}
         />
       )}
+      <PartnerImportDialog open={excelOpen} onClose={() => setExcelOpen(false)} />
       <OdooPartnerDialog open={odooOpen} onOpenChange={setOdooOpen} mode="import" defaultKind={type === 'CUSTOMER' || type === 'SUPPLIER' ? type : undefined} />
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
     </>

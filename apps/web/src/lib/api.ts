@@ -122,7 +122,7 @@ export async function api<T>(path: string, opts: RequestOptions = {}): Promise<T
   return (await res.json()) as T;
 }
 
-/** Tải file (CSV/Excel) có kèm Authorization. */
+/** Tải file (Excel…) có kèm Authorization. */
 export async function downloadFile(path: string, query?: Query) {
   const res = await apiRaw(path, { query });
   const blob = await res.blob();

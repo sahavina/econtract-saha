@@ -533,7 +533,7 @@ export default function ContractsPage() {
           <>
             {can('contract.export') && (
               <Button variant="outline" className="h-9" onClick={() => downloadFile('/contracts/export', { ...query, page: undefined, pageSize: undefined }).catch((e: Error) => toast.error(e.message))}>
-                <Download /> Xuất CSV
+                <Download /> Xuất Excel
               </Button>
             )}
             {can('contract.create') && (

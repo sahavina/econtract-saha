@@ -12,6 +12,7 @@ import {
   type PartnerUpdate,
   partnerUpdateSchema,
 } from './partners.schemas.js';
+import { type PartnerImportInput, partnerImportSchema } from './partners.import.js';
 import { PartnersService } from './partners.service.js';
 
 @ApiTags('Partners')
@@ -24,6 +25,14 @@ export class PartnersController {
   @RequirePermissions(PERMISSIONS.PARTNER_VIEW)
   list(@CurrentUser() user: AuthUser, @Query(new ZodPipe(partnerQuerySchema)) query: PartnerQuery) {
     return this.partners.list(user, query);
+  }
+
+  /** Nhập đối tác từ Excel (web đọc file, gửi các dòng đã map cột). dryRun ⇒ chỉ kiểm tra. */
+  @Post('import')
+  @HttpCode(200)
+  @RequirePermissions(PERMISSIONS.PARTNER_MANAGE)
+  importRows(@CurrentUser() user: AuthUser, @Body(new ZodPipe(partnerImportSchema)) body: PartnerImportInput) {
+    return this.partners.importRows(user, body);
   }
 
   @Get(':id')

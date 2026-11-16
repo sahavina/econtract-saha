@@ -125,6 +125,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'partner.create': 'Tạo đối tác',
   'partner.update': 'Cập nhật đối tác',
   'partner.delete': 'Xóa đối tác',
+  'partner.import': 'Nhập đối tác từ Excel',
   'partner.odoo_import': 'Nhập đối tác từ Odoo',
   'partner.odoo_sync': 'Cập nhật đối tác từ Odoo',
   'partner.odoo_link': 'Ánh xạ đối tác với Odoo',

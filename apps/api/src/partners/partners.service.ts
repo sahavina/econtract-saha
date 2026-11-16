@@ -6,6 +6,7 @@ import type { AuthUser } from '../common/auth-user.js';
 import { paginated } from '../common/pagination.js';
 import { ContractsService } from '../contracts/contracts.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { type PartnerImportInput, planPartnerImport } from './partners.import.js';
 import type { PartnerInput, PartnerQuery, PartnerUpdate } from './partners.schemas.js';
 
 /** Tình trạng hợp tác suy ra từ hợp đồng: đang có hợp đồng hiệu lực, đang đàm phán, đã kết thúc, chưa có hợp đồng. */
@@ -139,6 +140,53 @@ export class PartnersService {
       );
       return partner;
     });
+  }
+
+  /**
+   * Nhập đối tác từ Excel: dryRun ⇒ chỉ trả kết quả kiểm tra từng dòng; ghi thật chỉ khi không còn dòng lỗi.
+   * Mã trùng đối tác đã có ⇒ bỏ qua, hoặc cập nhật khi updateExisting.
+   */
+  async importRows(user: AuthUser, input: PartnerImportInput) {
+    const codes = [...new Set(input.rows.map((r) => (typeof r.code === 'string' || typeof r.code === 'number' ? String(r.code).trim() : '')).filter(Boolean))];
+    const [found, users] = await Promise.all([
+      this.prisma.partner.findMany({ where: { tenantId: user.tenantId, code: { in: codes } }, select: { id: true, code: true, deletedAt: true } }),
+      this.prisma.user.findMany({ where: { tenantId: user.tenantId }, select: { id: true, email: true } }),
+    ]);
+    const plan = planPartnerImport(
+      input,
+      new Map(found.map((p) => [p.code, { id: p.id, deleted: !!p.deletedAt }])),
+      new Map(users.map((u) => [u.email.toLowerCase(), u.id])),
+    );
+    const result = { summary: plan.summary, rows: plan.rows, imported: false };
+    if (input.dryRun) return result;
+    if (plan.summary.error) throw new BadRequestException(`File còn ${plan.summary.error} dòng lỗi – sửa rồi nhập lại`);
+    if (!plan.planned.length) return { ...result, imported: true };
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        const creates = plan.planned.filter((p) => p.action === 'create').map((p) => ({ ...p.data, tenantId: user.tenantId }));
+        if (creates.length) await tx.partner.createMany({ data: creates });
+        for (const p of plan.planned) {
+          if (p.action === 'update' && p.existingId) await tx.partner.update({ where: { id: p.existingId }, data: p.data });
+        }
+        await this.audit.log(
+          user,
+          {
+            action: 'partner.import',
+            entityType: 'partner',
+            data: {
+              created: plan.summary.create,
+              updated: plan.summary.update,
+              skipped: plan.summary.skip,
+              codes: plan.planned.slice(0, 50).map((p) => p.data.code),
+            },
+          },
+          tx,
+        );
+      },
+      { timeout: 60_000 },
+    );
+    return { ...result, imported: true };
   }
 
   async remove(user: AuthUser, id: string) {

@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, HttpCode, Param, ParseIntPipe, ParseUUIDPipe, Patch, Post, Query, Res } from '@nestjs/common';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
-import { CONTRACT_CATEGORY_SHORT, CONTRACT_STATUS_LABELS, PERMISSIONS } from '@saha/shared';
+import { buildXlsxBytes, CONTRACT_CATEGORY_SHORT, CONTRACT_STATUS_LABELS, PERMISSIONS, XLSX_MIME } from '@saha/shared';
 import type { Response } from 'express';
 import type { AuthUser } from '../common/auth-user.js';
 import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../common/decorators.js';
@@ -23,12 +23,8 @@ import { ContractsService } from './contracts.service.js';
 
 const VIEW = [PERMISSIONS.CONTRACT_VIEW_ALL, PERMISSIONS.CONTRACT_VIEW_OWN] as const;
 
-const csvCell = (v: string | number | Date | null | undefined) => {
-  const s = v === null || v === undefined ? '' : v instanceof Date ? v.toISOString().slice(0, 10) : String(v);
-  // Chống CSV/formula injection khi mở bằng Excel.
-  const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-  return `"${safe.replaceAll('"', '""')}"`;
-};
+/** Ngày theo giờ Việt Nam (UTC+7) cho cột ngày giờ (ngày tạo) khi xuất Excel. */
+const vnDay = (d: Date) => new Date(d.getTime() + 7 * 3_600_000);
 
 @ApiTags('Contracts')
 @ApiBearerAuth()
@@ -79,31 +75,29 @@ export class ContractsController {
       'Ngày hết hạn',
       'Trạng thái',
     ];
-    const lines = rows.map((r) =>
-      [
-        r.code,
-        r.title,
-        r.category ? CONTRACT_CATEGORY_SHORT[r.category] : '',
-        r.contractType?.name,
-        r.parties[0]?.name,
-        r.value.toString(),
-        r.currency,
-        r.owner?.fullName,
-        r.department?.name,
-        r.createdAt,
-        r.signedDate,
-        r.effectiveDate,
-        r.expiryDate,
-        CONTRACT_STATUS_LABELS[r.status],
-      ]
-        .map(csvCell)
-        .join(','),
-    );
-    const filename = `hop-dong-${new Date().toISOString().slice(0, 10)}.csv`;
-    res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+    const lines = rows.map((r) => [
+      r.code,
+      r.title,
+      r.category ? CONTRACT_CATEGORY_SHORT[r.category] : '',
+      r.contractType?.name,
+      r.parties[0]?.name,
+      Number(r.value),
+      r.currency,
+      r.owner?.fullName,
+      r.department?.name,
+      vnDay(r.createdAt),
+      r.signedDate,
+      r.effectiveDate,
+      r.expiryDate,
+      CONTRACT_STATUS_LABELS[r.status],
+    ]);
+    const bytes = buildXlsxBytes([
+      { name: 'Hop dong', rows: [header, ...lines], widths: [18, 44, 14, 20, 36, 16, 8, 22, 20, 12, 12, 12, 12, 16] },
+    ]);
+    const filename = `hop-dong-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    res.setHeader('Content-Type', XLSX_MIME);
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-    // BOM để Excel hiển thị đúng tiếng Việt.
-    res.send('﻿' + [header.map(csvCell).join(','), ...lines].join('\r\n'));
+    res.send(Buffer.from(bytes));
   }
 
   /** Tổng hợp đơn đặt hàng theo bộ lọc (vd theo khách hàng, theo hợp đồng nguyên tắc). */

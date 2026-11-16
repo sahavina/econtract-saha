@@ -35,6 +35,7 @@ import { formatCompact, formatMoney } from '@/lib/format';
 import { useLookups } from '@/lib/queries';
 import type { ReportSummary } from '@/lib/types';
 import { cn } from '@/lib/utils';
+import { buildXlsx, downloadBlob } from '@/lib/xlsx-io';
 
 const COLORS = ['var(--chart-1)', 'var(--chart-2)', 'var(--chart-3)', 'var(--chart-4)', 'var(--chart-5)', 'var(--muted-foreground)'];
 const SHADOW = 'shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]';
@@ -46,20 +47,11 @@ function duration(hours: number | null) {
   return `${(hours / 24).toFixed(1)} ngày`;
 }
 
-/** Xuất bảng ra CSV (UTF-8 BOM để Excel hiển thị tiếng Việt), chống công thức độc hại. */
-function exportCsv(filename: string, header: string[], rows: (string | number | null)[][]) {
-  const cell = (v: string | number | null) => {
-    const s = v === null ? '' : String(v);
-    const safe = /^[=+\-@\t\r]/.test(s) ? `'${s}` : s;
-    return `"${safe.replaceAll('"', '""')}"`;
-  };
-  const csv = '﻿' + [header, ...rows].map((r) => r.map(cell).join(',')).join('\r\n');
-  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
+/** Xuất bảng ra file Excel .xlsx: chuỗi chỉ gồm số (giá trị tiền) ghi thành ô số để cộng/lọc được trong Excel. */
+function exportXlsx(filename: string, header: string[], rows: (string | number | null)[][]) {
+  const cell = (v: string | number | null) => (typeof v === 'string' && /^-?\d+(\.\d+)?$/.test(v) ? Number(v) : v);
+  const blob = buildXlsx([{ name: 'Bao cao', rows: [header, ...rows.map((r) => r.map(cell))], widths: header.map((h, i) => (i === 0 ? 36 : Math.max(14, h.length + 4))) }]);
+  downloadBlob(blob, filename);
 }
 
 /** Thẻ số liệu: biểu tượng trong ô màu, số lớn, nhãn nhỏ (giống bảng điều khiển). */
@@ -125,7 +117,7 @@ function GroupTable({
 }: {
   icon: LucideIcon;
   title: string;
-  rows: { name: string; count: number; value: string; cells?: (string | number)[] }[];
+  rows: { name: string; count: number; value: string; cells?: (string | number)[]; /** Giá trị xuất Excel (số thô) nếu khác phần hiển thị. */ exportCells?: (string | number)[] }[];
   file: string;
   extra?: string[];
   /** Nhóm là người (hiện ảnh chữ viết tắt). */
@@ -142,9 +134,9 @@ function GroupTable({
           variant="outline"
           size="sm"
           disabled={!rows.length}
-          onClick={() => exportCsv(file, ['Nhóm', 'Số hợp đồng', 'Tổng giá trị', ...(extra ?? [])], rows.map((r) => [r.name, r.count, r.value, ...(r.cells ?? [])]))}
+          onClick={() => exportXlsx(file, ['Nhóm', 'Số hợp đồng', 'Tổng giá trị', ...(extra ?? [])], rows.map((r) => [r.name, r.count, r.value, ...(r.exportCells ?? r.cells ?? [])]))}
         >
-          <Download /> CSV
+          <Download /> Excel
         </Button>
       }
     >
@@ -350,15 +342,15 @@ export default function ReportsPage() {
           <GroupTable
             icon={Building2}
             title="Hiệu suất theo phòng ban"
-            file="bao-cao-phong-ban.csv"
+            file="bao-cao-phong-ban.xlsx"
             extra={['HĐ đã ký', 'Giá trị đã ký', 'TG phê duyệt TB', 'TG ký TB']}
-            rows={r.byDepartment.map((d) => ({ ...d, cells: [d.signedCount, formatMoney(d.signedValue), duration(d.avgApprovalHours), duration(d.avgSigningHours)] }))}
+            rows={r.byDepartment.map((d) => ({ ...d, cells: [d.signedCount, formatMoney(d.signedValue), duration(d.avgApprovalHours), duration(d.avgSigningHours)], exportCells: [d.signedCount, d.signedValue, duration(d.avgApprovalHours), duration(d.avgSigningHours)] }))}
           />
           <div className="grid gap-4 lg:grid-cols-2">
-            <GroupTable icon={Layers} title="Theo loại hợp đồng" file="bao-cao-loai-hop-dong.csv" rows={r.byType} />
-            <GroupTable icon={Users} person title="Top nhân viên phụ trách (theo giá trị)" file="bao-cao-nhan-vien.csv" rows={r.byOwner} />
+            <GroupTable icon={Layers} title="Theo loại hợp đồng" file="bao-cao-loai-hop-dong.xlsx" rows={r.byType} />
+            <GroupTable icon={Users} person title="Top nhân viên phụ trách (theo giá trị)" file="bao-cao-nhan-vien.xlsx" rows={r.byOwner} />
           </div>
-          <GroupTable icon={Handshake} title="Top đối tác (Bên B)" file="bao-cao-doi-tac.csv" rows={r.byPartner} />
+          <GroupTable icon={Handshake} title="Top đối tác (Bên B)" file="bao-cao-doi-tac.xlsx" rows={r.byPartner} />
         </div>
       )}
     </>
