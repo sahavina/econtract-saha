@@ -17,7 +17,33 @@ import {
 } from '@saha/shared';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Check, Circle, CircleCheck, CloudDownload, Eye, FileText, FileUp, Loader2, PackagePlus, Pencil, Plus, Send, Trash2, X } from 'lucide-react';
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  CloudDownload,
+  CloudUpload,
+  Coins,
+  Eye,
+  FileText,
+  FolderOpen,
+  Info,
+  Loader2,
+  type LucideIcon,
+  PackagePlus,
+  Paperclip,
+  Pencil,
+  Plus,
+  Send,
+  SlidersHorizontal,
+  SquareCheck,
+  Trash2,
+  UserRound,
+  Users,
+  X,
+} from 'lucide-react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { cloneElement, isValidElement, useId, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, type UseFormReturn, useWatch } from 'react-hook-form';
@@ -25,7 +51,9 @@ import { toast } from 'sonner';
 import { z } from 'zod';
 import { ContractEditor } from '@/components/contract-editor';
 import { FilterSelect } from '@/components/filter-select';
+import { CreateSteps } from '@/components/create-steps';
 import { StatusPill } from '@/components/list-ui';
+import { type Crumb, PageHeader } from '@/components/page-header';
 import { OdooPartnerDialog } from '@/components/odoo-partner-dialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -43,7 +71,7 @@ import { convertDocToDocx, readDocx } from '@/lib/docx';
 import { readPdfText } from '@/lib/pdf-text';
 import { readXlsx } from '@/lib/xlsx';
 import { attachMainDocument, DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize, uploadContractDocument } from '@/lib/documents';
-import { formatDate, formatMoney, toDateInput } from '@/lib/format';
+import { formatMoney, toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
 import { useLookups } from '@/lib/queries';
 import type { ContractDetail, ContractDocument, ContractKind, ContractListItem, Partner, Product, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
@@ -331,7 +359,7 @@ function toPayload(v: FormValues, isEdit: boolean, kind: ContractKind) {
   return isEdit ? { ...payload, code: v.code.trim() } : { ...payload, kind, code: nul(v.code), templateId: nul(v.templateId) };
 }
 
-function Field({ label, error, children, className }: { label: string; error?: string; children: React.ReactNode; className?: string }) {
+function Field({ label, error, children, className }: { label: React.ReactNode; error?: string; children: React.ReactNode; className?: string }) {
   const id = useId();
   // Gắn id cho input con để label liên kết đúng (hỗ trợ trình đọc màn hình).
   const isInput = isValidElement<{ id?: string }>(children) && (children.type === Input || children.type === Textarea);
@@ -350,13 +378,16 @@ function ContractFilesPicker({
   onChange,
   required,
   isOrder,
+  footer,
 }: {
   files: File[];
   onChange: (files: File[], added: File[]) => void;
   required?: boolean;
   isOrder?: boolean;
+  footer?: React.ReactNode;
 }) {
   const input = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
   const add = (list: FileList | null) => {
     const picked = Array.from(list ?? []);
     const tooBig = picked.filter((f) => f.size > DOCUMENT_MAX_BYTES);
@@ -366,37 +397,42 @@ function ContractFilesPicker({
     if (input.current) input.current.value = '';
   };
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>
-          {required ? `${isOrder ? 'Tệp đơn đặt hàng' : 'Tệp hợp đồng'} *` : 'Tài liệu đính kèm'}
-        </CardTitle>
-        <CardDescription>
-          {isOrder
-            ? required
-              ? 'Tải lên đơn của khách (Word, Excel hoặc PDF có chữ): hệ thống tự điền số đơn, ngày, các bên, bảng hàng hóa, giao hàng, thanh toán và đính kèm tệp vào tab Tài liệu. Ảnh/PDF scan chỉ được đính kèm.'
-              : 'Tùy chọn: đính kèm đơn gốc của khách; có thể bổ sung sau ở tab Tài liệu.'
-            : required
-              ? 'Tải lên bản hợp đồng đã soạn sẵn (PDF khuyến nghị để đối tác xem trực tiếp khi ký). Không cần soạn nội dung trong hệ thống.'
-              : 'Tùy chọn: bản hợp đồng, phụ lục có sẵn. Có thể bổ sung sau ở tab Tài liệu.'}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
+    <FormSection icon={Paperclip} title={required ? `${isOrder ? 'Tệp đơn đặt hàng' : 'Tệp hợp đồng'} *` : 'Tài liệu đính kèm'}>
+      <div className="space-y-3">
+        {required && (
+          <p className="text-xs text-muted-foreground">
+            {isOrder
+              ? 'Tải lên đơn của khách (Word, Excel hoặc PDF có chữ): hệ thống tự điền số đơn, ngày, các bên, hàng hóa, giao hàng, thanh toán. Ảnh/PDF scan chỉ được đính kèm.'
+              : 'Tải lên bản hợp đồng đã soạn sẵn (PDF khuyến nghị); Word/PDF có chữ được đọc để tự điền thông tin.'}
+          </p>
+        )}
         <input ref={input} type="file" accept={DOCUMENT_ACCEPT} multiple className="hidden" onChange={(e) => add(e.target.files)} aria-label="Chọn tệp hợp đồng" />
-        <button
-          type="button"
-          onClick={() => input.current?.click()}
-          onDragOver={(e) => e.preventDefault()}
+        <div
+          onDragOver={(e) => {
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
           onDrop={(e) => {
             e.preventDefault();
+            setDragging(false);
             add(e.dataTransfer.files);
           }}
-          className="flex w-full flex-col items-center gap-1 rounded-lg border-2 border-dashed px-4 py-6 text-sm text-muted-foreground transition-colors hover:border-primary hover:text-foreground"
+          className={`flex flex-col items-center gap-1 rounded-lg border-2 border-dashed px-4 py-5 text-center transition-colors ${dragging ? 'border-primary bg-primary/10' : 'border-primary/35 bg-primary/[0.02]'}`}
         >
-          <FileUp className="size-6" />
-          <span className="font-medium text-foreground">Chọn hoặc kéo thả tệp vào đây</span>
-          <span>PDF, DOC, DOCX, XLSX, PNG, JPG · tối đa 20 MB mỗi tệp</span>
-        </button>
+          <CloudUpload className="size-9 text-primary" strokeWidth={1.6} aria-hidden />
+          <span className="font-semibold">Kéo thả tài liệu vào đây</span>
+          <span className="text-xs text-muted-foreground">
+            hoặc{' '}
+            <button type="button" className="font-medium text-primary hover:underline" onClick={() => input.current?.click()}>
+              chọn tệp từ máy
+            </button>
+          </span>
+          <Button type="button" variant="outline" size="sm" className="mt-2 border-primary/40 text-primary hover:text-primary" onClick={() => input.current?.click()}>
+            <FolderOpen /> Chọn tệp
+          </Button>
+          <span className="mt-2 text-xs text-muted-foreground">Hỗ trợ: PDF, DOC, DOCX, XLSX, PNG, JPG (Tối đa 20 MB/tệp)</span>
+        </div>
         {files.length > 0 && (
           <ul className="divide-y rounded-md border">
             {files.map((f) => (
@@ -406,26 +442,33 @@ function ContractFilesPicker({
                   {f.name}
                 </span>
                 <span className="text-xs text-muted-foreground tabular-nums">{formatFileSize(f.size)}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  aria-label={`Bỏ ${f.name}`}
-                  onClick={() => onChange(files.filter((x) => x !== f), [])}
-                >
+                <Button type="button" variant="ghost" size="icon-sm" aria-label={`Bỏ ${f.name}`} onClick={() => onChange(files.filter((x) => x !== f), [])}>
                   <X />
                 </Button>
               </li>
             ))}
           </ul>
         )}
-      </CardContent>
-    </Card>
+        {footer}
+      </div>
+    </FormSection>
   );
 }
 
 /** Form tạo mới; có `partnerId` (mở từ trang đối tác) thì tải đối tác trước để điền sẵn các bên. */
-export function PartnerContractForm({ partnerId, quoteId = '', ...props }: { partnerId: string; quoteId?: string; fromFile?: boolean; kind?: ContractKind; parentId?: string }) {
+export function PartnerContractForm({
+  partnerId,
+  quoteId = '',
+  ...props
+}: {
+  partnerId: string;
+  quoteId?: string;
+  fromFile?: boolean;
+  kind?: ContractKind;
+  parentId?: string;
+  header?: CreateHeader;
+  switchMode?: { href: string; label: string };
+}) {
   const partner = useQuery({
     queryKey: ['partners', 'detail', partnerId],
     queryFn: () => api<Partner>(`/partners/${encodeURIComponent(partnerId)}`),
@@ -451,8 +494,14 @@ export function ContractForm({
   presetPartner,
   presetCompany,
   presetQuote,
+  header,
+  switchMode,
 }: {
   contract?: ContractDetail;
+  /** Trang tạo mới: tiêu đề, nút Hủy / Lưu bản nháp / Gửi phê duyệt và thanh các bước nằm trên đầu trang. */
+  header?: CreateHeader;
+  /** Liên kết đổi chế độ "Soạn trong hệ thống" ⇄ "Tạo từ file" (hiện dưới khung Tài liệu đính kèm). */
+  switchMode?: { href: string; label: string };
   fromFile?: boolean;
   /** Lập đơn đặt hàng (dòng hàng, hợp đồng nguyên tắc, giao hàng) thay vì hợp đồng. */
   kind?: ContractKind;
@@ -500,6 +549,8 @@ export function ContractForm({
   const watchedParties = useWatch({ control, name: 'parties' });
 
   const [files, setFiles] = useState<File[]>([]);
+  const [moreOpen, setMoreOpen] = useState(isEdit);
+  const moreRef = useRef<HTMLDivElement>(null);
   const [previewTemplate, setPreviewTemplate] = useState(false);
   const [previewImported, setPreviewImported] = useState(false);
   const [editingImported, setEditingImported] = useState(false);
@@ -508,10 +559,11 @@ export function ContractForm({
 
   const save = useMutation({
     meta: { silent: true },
-    mutationFn: async ({ v, submit }: { v: FormValues; submit?: boolean }) => {
+    mutationFn: async ({ v, intent }: { v: FormValues; intent: SaveIntent }) => {
+      const submit = intent === 'approve';
       if (isEdit) {
         const c = await api<ContractDetail>(`/contracts/${contract.id}`, { method: 'PATCH', body: toPayload(v, true, kind) });
-        return { c, uploaded: 0, failed: [] as string[], submit: false, submitError: undefined as string | undefined };
+        return { c, uploaded: 0, failed: [] as string[], intent, submitError: undefined as string | undefined };
       }
       // Đơn chưa chọn loại ⇒ dùng loại "Đơn đặt hàng" đầu tiên để sinh mã theo mẫu của loại đó.
       const typeId = v.contractTypeId || (isOrder ? (kindTypes[0]?.id ?? '') : '');
@@ -548,9 +600,10 @@ export function ContractForm({
           submitError = e.message;
         });
       }
-      return { c, uploaded: files.length - failed.length, failed, submit: !!submit, submitError };
+      return { c, uploaded: files.length - failed.length, failed, intent, submitError };
     },
-    onSuccess: ({ c, uploaded, failed, submit, submitError }) => {
+    onSuccess: ({ c, uploaded, failed, intent, submitError }) => {
+      const submit = intent === 'approve';
       qc.invalidateQueries({ queryKey: ['contracts'] });
       qc.invalidateQueries({ queryKey: ['orders'] });
       qc.invalidateQueries({ queryKey: ['contract', c.id] });
@@ -560,7 +613,9 @@ export function ContractForm({
       else toast.success(`Đã tạo ${noun} nháp ${c.code}${uploaded ? ` kèm ${uploaded} tệp` : ''}`);
       if (submitError) toast.error(`Đã lưu nháp nhưng chưa gửi phê duyệt được`, { description: submitError, duration: 15_000 });
       if (failed.length) toast.error(`Chưa tải lên được ${failed.length} tệp – thử lại ở tab Tài liệu`, { description: failed.join('\n'), duration: 15_000 });
-      router.push(submit ? `/contracts/${c.id}?tab=approval` : files.length ? `/contracts/${c.id}?tab=documents` : `/contracts/${c.id}`);
+      // "Lưu & tiếp tục" ⇒ bước 2: soạn nội dung (đã đính kèm tệp thì sang tab Tài liệu).
+      const tab = submit ? 'approval' : files.length ? 'documents' : intent === 'continue' ? 'content' : '';
+      router.push(tab ? `/contracts/${c.id}?tab=${tab}` : `/contracts/${c.id}`);
     },
     onError: (err) => {
       if (err instanceof ApiError && err.errors.length) {
@@ -840,6 +895,29 @@ export function ContractForm({
       files={files}
       required={fromFile}
       isOrder={isOrder}
+      footer={
+        (switchMode || (!fromFile && !isOrder)) && (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+            {!fromFile && (
+              <button
+                type="button"
+                className="font-medium text-primary hover:underline"
+                onClick={() => {
+                  setMoreOpen(true);
+                  requestAnimationFrame(() => moreRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }));
+                }}
+              >
+                Chưa có file? Chọn mẫu {isOrder ? 'đơn' : 'hợp đồng'}
+              </button>
+            )}
+            {switchMode && (
+              <Link href={switchMode.href} className="font-medium text-primary hover:underline">
+                {switchMode.label}
+              </Link>
+            )}
+          </div>
+        )
+      }
       onChange={(next, added) => {
         setFiles(next);
         if (imported && !next.some((x) => x.name === imported.name)) setImported(null);
@@ -920,478 +998,596 @@ export function ContractForm({
   const vatPercent = w.vatRate && /^\d{1,3}(\.\d{1,2})?$/.test(w.vatRate) ? Number(w.vatRate) : 0;
   const vatAmount = Math.round((pretax * vatPercent) / 100);
   const currency = w.currency || 'VND';
-  const namedParties = (w.parties ?? []).filter((p) => p?.name?.trim());
+  const currencySign = currency === 'VND' ? 'đ' : currency;
+  const allParties = w.parties ?? [];
+  const namedParties = allParties.filter((p) => p?.name?.trim());
   const counterpart = namedParties.find((p) => !p?.isInternal) ?? namedParties[0];
-  const departmentName = lookups.data?.departments.find((d) => d.id === w.departmentId)?.name;
-  const ownerName = lookups.data?.users.find((u) => u.id === w.ownerId)?.fullName;
+  const departmentName = lookups.data?.departments.find((d) => d.id === w.departmentId)?.name ?? (isEdit ? '—' : 'Phòng ban của tôi');
+  const ownerName = lookups.data?.users.find((u) => u.id === w.ownerId)?.fullName ?? (isEdit ? '—' : 'Tôi');
   const descriptionLength = w.description?.length ?? 0;
-  const term = termLabel(w.effectiveDate, w.expiryDate);
-  const checks: { label: string; ok: boolean; required: boolean }[] = [
-    { label: isOrder ? 'Tên đơn hàng' : 'Tên hợp đồng', ok: !!w.title?.trim(), required: true },
-    { label: isOrder ? 'Loại đơn' : 'Loại hợp đồng', ok: !!selectedType, required: false },
-    { label: 'Các bên tham gia (ít nhất 2 bên)', ok: namedParties.length >= 2, required: true },
-    { label: 'Phân loại đối tác (khách hàng / nhà cung cấp)', ok: namedParties.length > 0 && namedParties.every((p) => p?.isInternal || !!p?.partnerType), required: true },
-    { label: isOrder ? 'Hàng hóa và đơn giá' : 'Giá trị hợp đồng', ok: pretax > 0, required: true },
-    ...(isOrder ? [] : [{ label: 'Ngày hiệu lực và ngày hết hạn', ok: !!w.effectiveDate && !!w.expiryDate, required: false }]),
-    ...(fromFile && !isEdit ? [{ label: isOrder ? 'Tệp đơn đặt hàng' : 'Tệp hợp đồng', ok: files.length > 0, required: true }] : []),
-    // Gửi phê duyệt cần có nội dung (từ mẫu/file) hoặc tài liệu đính kèm; lưu nháp thì chưa cần.
-    ...(!fromFile && !isEdit ? [{ label: 'Mẫu, nội dung hoặc tệp đính kèm (cần khi gửi duyệt)', ok: !!w.templateId || !!imported?.use || files.length > 0, required: false }] : []),
+  const hasDocument = !!w.templateId || !!imported?.use || files.length > 0;
+  const partiesNote =
+    namedParties.length < 2
+      ? 'cần ít nhất 2 bên'
+      : !namedParties.every((p) => p?.isInternal || !!p?.partnerType)
+        ? 'chưa phân loại đối tác'
+        : !namedParties.every((p) => p?.taxCode?.trim() && p?.representative?.trim())
+          ? 'thiếu MST / người đại diện'
+          : '';
+  const termOk = !!w.effectiveDate && !!w.expiryDate && w.expiryDate >= w.effectiveDate;
+  const checks: { label: string; ok: boolean; note?: string }[] = [
+    { label: isOrder ? 'Tên đơn hàng' : 'Tên hợp đồng', ok: !!w.title?.trim() },
+    { label: isOrder ? 'Loại đơn' : 'Loại hợp đồng', ok: !!selectedType },
+    { label: 'Phòng ban', ok: true },
+    { label: 'Người phụ trách', ok: true },
+    ...(isEdit ? [] : [{ label: isOrder ? 'Tài liệu đơn hàng' : 'Tài liệu hợp đồng', ok: hasDocument, note: 'chưa đính kèm' }]),
+    { label: 'Thông tin các bên tham gia', ok: !partiesNote, note: partiesNote },
+    { label: isOrder ? 'Hàng hóa và đơn giá' : 'Giá trị hợp đồng', ok: pretax > 0, note: isOrder ? 'chưa có dòng hàng' : 'chưa nhập' },
+    ...(isOrder ? [] : [{ label: 'Thời hạn hợp đồng', ok: termOk, note: w.effectiveDate && w.expiryDate ? 'ngày hết hạn trước ngày hiệu lực' : 'chưa nhập ngày' }]),
   ];
-  const doneCount = checks.filter((c) => c.ok).length;
-  const missingRequired = checks.filter((c) => c.required && !c.ok).length;
+  const vatOptions = ['0', '5', '8', '10'];
+  const pendingIntent = save.isPending ? (save.variables?.intent ?? 'draft') : null;
 
-  const submit = (sendForApproval: boolean) =>
+  const submit = (intent: SaveIntent) =>
     form.handleSubmit((v) => {
       if (fromFile && !files.length) return toast.error(`Chọn ít nhất một tệp ${noun}`);
-      save.mutate({ v, submit: sendForApproval });
+      save.mutate({ v, intent });
     });
 
-  return (
-    <form onSubmit={submit(false)} className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_21rem] xl:items-start" noValidate>
-      <div className="min-w-0 space-y-4">
-        {!isEdit && fromFile && filesPicker}
-        {!isEdit && fromFile && importedCard}
-        {!isEdit && (!fromFile || isOrder) && (
-          <Card>
-            <CardHeader>
-              <CardTitle>{isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}</CardTitle>
-              <CardDescription>
-                {isOrder
-                  ? 'Chọn mẫu đơn có sẵn (Soạn thảo → Mẫu hợp đồng, loại "Đơn đặt hàng"), hoặc dùng nội dung đơn mặc định có sẵn bảng hàng hóa – sửa tiếp ở tab Nội dung sau khi tạo.'
-                  : 'Chọn mẫu để sao chép sẵn nội dung và loại hợp đồng; có thể soạn lại sau khi tạo.'}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              <Controller
-                control={control}
-                name="templateId"
-                render={({ field }) => (
-                  <FilterSelect
-                    className="w-full md:w-96"
-                    allLabel={isOrder ? '— Không dùng mẫu (nội dung đơn mặc định) —' : '— Không dùng mẫu (soạn từ đầu) —'}
-                    value={field.value}
-                    onChange={(v) => {
-                      field.onChange(v ?? '');
-                      suggestEmptyPartyTypes();
-                    }}
-                    options={kindTemplates.map((t) => ({ value: t.id, label: `${t.name} · v${t.version}` }))}
-                    ariaLabel={isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}
-                  />
-                )}
-              />
-              {templateId && (
-                <Button type="button" variant="outline" size="sm" onClick={() => setPreviewTemplate(true)}>
-                  <Eye /> Xem trước mẫu
-                </Button>
-              )}
-              {previewTemplate && templateId && (
-                <TemplatePreviewDialog templateId={templateId} kind={kind} open onClose={() => setPreviewTemplate(false)} />
-              )}
-              {selectedTemplate && (
-                <p className="text-sm text-muted-foreground">
-                  {selectedTemplate.description ?? selectedTemplate.name}
-                  {selectedTemplate.requiredVariables.length > 0 &&
-                    ` · Dữ liệu bắt buộc: ${selectedTemplate.requiredVariables.map((k) => `{{${k}}}`).join(', ')}`}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+  const req = (label: React.ReactNode) => (
+    <>
+      {label} <span className="text-destructive">*</span>
+    </>
+  );
+
+  /** Bên mua/bán: đối tác là khách hàng ⇒ bên mua; nhà cung cấp ⇒ bên bán; bên nội bộ ngược lại với đối tác. */
+  const sideOf = (i: number) => {
+    const p = allParties[i];
+    if (!p) return '';
+    let type = p.partnerType;
+    if (p.isInternal) {
+      const other = allParties.find((q) => q && !q.isInternal && q.partnerType)?.partnerType;
+      type = other === 'CUSTOMER' ? 'SUPPLIER' : other === 'SUPPLIER' ? 'CUSTOMER' : '';
+    }
+    return type === 'CUSTOMER' ? 'Bên mua' : type === 'SUPPLIER' ? 'Bên bán' : '';
+  };
+
+  const templatePicker = !isEdit && (!fromFile || isOrder) && (
+    <div className="space-y-2 md:col-span-2">
+      <Label>{isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}</Label>
+      <div className="flex flex-wrap items-center gap-2">
+        <Controller
+          control={control}
+          name="templateId"
+          render={({ field }) => (
+            <FilterSelect
+              className="w-full md:w-96"
+              allLabel={isOrder ? '— Không dùng mẫu (nội dung đơn mặc định) —' : '— Không dùng mẫu (soạn từ đầu) —'}
+              value={field.value}
+              onChange={(v) => {
+                field.onChange(v ?? '');
+                suggestEmptyPartyTypes();
+              }}
+              options={kindTemplates.map((t) => ({ value: t.id, label: `${t.name} · v${t.version}` }))}
+              ariaLabel={isOrder ? 'Mẫu đơn đặt hàng' : 'Mẫu hợp đồng'}
+            />
+          )}
+        />
+        {templateId && (
+          <Button type="button" variant="outline" onClick={() => setPreviewTemplate(true)}>
+            <Eye /> Xem trước mẫu
+          </Button>
         )}
-        <Card>
-          <CardHeader>
-            <CardTitle>{isOrder ? 'Thông tin đơn hàng' : 'Thông tin hợp đồng'}</CardTitle>
-            <CardDescription>Các trường có dấu * là bắt buộc.</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
-            <Field label={isOrder ? 'Tên đơn hàng *' : 'Tên hợp đồng *'} error={errors.title?.message} className="md:col-span-2">
-              <Input aria-invalid={!!errors.title} placeholder={isOrder ? 'Nhập tên đơn hàng' : 'Nhập tên hợp đồng'} {...register('title')} />
-            </Field>
-            <Field label={isOrder ? 'Số đơn hàng' : 'Mã hợp đồng'} error={errors.code?.message}>
-              <Input
-                aria-invalid={!!errors.code}
-                placeholder={isEdit ? `Nhập ${isOrder ? 'số đơn hàng' : 'mã hợp đồng'}` : selectedType ? `Tự sinh theo mẫu ${selectedType.codePattern}` : 'Để trống để tự sinh (HD-{YYYY}-{SEQUENCE:5})'}
-                {...register('code', { onBlur: (e) => void checkCode(e.target.value) })}
-              />
-            </Field>
-            <Field label={isOrder ? 'Loại đơn' : 'Loại hợp đồng'}>
-              <Controller
-                control={control}
-                name="contractTypeId"
-                render={({ field }) => (
-                  <FilterSelect
-                    className="w-full"
-                    allLabel={isOrder && kindTypes[0] ? `${kindTypes[0].name} (mặc định)` : '— Chưa chọn —'}
-                    value={field.value}
-                    onChange={(v) => {
-                      field.onChange(v ?? '');
-                      suggestEmptyPartyTypes();
-                    }}
-                    options={kindTypes.map((t) => ({ value: t.id, label: t.name }))}
-                    ariaLabel={isOrder ? 'Loại đơn' : 'Loại hợp đồng'}
-                  />
+      </div>
+      {previewTemplate && templateId && <TemplatePreviewDialog templateId={templateId} kind={kind} open onClose={() => setPreviewTemplate(false)} />}
+      <p className="text-xs text-muted-foreground">
+        {selectedTemplate
+          ? `${selectedTemplate.description ?? selectedTemplate.name}${selectedTemplate.requiredVariables.length > 0 ? ` · Dữ liệu bắt buộc: ${selectedTemplate.requiredVariables.map((k) => `{{${k}}}`).join(', ')}` : ''}`
+          : isOrder
+            ? 'Chọn mẫu đơn có sẵn, hoặc dùng nội dung đơn mặc định có sẵn bảng hàng hóa – sửa tiếp ở tab Nội dung sau khi tạo.'
+            : 'Chọn mẫu để sao chép sẵn nội dung và loại hợp đồng; có thể soạn lại sau khi tạo.'}
+      </p>
+    </div>
+  );
+
+  return (
+    <>
+      {header && (
+        <>
+          <PageHeader
+            title={header.title}
+            description={header.description}
+            crumbs={header.crumbs}
+            actions={
+              <>
+                <Button type="button" variant="outline" className="h-10 min-w-24" onClick={() => router.back()}>
+                  Hủy
+                </Button>
+                <Button type="button" variant="outline" className="h-10 border-primary/30 px-5 font-semibold text-primary hover:text-primary" disabled={save.isPending} onClick={submit('draft')}>
+                  {pendingIntent === 'draft' && <Loader2 className="animate-spin" />}
+                  Lưu bản nháp
+                </Button>
+                {canSubmit && (
+                  <Button type="button" className="h-10 px-5 font-semibold" disabled={save.isPending} onClick={submit('approve')}>
+                    {pendingIntent === 'approve' ? <Loader2 className="animate-spin" /> : <Send />}
+                    Gửi phê duyệt
+                  </Button>
                 )}
-              />
-            </Field>
-            {!isOrder && (
-              <Field label="Phân loại hợp đồng">
+              </>
+            }
+          />
+          <CreateSteps />
+        </>
+      )}
+      <form id="contract-form" onSubmit={submit(isEdit ? 'draft' : 'continue')} className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_22rem] xl:items-start" noValidate>
+        <div className="min-w-0 space-y-5">
+          <FormSection icon={FileText} title={isOrder ? 'Thông tin đơn hàng' : 'Thông tin hợp đồng'}>
+            <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+              <Field label={req(isOrder ? 'Tên đơn hàng' : 'Tên hợp đồng')} error={errors.title?.message}>
+                <Input aria-invalid={!!errors.title} placeholder={isOrder ? 'Nhập tên đơn hàng' : 'Nhập tên hợp đồng'} {...register('title')} />
+              </Field>
+              <Field
+                label={
+                  <span className="inline-flex items-center gap-1.5">
+                    {req(isOrder ? 'Số đơn hàng' : 'Mã hợp đồng')}
+                    <span title={`Để trống để hệ thống tự sinh${selectedType ? ` theo mẫu ${selectedType.codePattern}` : ''}; hoặc nhập mã riêng.`}>
+                      <Info className="size-3.5 text-muted-foreground" aria-hidden />
+                    </span>
+                  </span>
+                }
+                error={errors.code?.message}
+              >
+                <Input
+                  aria-invalid={!!errors.code}
+                  className="bg-muted/70 focus-visible:bg-card"
+                  placeholder={isEdit ? `Nhập ${isOrder ? 'số đơn hàng' : 'mã hợp đồng'}` : `Tự sinh: ${selectedType?.codePattern ?? 'HD-{YYYY}-{SEQUENCE:5}'}`}
+                  {...register('code', { onBlur: (e) => void checkCode(e.target.value) })}
+                />
+              </Field>
+              <Field label={req(isOrder ? 'Loại đơn' : 'Loại hợp đồng')}>
                 <Controller
                   control={control}
-                  name="category"
+                  name="contractTypeId"
                   render={({ field }) => (
                     <FilterSelect
                       className="w-full"
-                      allLabel="— Tự nhận theo đối tác —"
-                      value={field.value || undefined}
-                      onChange={(v) => field.onChange(v ?? '')}
-                      options={CONTRACT_CATEGORIES.map((c) => ({ value: c, label: CONTRACT_CATEGORY_LABELS[c] }))}
-                      ariaLabel="Phân loại hợp đồng"
+                      allLabel={isOrder && kindTypes[0] ? `${kindTypes[0].name} (mặc định)` : '— Chọn loại —'}
+                      value={field.value}
+                      onChange={(v) => {
+                        field.onChange(v ?? '');
+                        suggestEmptyPartyTypes();
+                      }}
+                      options={kindTypes.map((t) => ({ value: t.id, label: t.name }))}
+                      ariaLabel={isOrder ? 'Loại đơn' : 'Loại hợp đồng'}
                     />
                   )}
                 />
               </Field>
-            )}
-            {!isOrder && (
-              <Field label="Nhóm hợp đồng">
-                <Input placeholder="VD: Hợp đồng khung, Dự án…" {...register('group')} />
+              <Field label={req('Phòng ban')}>
+                <Controller
+                  control={control}
+                  name="departmentId"
+                  render={({ field }) => (
+                    <FilterSelect className="w-full" allLabel="Phòng ban của tôi" value={field.value} onChange={(v) => field.onChange(v ?? '')} options={(lookups.data?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} ariaLabel="Phòng ban" />
+                  )}
+                />
               </Field>
-            )}
-            <Field label="Phòng ban phụ trách">
-              <Controller
-                control={control}
-                name="departmentId"
-                render={({ field }) => (
-                  <FilterSelect className="w-full" allLabel="Phòng ban của tôi" value={field.value} onChange={(v) => field.onChange(v ?? '')} options={(lookups.data?.departments ?? []).map((d) => ({ value: d.id, label: d.name }))} ariaLabel="Phòng ban phụ trách" />
-                )}
-              />
-            </Field>
-            <Field label="Người phụ trách">
-              <Controller
-                control={control}
-                name="ownerId"
-                render={({ field }) => (
-                  <FilterSelect className="w-full" allLabel="Tôi" value={field.value} onChange={(v) => field.onChange(v ?? '')} options={(lookups.data?.users ?? []).map((u) => ({ value: u.id, label: u.fullName }))} ariaLabel="Người phụ trách" />
-                )}
-              />
-            </Field>
-            <Field label="Mức độ bảo mật">
-              <Controller
-                control={control}
-                name="confidentiality"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-full" aria-label="Mức độ bảo mật"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {CONFIDENTIALITY.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
-            <Field label="Tags (phân cách bằng dấu phẩy)">
-              <Input {...register('tags')} />
-            </Field>
-            <Field label="Mô tả" error={errors.description?.message} className="md:col-span-2">
-              <div className="space-y-1">
-                <Textarea rows={3} maxLength={5000} placeholder={`Mô tả ngắn gọn nội dung ${noun}…`} aria-label="Mô tả" {...register('description')} />
-                <p className="text-right text-xs text-muted-foreground tabular-nums">{descriptionLength}/5000</p>
-              </div>
-            </Field>
-            <Field label="Ghi chú" className="md:col-span-2">
-              <Textarea rows={2} {...register('note')} />
-            </Field>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>{isOrder ? 'Giá trị & ngày đặt hàng' : 'Giá trị & thời hạn'}</CardTitle>
-            <CardDescription>{isOrder ? 'Giá trị đơn tự tính từ bảng hàng hóa.' : 'Tổng giá trị = giá trị trước thuế + thuế GTGT.'}</CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            <Field label={isOrder ? 'Giá trị đơn (chưa VAT)' : 'Giá trị trước thuế *'} error={errors.value?.message}>
-              {isOrder ? <OrderValue form={form} /> : <Input inputMode="decimal" aria-invalid={!!errors.value} {...register('value')} />}
-            </Field>
-            <Field label="Tiền tệ" error={errors.currency?.message}>
-              <Controller
-                control={control}
-                name="currency"
-                render={({ field }) => (
-                  <Select value={field.value} onValueChange={field.onChange}>
-                    <SelectTrigger className="w-full" aria-label="Tiền tệ"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {['VND', 'USD', 'EUR'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                )}
-              />
-            </Field>
-            <Field label="Thuế GTGT (%)" error={errors.vatRate?.message}>
-              <Input inputMode="decimal" placeholder="VD: 8 hoặc 10" {...register('vatRate')} />
-            </Field>
-            <div className="grid gap-3 rounded-lg border bg-muted/40 p-3 sm:col-span-2 sm:grid-cols-2 lg:col-span-3 lg:grid-cols-3">
-              <SummaryAmount label="Giá trị trước thuế" value={formatMoney(pretax, currency)} />
-              <SummaryAmount label={`Thuế GTGT${vatPercent ? ` (${vatPercent}%)` : ''}`} value={formatMoney(vatAmount, currency)} />
-              <SummaryAmount label="Tổng giá trị" value={formatMoney(pretax + vatAmount, currency)} strong />
+              <Field label={req('Người phụ trách')}>
+                <div className="relative">
+                  <UserRound className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" aria-hidden />
+                  <Controller
+                    control={control}
+                    name="ownerId"
+                    render={({ field }) => (
+                      <FilterSelect className="w-full pl-9" allLabel="Tôi" value={field.value} onChange={(v) => field.onChange(v ?? '')} options={(lookups.data?.users ?? []).map((u) => ({ value: u.id, label: u.fullName }))} ariaLabel="Người phụ trách" />
+                    )}
+                  />
+                </div>
+              </Field>
+              <Field label={isOrder ? 'Mô tả đơn hàng' : 'Mô tả hợp đồng'} error={errors.description?.message} className="md:col-span-2">
+                <div>
+                  <Textarea rows={3} maxLength={5000} placeholder={`Mô tả ngắn gọn nội dung ${noun}…`} aria-label="Mô tả" {...register('description')} />
+                  <p className="mt-1 text-right text-xs text-muted-foreground tabular-nums">{descriptionLength} / 5000</p>
+                </div>
+              </Field>
             </div>
-            <Field label={isOrder ? 'Ngày đặt hàng' : 'Ngày dự kiến ký'}>
-              <Input type="date" {...register('expectedSignDate')} />
-            </Field>
-            {!isOrder && (
+          </FormSection>
+
+          <FormSection
+            icon={Users}
+            title="Các bên tham gia"
+            action={
               <>
-                <Field label="Ngày hiệu lực">
-                  <Input type="date" {...register('effectiveDate')} />
-                </Field>
-                <Field label="Ngày hết hạn" error={errors.expiryDate?.message}>
-                  <Input type="date" aria-invalid={!!errors.expiryDate} {...register('expiryDate')} />
-                </Field>
-                {term && <p className="text-sm text-muted-foreground sm:col-span-2 lg:col-span-3">Thời hạn hợp đồng: <span className="font-medium text-foreground">{term}</span></p>}
+                <Input placeholder="Lọc danh sách đối tác…" value={partnerSearch} onChange={(e) => setPartnerSearch(e.target.value)} className="hidden h-8 w-48 sm:block" aria-label="Lọc đối tác" />
+                <Button type="button" variant="ghost" size="sm" className="text-primary" onClick={() => parties.append(emptyParty(parties.fields.length === 0 ? 'PARTY_A' : parties.fields.length === 1 ? 'PARTY_B' : 'PARTY_C'))}>
+                  <Plus /> Thêm bên
+                </Button>
               </>
-            )}
-          </CardContent>
-        </Card>
-
-        {isOrder && <OrderDeliveryCard form={form} onParentPicked={applyParentParties} />}
-        {isOrder && <OrderItemsCard form={form} />}
-
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-2">
-            <div>
-              <CardTitle>Các bên tham gia</CardTitle>
-              <CardDescription>Chọn từ danh mục đối tác để điền tự động, hoặc nhập trực tiếp.</CardDescription>
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => parties.append(emptyParty(parties.fields.length === 0 ? 'PARTY_A' : parties.fields.length === 1 ? 'PARTY_B' : 'PARTY_C'))}>
-              <Plus /> Thêm bên
-            </Button>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <Input placeholder="Lọc danh sách đối tác…" value={partnerSearch} onChange={(e) => setPartnerSearch(e.target.value)} className="max-w-xs" aria-label="Lọc đối tác" />
-            <div className="grid gap-4 lg:grid-cols-2">
+            }
+          >
+            <div className="grid gap-5 md:grid-cols-2">
               {parties.fields.map((f, i) => {
                 const pe = errors.parties?.[i];
                 const internal = !!watchedParties?.[i]?.isInternal;
+                const role = PARTY_ROLES.find((r) => r.value === watchedParties?.[i]?.role)?.label ?? 'Bên';
+                const side = sideOf(i);
                 return (
-                  <div key={f.id} className={`min-w-0 rounded-xl border p-4 ${internal ? 'border-primary/30 bg-primary/[0.03]' : 'bg-card'}`}>
-                    <div className="mb-3 flex items-center gap-2">
-                      <Controller
-                        control={control}
-                        name={`parties.${i}.role`}
-                        render={({ field }) => (
-                          <Select value={field.value} onValueChange={field.onChange}>
-                            <SelectTrigger size="sm" className="w-28 font-semibold text-primary" aria-label="Vai trò"><SelectValue /></SelectTrigger>
-                            <SelectContent>
-                              {PARTY_ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
-                            </SelectContent>
-                          </Select>
-                        )}
-                      />
-                      <label className="flex min-w-0 items-center gap-2 text-sm">
+                  <div key={f.id} className="min-w-0 overflow-hidden rounded-lg border">
+                    <div className="flex items-center gap-2 bg-primary/10 px-4 py-2">
+                      <span className="min-w-0 flex-1 truncate font-semibold text-[oklch(0.35_0.15_277)] dark:text-primary">
+                        {req(`${role}${side ? ` (${side})` : ''}`)}
+                      </span>
+                      <label className="flex shrink-0 items-center gap-1.5 text-xs text-muted-foreground" title="Bên nội bộ (doanh nghiệp mình)">
                         <input
                           type="checkbox"
-                          className="size-4 shrink-0"
+                          className="size-3.5"
                           {...register(`parties.${i}.isInternal`, { onChange: (e) => (e.target.checked ? applyCompany(i) : clearCompany(i)) })}
                         />
-                        <span className="truncate" title="Bên nội bộ (doanh nghiệp mình)">Bên nội bộ</span>
+                        Nội bộ
                       </label>
-                      <Button type="button" variant="ghost" size="icon-sm" className="ml-auto shrink-0" aria-label="Xóa bên" onClick={() => parties.remove(i)}>
+                      <Button type="button" variant="ghost" size="icon-sm" className="shrink-0 text-muted-foreground" aria-label="Xóa bên" onClick={() => parties.remove(i)}>
                         <Trash2 />
                       </Button>
                     </div>
-                    {!internal && (
-                      <div className="mb-3 flex flex-wrap items-start gap-2">
-                        <Controller
-                          control={control}
-                          name={`parties.${i}.partnerId`}
-                          render={({ field }) => (
-                            <FilterSelect className="w-full min-w-0 flex-1 basis-56" allLabel="— Nhập thủ công —" value={field.value} onChange={(v) => applyPartner(i, v)} options={partnerOptions} ariaLabel="Chọn đối tác" />
-                          )}
-                        />
-                        <Controller
-                          control={control}
-                          name={`parties.${i}.partnerType`}
-                          render={({ field }) => (
-                            <div className="space-y-1">
+                    <div className="space-y-2.5 p-4">
+                      {!internal && (
+                        <div className="flex flex-wrap items-start gap-2 pb-1">
+                          <Controller
+                            control={control}
+                            name={`parties.${i}.partnerId`}
+                            render={({ field }) => (
+                              <FilterSelect className="h-8 w-full min-w-0 flex-1 basis-40" allLabel="— Nhập thủ công —" value={field.value} onChange={(v) => applyPartner(i, v)} options={partnerOptions} ariaLabel="Chọn đối tác" />
+                            )}
+                          />
+                          <Controller
+                            control={control}
+                            name={`parties.${i}.partnerType`}
+                            render={({ field }) => (
                               <Select value={field.value || undefined} onValueChange={field.onChange}>
-                                <SelectTrigger className="w-40" aria-label="Phân loại đối tác" aria-invalid={!!pe?.partnerType}>
-                                  <SelectValue placeholder="Phân loại đối tác *" />
+                                <SelectTrigger size="sm" className="w-36" aria-label="Phân loại đối tác" aria-invalid={!!pe?.partnerType}>
+                                  <SelectValue placeholder="Phân loại *" />
                                 </SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="CUSTOMER">Khách hàng</SelectItem>
                                   <SelectItem value="SUPPLIER">Nhà cung cấp</SelectItem>
                                 </SelectContent>
                               </Select>
-                              {pe?.partnerType && <p className="text-xs text-destructive">{pe.partnerType.message}</p>}
-                            </div>
+                            )}
+                          />
+                          {odooReady(odoo.data) && (
+                            <Button type="button" variant="outline" size="sm" onClick={() => setOdooPick(i)}>
+                              <CloudDownload /> Odoo
+                            </Button>
                           )}
-                        />
-                        {odooReady(odoo.data) && (
-                          <Button type="button" variant="outline" onClick={() => setOdooPick(i)}>
-                            <CloudDownload /> Chọn từ Odoo
-                          </Button>
-                        )}
-                      </div>
-                    )}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="Tên pháp nhân/cá nhân *" error={pe?.name?.message} className="sm:col-span-2">
-                        <Input {...register(`parties.${i}.name`)} />
-                      </Field>
-                      <Field label="Mã số thuế / CCCD">
-                        <Input {...register(`parties.${i}.taxCode`)} />
-                      </Field>
-                      <Field label="Số điện thoại">
-                        <Input {...register(`parties.${i}.phone`)} />
-                      </Field>
-                      <Field label="Địa chỉ" className="sm:col-span-2">
-                        <Input {...register(`parties.${i}.address`)} />
-                      </Field>
-                      <Field label="Người đại diện">
-                        <Input {...register(`parties.${i}.representative`)} />
-                      </Field>
-                      <Field label="Chức vụ">
-                        <Input {...register(`parties.${i}.position`)} />
-                      </Field>
-                      <Field label="Email" error={pe?.email?.message}>
-                        <Input type="email" {...register(`parties.${i}.email`)} />
-                      </Field>
-                      <Field label="Căn cứ ủy quyền">
-                        <Input {...register(`parties.${i}.authorizationRef`)} />
-                      </Field>
-                      <Field label="Số tài khoản (kèm ngân hàng)" className="sm:col-span-2">
-                        <Input {...register(`parties.${i}.bankAccount`)} />
-                      </Field>
+                          {pe?.partnerType && <p className="w-full text-xs text-destructive">{pe.partnerType.message}</p>}
+                        </div>
+                      )}
+                      <PartyRow label={req(`Tên ${role.charAt(0).toLowerCase()}${role.slice(1)}`)} error={pe?.name?.message}>
+                        <Input className="h-8" aria-label={`Tên ${role}`} {...register(`parties.${i}.name`)} />
+                      </PartyRow>
+                      <PartyRow label={req('Mã số thuế')}>
+                        <Input className="h-8" aria-label="Mã số thuế" {...register(`parties.${i}.taxCode`)} />
+                      </PartyRow>
+                      <PartyRow label={req('Đại diện bởi')}>
+                        <Input className="h-8" aria-label="Người đại diện" {...register(`parties.${i}.representative`)} />
+                      </PartyRow>
+                      <PartyRow label={req('Chức vụ')}>
+                        <Input className="h-8" aria-label="Chức vụ" {...register(`parties.${i}.position`)} />
+                      </PartyRow>
+                      <details className="group pt-1">
+                        <summary className="flex cursor-pointer list-none items-center gap-1 text-xs font-medium text-primary select-none">
+                          <ChevronRight className="size-3.5 transition-transform group-open:rotate-90" /> Thông tin khác (địa chỉ, liên hệ…)
+                        </summary>
+                        <div className="mt-2.5 space-y-2.5">
+                          <PartyRow label="Vai trò">
+                            <Controller
+                              control={control}
+                              name={`parties.${i}.role`}
+                              render={({ field }) => (
+                                <Select value={field.value} onValueChange={field.onChange}>
+                                  <SelectTrigger size="sm" className="w-full" aria-label="Vai trò"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    {PARTY_ROLES.map((r) => <SelectItem key={r.value} value={r.value}>{r.label}</SelectItem>)}
+                                  </SelectContent>
+                                </Select>
+                              )}
+                            />
+                          </PartyRow>
+                          <PartyRow label="Địa chỉ">
+                            <Input className="h-8" aria-label="Địa chỉ" {...register(`parties.${i}.address`)} />
+                          </PartyRow>
+                          <PartyRow label="Email" error={pe?.email?.message}>
+                            <Input className="h-8" type="email" aria-label="Email" {...register(`parties.${i}.email`)} />
+                          </PartyRow>
+                          <PartyRow label="Điện thoại">
+                            <Input className="h-8" aria-label="Số điện thoại" {...register(`parties.${i}.phone`)} />
+                          </PartyRow>
+                          <PartyRow label="Căn cứ ủy quyền">
+                            <Input className="h-8" aria-label="Căn cứ đại diện / ủy quyền" {...register(`parties.${i}.authorizationRef`)} />
+                          </PartyRow>
+                          <PartyRow label="Số tài khoản">
+                            <Input className="h-8" aria-label="Số tài khoản (kèm ngân hàng)" placeholder="Số tài khoản – ngân hàng" {...register(`parties.${i}.bankAccount`)} />
+                          </PartyRow>
+                        </div>
+                      </details>
                     </div>
                   </div>
                 );
               })}
             </div>
-            {parties.fields.length === 0 && <p className="text-sm text-muted-foreground">Chưa có bên tham gia.</p>}
-          </CardContent>
-        </Card>
+            {parties.fields.length === 0 && <p className="text-sm text-muted-foreground">Chưa có bên tham gia – bấm “Thêm bên”.</p>}
+          </FormSection>
 
-        {isOrder && !isEdit && !imported?.use && <OrderContentPreview form={form} templateId={templateId} />}
-        {!isEdit && !fromFile && importedCard}
-      </div>
-
-      <aside className="min-w-0 space-y-4 xl:sticky xl:top-20 xl:max-h-[calc(100vh-10rem)] xl:overflow-y-auto xl:overscroll-contain xl:p-0.5">
-        <Card>
-          <CardHeader>
-            <CardTitle>Tóm tắt {noun}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
-            <div className="flex items-start justify-between gap-2">
-              <p className={`line-clamp-2 font-semibold ${w.title?.trim() ? '' : 'text-muted-foreground'}`}>{w.title?.trim() || `Chưa nhập tên ${noun}`}</p>
-              {!isEdit && <StatusPill tone="gray" className="shrink-0">Nháp</StatusPill>}
-            </div>
-            <dl className="space-y-2">
-              <SummaryRow label={isOrder ? 'Số đơn' : 'Mã hợp đồng'} value={w.code?.trim() || (isEdit ? '—' : 'Tự sinh khi lưu')} />
-              <SummaryRow label="Loại" value={selectedType?.name ?? '—'} />
-              <SummaryRow label="Đối tác" value={counterpart?.name?.trim() || '—'} />
-              <SummaryRow label="Phòng ban" value={departmentName ?? (isEdit ? '—' : 'Phòng ban của tôi')} />
-              <SummaryRow label="Phụ trách" value={ownerName ?? (isEdit ? '—' : 'Tôi')} />
-              {!isOrder && <SummaryRow label="Hiệu lực" value={w.effectiveDate || w.expiryDate ? `${w.effectiveDate ? formatDate(w.effectiveDate) : '…'} – ${w.expiryDate ? formatDate(w.expiryDate) : '…'}` : '—'} />}
-            </dl>
-            <dl className="space-y-2 border-t pt-3">
-              <SummaryRow label="Trước thuế" value={formatMoney(pretax, currency)} />
-              <SummaryRow label={`Thuế GTGT${vatPercent ? ` (${vatPercent}%)` : ''}`} value={formatMoney(vatAmount, currency)} />
-              <div className="flex items-baseline justify-between gap-2">
-                <dt className="font-medium">Tổng giá trị</dt>
-                <dd className="text-base font-bold text-primary tabular-nums">{formatMoney(pretax + vatAmount, currency)}</dd>
+          <FormSection icon={Coins} title={isOrder ? 'Giá trị & ngày đặt hàng' : 'Giá trị & thời hạn'}>
+            <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] md:gap-8">
+              <div className="space-y-3">
+                <PartyRow label={req(isOrder ? 'Giá trị (chưa VAT)' : 'Giá trị trước thuế')} labelClassName="w-32" error={errors.value?.message}>
+                  {isOrder ? (
+                    <OrderValue form={form} />
+                  ) : (
+                    <div className="relative">
+                      <Input inputMode="decimal" className="pr-10" aria-label="Giá trị trước thuế" aria-invalid={!!errors.value} {...register('value')} />
+                      <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">{currencySign}</span>
+                    </div>
+                  )}
+                </PartyRow>
+                <PartyRow label={req('Thuế GTGT')} labelClassName="w-32" error={errors.vatRate?.message}>
+                  <Controller
+                    control={control}
+                    name="vatRate"
+                    render={({ field }) => (
+                      <Select value={field.value || 'none'} onValueChange={(v) => field.onChange(v === 'none' ? '' : v)}>
+                        <SelectTrigger className="w-full" aria-label="Thuế GTGT"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="none">Không chịu thuế</SelectItem>
+                          {(field.value && !vatOptions.includes(field.value) ? [...vatOptions, field.value] : vatOptions).map((r) => (
+                            <SelectItem key={r} value={r}>{r}%</SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </PartyRow>
+                <PartyRow label={req('Tổng giá trị')} labelClassName="w-32">
+                  <div className="rounded-md bg-primary/10 px-3 py-1.5 text-base font-bold whitespace-nowrap text-primary tabular-nums">{formatMoney(pretax + vatAmount, currency).replace('₫', 'đ')}</div>
+                </PartyRow>
               </div>
-            </dl>
-          </CardContent>
-        </Card>
-
-        {!isEdit && !fromFile && filesPicker}
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Kiểm tra thông tin</CardTitle>
-            <CardDescription>
-              {doneCount}/{checks.length} mục đã đủ{missingRequired ? ` · còn thiếu ${missingRequired} mục bắt buộc` : ''}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
-            <div className="h-1.5 overflow-hidden rounded-full bg-muted" role="progressbar" aria-valuemin={0} aria-valuemax={checks.length} aria-valuenow={doneCount} aria-label="Mức độ đầy đủ">
-              <div className={`h-full rounded-full transition-all ${missingRequired ? 'bg-amber-500' : 'bg-emerald-500'}`} style={{ width: `${(doneCount / checks.length) * 100}%` }} />
+              <div className="hidden bg-border md:block" aria-hidden />
+              <div className="space-y-3">
+                {isOrder ? (
+                  <PartyRow label="Ngày đặt hàng" labelClassName="w-32">
+                    <Input type="date" aria-label="Ngày đặt hàng" {...register('expectedSignDate')} />
+                  </PartyRow>
+                ) : (
+                  <>
+                    <PartyRow label={req('Ngày hiệu lực')} labelClassName="w-32">
+                      <Input type="date" aria-label="Ngày hiệu lực" {...register('effectiveDate')} />
+                    </PartyRow>
+                    <PartyRow label={req('Ngày hết hạn')} labelClassName="w-32" error={errors.expiryDate?.message}>
+                      <Input type="date" aria-label="Ngày hết hạn" aria-invalid={!!errors.expiryDate} {...register('expiryDate')} />
+                    </PartyRow>
+                  </>
+                )}
+              </div>
             </div>
-            <ul className="space-y-2 text-sm">
+          </FormSection>
+
+          {isOrder && <OrderDeliveryCard form={form} onParentPicked={applyParentParties} />}
+          {isOrder && <OrderItemsCard form={form} />}
+
+          <div ref={moreRef} className="scroll-mt-20">
+            <FormSection
+              icon={SlidersHorizontal}
+              title="Thông tin bổ sung"
+              collapsed={!moreOpen}
+              action={
+                <Button type="button" variant="ghost" size="sm" className="text-primary" onClick={() => setMoreOpen((x) => !x)} aria-expanded={moreOpen}>
+                  {moreOpen ? 'Thu gọn' : `Mở rộng${isEdit ? '' : ' (mẫu, phân loại, bảo mật…)'}`}
+                  <ChevronDown className={`transition-transform ${moreOpen ? 'rotate-180' : ''}`} />
+                </Button>
+              }
+            >
+              <div className="grid gap-x-6 gap-y-4 md:grid-cols-2">
+                {templatePicker}
+                {!isOrder && (
+                  <Field label="Phân loại hợp đồng">
+                    <Controller
+                      control={control}
+                      name="category"
+                      render={({ field }) => (
+                        <FilterSelect
+                          className="w-full"
+                          allLabel="— Tự nhận theo đối tác —"
+                          value={field.value || undefined}
+                          onChange={(v) => field.onChange(v ?? '')}
+                          options={CONTRACT_CATEGORIES.map((c) => ({ value: c, label: CONTRACT_CATEGORY_LABELS[c] }))}
+                          ariaLabel="Phân loại hợp đồng"
+                        />
+                      )}
+                    />
+                  </Field>
+                )}
+                {!isOrder && (
+                  <Field label="Nhóm hợp đồng">
+                    <Input placeholder="VD: Hợp đồng khung, Dự án…" {...register('group')} />
+                  </Field>
+                )}
+                <Field label="Mức độ bảo mật">
+                  <Controller
+                    control={control}
+                    name="confidentiality"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full" aria-label="Mức độ bảo mật"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {CONFIDENTIALITY.map((c) => <SelectItem key={c.value} value={c.value}>{c.label}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+                <Field label="Tiền tệ" error={errors.currency?.message}>
+                  <Controller
+                    control={control}
+                    name="currency"
+                    render={({ field }) => (
+                      <Select value={field.value} onValueChange={field.onChange}>
+                        <SelectTrigger className="w-full" aria-label="Tiền tệ"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          {['VND', 'USD', 'EUR'].map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    )}
+                  />
+                </Field>
+                {!isOrder && (
+                  <Field label="Ngày dự kiến ký">
+                    <Input type="date" {...register('expectedSignDate')} />
+                  </Field>
+                )}
+                <Field label="Tags (phân cách bằng dấu phẩy)">
+                  <Input {...register('tags')} />
+                </Field>
+                <Field label="Ghi chú" className="md:col-span-2">
+                  <Textarea rows={2} {...register('note')} />
+                </Field>
+              </div>
+            </FormSection>
+          </div>
+
+          {isOrder && !isEdit && !imported?.use && <OrderContentPreview form={form} templateId={templateId} />}
+          {!isEdit && importedCard}
+
+          {header && (
+            <div className="flex justify-end">
+              <Button type="submit" size="lg" className="h-11 px-6 text-base font-semibold" disabled={save.isPending}>
+                {pendingIntent === 'continue' && <Loader2 className="animate-spin" />}
+                Lưu & tiếp tục <ArrowRight />
+              </Button>
+            </div>
+          )}
+        </div>
+
+        <aside className="min-w-0 space-y-5 xl:sticky xl:top-20 xl:max-h-[calc(100vh-6rem)] xl:overflow-y-auto xl:overscroll-contain xl:p-0.5">
+          <FormSection icon={FileText} title={`Tóm tắt ${noun}`} bodyClassName="px-5 py-2">
+            <dl className="divide-y text-sm">
+              <SummaryRow label={isOrder ? 'Tên đơn hàng' : 'Tên hợp đồng'}>{w.title?.trim() || '—'}</SummaryRow>
+              <SummaryRow label={isOrder ? 'Giá trị đơn' : 'Giá trị hợp đồng'}>
+                <span className="block text-base font-bold text-primary tabular-nums">{formatMoney(pretax + vatAmount, currency).replace('₫', 'đ')}</span>
+                <span className="block text-xs text-muted-foreground">{vatPercent ? `(Bao gồm thuế GTGT ${vatPercent}%)` : '(Không gồm thuế GTGT)'}</span>
+              </SummaryRow>
+              <SummaryRow label="Đối tác">
+                <span className={counterpart?.name?.trim() ? 'font-semibold text-primary' : ''}>{counterpart?.name?.trim() || '—'}</span>
+              </SummaryRow>
+              <SummaryRow label={isOrder ? 'Loại đơn' : 'Loại hợp đồng'}>{selectedType ? <StatusPill tone="green">{selectedType.name}</StatusPill> : '—'}</SummaryRow>
+              <SummaryRow label="Phòng ban">{departmentName}</SummaryRow>
+              <SummaryRow label="Người phụ trách">{ownerName}</SummaryRow>
+            </dl>
+          </FormSection>
+
+          {!isEdit && filesPicker}
+
+          <FormSection icon={SquareCheck} title="Kiểm tra thông tin bắt buộc">
+            <ul className="space-y-2.5 text-sm">
               {checks.map((c) => (
-                <li key={c.label} className="flex items-start gap-2">
-                  {c.ok ? <CircleCheck className="mt-0.5 size-4 shrink-0 text-emerald-600" /> : <Circle className={`mt-0.5 size-4 shrink-0 ${c.required ? 'text-amber-500' : 'text-muted-foreground/60'}`} />}
-                  <span className={`min-w-0 flex-1 ${c.ok ? 'text-muted-foreground' : ''}`}>{c.label}</span>
-                  {!c.ok && <span className={`shrink-0 text-xs ${c.required ? 'text-amber-600' : 'text-muted-foreground'}`}>{c.required ? 'Bắt buộc' : 'Nên có'}</span>}
+                <li key={c.label} className="flex items-start gap-2.5">
+                  {c.ok ? (
+                    <span className="mt-px flex size-[18px] shrink-0 items-center justify-center rounded-full bg-emerald-500 text-white">
+                      <Check className="size-3" strokeWidth={3} />
+                    </span>
+                  ) : (
+                    <span className="mt-px size-[18px] shrink-0 rounded-full border-2 border-amber-400 bg-amber-100" aria-hidden />
+                  )}
+                  <span className="min-w-0">
+                    {c.label}
+                    {!c.ok && c.note && <span className="text-amber-600"> ({c.note})</span>}
+                    <span className="sr-only">{c.ok ? ' – đã đủ' : ' – chưa đủ'}</span>
+                  </span>
                 </li>
               ))}
             </ul>
-          </CardContent>
-        </Card>
-      </aside>
+          </FormSection>
+        </aside>
 
-      <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-card/95 p-3 shadow-lg shadow-slate-900/10 backdrop-blur xl:col-span-2">
-        {!isEdit && missingRequired > 0 && <p className="mr-auto hidden text-sm text-muted-foreground sm:block">Còn thiếu {missingRequired} mục bắt buộc</p>}
-        <Button type="button" variant="outline" onClick={() => router.back()}>
-          Hủy
-        </Button>
-        <Button type="submit" variant={canSubmit ? 'outline' : 'default'} disabled={save.isPending}>
-          {save.isPending && !save.variables?.submit && <Loader2 className="animate-spin" />}
-          {isEdit ? 'Lưu thay đổi' : files.length ? `Lưu nháp và tải lên ${files.length} tệp` : 'Lưu bản nháp'}
-        </Button>
-        {canSubmit && (
-          <Button type="button" disabled={save.isPending} onClick={submit(true)}>
-            {save.isPending && save.variables?.submit ? <Loader2 className="animate-spin" /> : <Send />}
-            Gửi phê duyệt
-          </Button>
+        {!header && (
+          <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-end gap-2 rounded-xl border bg-card/95 p-3 shadow-lg shadow-slate-900/10 backdrop-blur xl:col-span-2">
+            <Button type="button" variant="outline" onClick={() => router.back()}>
+              Hủy
+            </Button>
+            <Button type="submit" disabled={save.isPending}>
+              {save.isPending && <Loader2 className="animate-spin" />}
+              {isEdit ? 'Lưu thay đổi' : 'Lưu bản nháp'}
+            </Button>
+          </div>
         )}
-      </div>
-      <OdooPartnerDialog
-        open={odooPick !== null}
-        onOpenChange={(o) => !o && setOdooPick(null)}
-        mode="pick"
-        onPicked={(p) => odooPick !== null && applyPartner(odooPick, p.id, p)}
-      />
-    </form>
+        <OdooPartnerDialog
+          open={odooPick !== null}
+          onOpenChange={(o) => !o && setOdooPick(null)}
+          mode="pick"
+          onPicked={(p) => odooPick !== null && applyPartner(odooPick, p.id, p)}
+        />
+      </form>
+    </>
   );
 }
 
-function SummaryRow({ label, value }: { label: string; value: string }) {
+/** Khung thẻ của form: tiêu đề có biểu tượng, gạch ngăn cách; `collapsed` chỉ hiện phần đầu. */
+function FormSection({
+  icon: Icon,
+  title,
+  action,
+  collapsed,
+  bodyClassName,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  action?: React.ReactNode;
+  collapsed?: boolean;
+  bodyClassName?: string;
+  children: React.ReactNode;
+}) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="shrink-0 text-muted-foreground">{label}</dt>
-      <dd className="min-w-0 truncate text-right font-medium" title={value}>
-        {value}
-      </dd>
+    <section className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05),0_1px_2px_-1px_rgb(15_23_42/0.04)]">
+      <header className={`flex min-h-14 items-center gap-3 px-5 py-2.5 ${collapsed ? '' : 'border-b'}`}>
+        <Icon className="size-5 shrink-0 text-primary" aria-hidden />
+        <h2 className="min-w-0 flex-1 text-base font-semibold tracking-tight">{title}</h2>
+        {action}
+      </header>
+      {!collapsed && <div className={bodyClassName ?? 'p-5'}>{children}</div>}
+    </section>
+  );
+}
+
+/** Dòng nhãn bên trái – ô nhập bên phải (thẻ các bên, giá trị & thời hạn). */
+function PartyRow({ label, error, labelClassName, children }: { label: React.ReactNode; error?: string; labelClassName?: string; children: React.ReactNode }) {
+  return (
+    <div className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-3 gap-y-1">
+      <span className={`text-sm text-muted-foreground ${labelClassName ?? 'w-28'}`}>{label}</span>
+      {children}
+      {error && <p className="col-start-2 text-xs text-destructive">{error}</p>}
     </div>
   );
 }
 
-function SummaryAmount({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function SummaryRow({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="min-w-0">
-      <div className="text-xs text-muted-foreground">{label}</div>
-      <div className={`truncate tabular-nums ${strong ? 'text-base font-bold text-primary' : 'font-semibold'}`}>{value}</div>
+    <div className="grid grid-cols-[8rem_minmax(0,1fr)] items-start gap-3 py-2.5">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="min-w-0 font-medium break-words">{children}</dd>
     </div>
   );
-}
-
-/** "Thời hạn hợp đồng" tính cả ngày hết hạn (01/01 → 31/12 là tròn 12 tháng); lẻ tháng thì tính theo ngày. */
-function termLabel(from?: string, to?: string) {
-  if (!from || !to) return null;
-  const start = new Date(`${from}T00:00:00`);
-  const end = new Date(`${to}T00:00:00`);
-  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) return null;
-  end.setDate(end.getDate() + 1);
-  const months = (end.getFullYear() - start.getFullYear()) * 12 + end.getMonth() - start.getMonth();
-  const check = new Date(start);
-  check.setMonth(start.getMonth() + months);
-  if (months > 0 && check.getTime() === end.getTime()) return monthsText(months);
-  return `${Math.round((end.getTime() - start.getTime()) / 86_400_000)} ngày`;
-}
-
-function monthsText(m: number) {
-  if (m % 12 === 0) return `${m / 12} năm`;
-  return m > 12 ? `${Math.floor(m / 12)} năm ${m % 12} tháng` : `${m} tháng`;
 }
 
 type OrderForm = UseFormReturn<FormValues>;
+
+type SaveIntent = 'draft' | 'continue' | 'approve';
+
+export interface CreateHeader {
+  title: string;
+  description: string;
+  crumbs: Crumb[];
+}
 
 /** Giá trị đơn = cộng tiền hàng (tự tính từ dòng hàng). */
 function OrderValue({ form }: { form: OrderForm }) {

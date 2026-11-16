@@ -1,12 +1,8 @@
 'use client';
 
-import { FilePen, FileUp } from 'lucide-react';
-import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { PartnerContractForm } from '@/components/contract-form';
-import { CreateSteps } from '@/components/create-steps';
 import { PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
 import { useAuth } from '@/lib/auth';
 
 export default function NewContractPage() {
@@ -14,37 +10,32 @@ export default function NewContractPage() {
   const params = useSearchParams();
   const fromFile = params.get('from') === 'file';
   const partner = params.get('partner') ?? '';
-  return (
-    <>
-      <PageHeader
-        title={fromFile ? 'Tạo hợp đồng từ file' : 'Tạo hợp đồng mới'}
-        description={
-          fromFile
-            ? 'Tải lên bản hợp đồng có sẵn, nhập thông tin chung và các bên; sau đó gửi phê duyệt và ký như hợp đồng soạn trong hệ thống.'
-            : 'Nhập thông tin chung, các bên và giá trị. Lưu bản nháp để soạn tiếp nội dung, hoặc gửi phê duyệt ngay.'
-        }
-        crumbs={[{ label: 'Quản lý hợp đồng', href: '/contracts' }, { label: fromFile ? 'Tạo hợp đồng từ file' : 'Tạo hợp đồng' }]}
-        actions={
-          <Button variant="outline" asChild>
-            {fromFile ? (
-              <Link href={`/contracts/new${partner ? `?partner=${partner}` : ''}`}>
-                <FilePen /> Soạn trong hệ thống
-              </Link>
-            ) : (
-              <Link href={`/contracts/new?from=file${partner ? `&partner=${partner}` : ''}`}>
-                <FileUp /> Tạo từ file
-              </Link>
-            )}
-          </Button>
-        }
-      />
-      <CreateSteps />
-      {can('contract.create') ? (
-        // key: đổi chế độ/đối tác thì dựng lại form, không giữ tệp/giá trị của chế độ trước.
-        <PartnerContractForm key={`${partner}-${fromFile}`} partnerId={partner} fromFile={fromFile} />
-      ) : (
+  const title = fromFile ? 'Tạo hợp đồng từ file' : 'Tạo hợp đồng mới';
+  const crumbs = [{ label: 'Hợp đồng', href: '/contracts' }, { label: title }];
+  if (!can('contract.create')) {
+    return (
+      <>
+        <PageHeader title={title} crumbs={crumbs} />
         <p className="text-sm text-muted-foreground">Bạn không có quyền tạo hợp đồng.</p>
-      )}
-    </>
+      </>
+    );
+  }
+  return (
+    // key: đổi chế độ/đối tác thì dựng lại form, không giữ tệp/giá trị của chế độ trước.
+    <PartnerContractForm
+      key={`${partner}-${fromFile}`}
+      partnerId={partner}
+      fromFile={fromFile}
+      header={{
+        title,
+        description: fromFile ? 'Tải lên bản hợp đồng có sẵn, kiểm tra thông tin rồi gửi phê duyệt và ký' : 'Thiết lập thông tin và quy trình ký kết',
+        crumbs,
+      }}
+      switchMode={
+        fromFile
+          ? { href: `/contracts/new${partner ? `?partner=${partner}` : ''}`, label: 'Soạn trong hệ thống →' }
+          : { href: `/contracts/new?from=file${partner ? `&partner=${partner}` : ''}`, label: 'Đã có file hợp đồng? Tạo từ file →' }
+      }
+    />
   );
 }
