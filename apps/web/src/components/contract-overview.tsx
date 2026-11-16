@@ -85,7 +85,7 @@ function paymentState(p: Payment): { label: string; tone: Tone } {
 
 /** Bước của tiến trình theo trạng thái hợp đồng (-1: đã hủy / lưu trữ). */
 const STEP_OF: Record<ContractStatus, number> = {
-  DRAFT: 0, PENDING_APPROVAL: 0, APPROVED: 1, PENDING_SIGNATURE: 1, SIGNED: 2, ACTIVE: 3, EXPIRED: 4, LIQUIDATED: 4, CANCELLED: -1, ARCHIVED: -1,
+  DRAFT: 0, PENDING_APPROVAL: 1, APPROVED: 1, PENDING_SIGNATURE: 1, SIGNED: 2, ACTIVE: 3, EXPIRED: 4, LIQUIDATED: 4, CANCELLED: -1, ARCHIVED: -1,
 };
 
 export function ContractOverview({ contract: c, editInfo, onOpenTab }: { contract: ContractDetail; editInfo?: React.ReactNode; onOpenTab: (tab: string) => void }) {
@@ -111,13 +111,27 @@ export function ContractOverview({ contract: c, editInfo, onOpenTab }: { contrac
 
   // Tiến trình: lấy thời điểm và người thực hiện từ nhật ký.
   const entries = timeline.data ?? [];
-  const lastOf = (...actions: string[]) => entries.find((e) => actions.includes(e.action));
-  const approved = lastOf('contract.approval_approve', 'contract.self_approve');
+  // Nhật ký trả về theo thứ tự cũ → mới: lấy lần gần nhất từ cuối danh sách.
+  const lastOf = (...actions: string[]) => entries.findLast((e) => actions.includes(e.action));
+  const approved = lastOf('contract.approval_approve', 'contract.self_approve', 'contract.approve_now');
+  // Đang chờ duyệt: hiện lần gửi gần nhất và những người đã duyệt từ lần gửi đó.
+  const submitted = lastOf('contract.submit_approval');
+  const approvedBy = submitted
+    ? [...new Set(entries.filter((e) => e.action === 'contract.approval_approve' && e.createdAt >= submitted.createdAt).map((e) => e.actorName ?? 'Hệ thống'))]
+    : [];
+  const recent = [...entries].reverse().slice(0, 4);
   const signedEntry = lastOf('contract.signature_completed', 'contract.signed');
   const cur = STEP_OF[c.status];
   const steps = [
     { label: isOrder ? 'Đã lập đơn' : 'Đã tạo', at: c.createdAt, by: c.createdBy.fullName, note: undefined as string | undefined },
-    { label: 'Đã phê duyệt', at: approved?.createdAt, by: approved?.actorName ?? undefined, note: undefined },
+    c.status === 'PENDING_APPROVAL'
+      ? {
+          label: 'Đang phê duyệt',
+          at: submitted?.createdAt,
+          by: undefined,
+          note: [submitted?.actorName && `Gửi bởi ${submitted.actorName}`, approvedBy.length ? `Đã duyệt: ${approvedBy.join(', ')}` : 'Chờ người duyệt đầu tiên'].filter(Boolean).join(' · '),
+        }
+      : { label: 'Đã phê duyệt', at: approved?.createdAt, by: approved?.actorName ?? undefined, note: undefined },
     { label: 'Đã ký', at: signedEntry?.createdAt ?? c.signedDate ?? undefined, by: undefined, note: c.signedDate ? 'Các bên đã hoàn tất ký kết' : undefined },
     { label: isOrder ? 'Đang thực hiện' : 'Đang hiệu lực', at: c.effectiveDate ?? undefined, by: undefined, note: c.effectiveDate ? `Từ ${formatDate(c.effectiveDate)}` : undefined },
     { label: c.status === 'LIQUIDATED' ? 'Đã thanh lý' : 'Hoàn tất', at: undefined, by: undefined, note: c.expiryDate ? `${cur >= 4 ? 'Kết thúc' : 'Dự kiến'} ${formatDate(c.expiryDate)}` : undefined },
@@ -399,7 +413,7 @@ export function ContractOverview({ contract: c, editInfo, onOpenTab }: { contrac
             <p className="text-sm text-muted-foreground">Chưa có hoạt động.</p>
           ) : (
             <ul className="divide-y">
-              {timeline.data.slice(0, 4).map((t) => (
+              {recent.map((t) => (
                 <li key={t.id} className="flex gap-3 py-2.5 first:pt-0 last:pb-0">
                   <InitialsAvatar name={t.actorName ?? 'Hệ thống'} className="size-8 text-[11px]" />
                   <div className="min-w-0 text-sm">
