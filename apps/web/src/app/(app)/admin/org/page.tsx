@@ -1,23 +1,24 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus } from 'lucide-react';
+import { Building2, Loader2, type LucideIcon, MapPin, Network, Pencil, Plus, Users, UserX } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { FilterSelect } from '@/components/filter-select';
+import { ListCard, MobileCard, PersonCell, StatusPill, TitleCell, Th } from '@/components/list-ui';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useLookups } from '@/lib/queries';
+import { cn } from '@/lib/utils';
 import type { AdminBranch, AdminDepartment } from '@/lib/types';
 
 interface DeptDraft {
@@ -158,6 +159,37 @@ function BranchDialog({ draft, onClose }: { draft: BranchDraft; onClose: () => v
   );
 }
 
+/** Thẻ số liệu tĩnh: biểu tượng trong ô màu, số lớn, nhãn nhỏ. */
+function Stat({ icon: Icon, label, value, tone }: { icon: LucideIcon; label: string; value: number; tone: string }) {
+  return (
+    <div className="flex items-center gap-3 rounded-xl border bg-card p-3 shadow-[0_1px_3px_0_rgb(15_23_42/0.05)] sm:gap-4 sm:p-4">
+      <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl sm:size-12', tone)}>
+        <Icon className="size-5 sm:size-6" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs text-muted-foreground sm:text-sm">{label}</span>
+        <span className="block text-2xl leading-tight font-bold tabular-nums sm:text-[1.75rem]">{value}</span>
+      </span>
+    </div>
+  );
+}
+
+const ActivePill = ({ active }: { active: boolean }) => (active ? <StatusPill tone="green">Hoạt động</StatusPill> : <StatusPill tone="gray">Ngừng</StatusPill>);
+
+/** Tiêu đề khung danh sách: biểu tượng + tên + nút thêm bên phải. */
+function SectionBar({ icon: Icon, title, count, action }: { icon: LucideIcon; title: string; count: number; action: React.ReactNode }) {
+  return (
+    <>
+      <span className="flex min-w-0 flex-1 items-center gap-2 px-1">
+        <Icon className="size-5 shrink-0 text-primary" aria-hidden />
+        <span className="font-semibold">{title}</span>
+        <span className="rounded-full bg-muted px-2 py-0.5 text-xs text-muted-foreground tabular-nums">{count}</span>
+      </span>
+      {action}
+    </>
+  );
+}
+
 export default function AdminOrgPage() {
   const { can } = useAuth();
   const allowed = can('org.manage');
@@ -169,105 +201,183 @@ export default function AdminOrgPage() {
   if (!allowed) return <p className="text-sm text-muted-foreground">Bạn không có quyền quản lý cơ cấu tổ chức.</p>;
   const error = departments.error ?? branches.error;
 
+  const editDept = (d: AdminDepartment) => setDept({ id: d.id, code: d.code, name: d.name, branchId: d.branchId ?? '', parentId: d.parentId ?? '', managerId: d.managerId ?? '', isActive: d.isActive });
+  const editBranch = (b: AdminBranch) => setBranch({ id: b.id, code: b.code, name: b.name, address: b.address ?? '', isActive: b.isActive });
+  const editBtn = (label: string, onClick: () => void) => (
+    <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${label}`} onClick={onClick}>
+      <Pencil />
+    </Button>
+  );
+  const managerCell = (d: AdminDepartment) => (d.manager ? <PersonCell name={d.manager.fullName} sub="Trưởng phòng" /> : <StatusPill tone="red">Chưa có trưởng phòng</StatusPill>);
+
   return (
     <>
-      <PageHeader title="Phòng ban, chi nhánh" crumbs={[{ label: 'Quản trị' }, { label: 'Phòng ban, chi nhánh' }]} />
+      <PageHeader title="Phòng ban, chi nhánh" description="Trưởng phòng là người duyệt ở bước “Trưởng phòng” của quy trình phê duyệt." crumbs={[{ label: 'Quản trị' }, { label: 'Phòng ban, chi nhánh' }]} />
       {error ? (
         <ErrorState error={error} />
       ) : !departments.data || !branches.data ? (
         <Skeleton className="h-64" />
       ) : (
-        <Tabs defaultValue="departments">
-          <TabsList>
-            <TabsTrigger value="departments">Phòng ban ({departments.data.length})</TabsTrigger>
-            <TabsTrigger value="branches">Chi nhánh ({branches.data.length})</TabsTrigger>
-          </TabsList>
-          <TabsContent value="departments" className="mt-4 space-y-3">
-            <Button onClick={() => setDept({ code: '', name: '', branchId: '', parentId: '', managerId: '', isActive: true })}>
-              <Plus /> Thêm phòng ban
-            </Button>
-            <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mã</TableHead>
-                    <TableHead>Tên phòng ban</TableHead>
-                    <TableHead>Trưởng phòng</TableHead>
-                    <TableHead>Thuộc</TableHead>
-                    <TableHead>Chi nhánh</TableHead>
-                    <TableHead className="text-right">Nhân sự</TableHead>
-                    <TableHead className="text-right">Hợp đồng</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {departments.data.length === 0 ? (
-                    <TableRow><TableCell colSpan={8}><EmptyState title="Chưa có phòng ban" /></TableCell></TableRow>
-                  ) : (
-                    departments.data.map((d) => (
-                      <TableRow key={d.id} className={d.isActive ? '' : 'opacity-50'}>
-                        <TableCell className="font-medium">{d.code}</TableCell>
-                        <TableCell>
-                          {d.name} {!d.isActive && <Badge variant="outline">Ngừng</Badge>}
-                        </TableCell>
-                        <TableCell>{d.manager?.fullName ?? <span className="text-destructive">Chưa có</span>}</TableCell>
-                        <TableCell>{d.parent?.name ?? '—'}</TableCell>
-                        <TableCell>{d.branch?.name ?? '—'}</TableCell>
-                        <TableCell className="text-right tabular-nums">{d._count.users}</TableCell>
-                        <TableCell className="text-right tabular-nums">{d._count.contracts}</TableCell>
-                        <TableCell className="text-right">
-                          <Button
-                            variant="ghost"
-                            size="icon-sm"
-                            aria-label={`Sửa ${d.name}`}
-                            onClick={() => setDept({ id: d.id, code: d.code, name: d.name, branchId: d.branchId ?? '', parentId: d.parentId ?? '', managerId: d.managerId ?? '', isActive: d.isActive })}
-                          >
-                            <Pencil />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-          <TabsContent value="branches" className="mt-4 space-y-3">
-            <Button onClick={() => setBranch({ code: '', name: '', address: '', isActive: true })}>
-              <Plus /> Thêm chi nhánh
-            </Button>
-            <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mã</TableHead>
-                    <TableHead>Tên chi nhánh</TableHead>
-                    <TableHead>Địa chỉ</TableHead>
-                    <TableHead className="text-right">Phòng ban</TableHead>
-                    <TableHead className="text-right">Nhân sự</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {branches.data.map((b) => (
-                    <TableRow key={b.id} className={b.isActive ? '' : 'opacity-50'}>
-                      <TableCell className="font-medium">{b.code}</TableCell>
-                      <TableCell>{b.name}</TableCell>
-                      <TableCell>{b.address ?? '—'}</TableCell>
-                      <TableCell className="text-right tabular-nums">{b._count.departments}</TableCell>
-                      <TableCell className="text-right tabular-nums">{b._count.users}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${b.name}`} onClick={() => setBranch({ id: b.id, code: b.code, name: b.name, address: b.address ?? '', isActive: b.isActive })}>
-                          <Pencil />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          </TabsContent>
-        </Tabs>
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <Stat icon={Network} label="Phòng ban" value={departments.data.length} tone="bg-indigo-50 text-indigo-600 dark:bg-indigo-950 dark:text-indigo-300" />
+            <Stat icon={Building2} label="Chi nhánh" value={branches.data.length} tone="bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-300" />
+            <Stat icon={Users} label="Nhân sự theo phòng ban" value={departments.data.reduce((s, d) => s + d._count.users, 0)} tone="bg-green-50 text-green-600 dark:bg-green-950 dark:text-green-300" />
+            <Stat icon={UserX} label="Phòng ban chưa có trưởng phòng" value={departments.data.filter((d) => d.isActive && !d.managerId).length} tone="bg-amber-50 text-amber-600 dark:bg-amber-950 dark:text-amber-300" />
+          </div>
+          <Tabs defaultValue="departments">
+            <TabsList>
+              <TabsTrigger value="departments">Phòng ban ({departments.data.length})</TabsTrigger>
+              <TabsTrigger value="branches">Chi nhánh ({branches.data.length})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="departments" className="mt-4">
+              <ListCard
+                toolbar={
+                  <SectionBar
+                    icon={Network}
+                    title="Phòng ban"
+                    count={departments.data.length}
+                    action={
+                      <Button className="h-9" onClick={() => setDept({ code: '', name: '', branchId: '', parentId: '', managerId: '', isActive: true })}>
+                        <Plus /> Thêm phòng ban
+                      </Button>
+                    }
+                  />
+                }
+              >
+                {departments.data.length === 0 ? (
+                  <div className="p-4">
+                    <EmptyState title="Chưa có phòng ban" />
+                  </div>
+                ) : (
+                  <>
+                    <ul className="divide-y md:hidden">
+                      {departments.data.map((d) => (
+                        <MobileCard
+                          key={d.id}
+                          title={d.name}
+                          sub={d.code}
+                          status={<ActivePill active={d.isActive} />}
+                          actions={editBtn(d.name, () => editDept(d))}
+                        >
+                          <span className="block text-xs text-muted-foreground">
+                            Trưởng phòng: {d.manager?.fullName ?? <span className="font-medium text-destructive">Chưa có</span>}
+                          </span>
+                          <span className="block text-xs text-muted-foreground">
+                            {[d.parent ? `Thuộc ${d.parent.name}` : null, d.branch?.name, `${d._count.users} nhân sự`, `${d._count.contracts} hợp đồng`].filter(Boolean).join(' · ')}
+                          </span>
+                        </MobileCard>
+                      ))}
+                    </ul>
+                    <div className="hidden md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <Th className="pl-4">Phòng ban</Th>
+                            <Th>Trưởng phòng</Th>
+                            <Th>Thuộc</Th>
+                            <Th>Chi nhánh</Th>
+                            <Th className="text-right">Nhân sự</Th>
+                            <Th className="text-right">Hợp đồng</Th>
+                            <Th>Trạng thái</Th>
+                            <Th />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {departments.data.map((d) => (
+                            <TableRow key={d.id} className={d.isActive ? '' : 'opacity-60'}>
+                              <TableCell className="pl-4">
+                                <TitleCell icon={Network} title={d.name} sub={d.code} />
+                              </TableCell>
+                              <TableCell>{managerCell(d)}</TableCell>
+                              <TableCell className="max-w-48 whitespace-normal">{d.parent?.name ?? '—'}</TableCell>
+                              <TableCell className="max-w-48 whitespace-normal">{d.branch?.name ?? '—'}</TableCell>
+                              <TableCell className="text-right tabular-nums">{d._count.users}</TableCell>
+                              <TableCell className="text-right tabular-nums">{d._count.contracts}</TableCell>
+                              <TableCell>
+                                <ActivePill active={d.isActive} />
+                              </TableCell>
+                              <TableCell className="pr-4 text-right">{editBtn(d.name, () => editDept(d))}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+              </ListCard>
+            </TabsContent>
+            <TabsContent value="branches" className="mt-4">
+              <ListCard
+                toolbar={
+                  <SectionBar
+                    icon={Building2}
+                    title="Chi nhánh"
+                    count={branches.data.length}
+                    action={
+                      <Button className="h-9" onClick={() => setBranch({ code: '', name: '', address: '', isActive: true })}>
+                        <Plus /> Thêm chi nhánh
+                      </Button>
+                    }
+                  />
+                }
+              >
+                {branches.data.length === 0 ? (
+                  <div className="p-4">
+                    <EmptyState title="Chưa có chi nhánh" />
+                  </div>
+                ) : (
+                  <>
+                    <ul className="divide-y md:hidden">
+                      {branches.data.map((b) => (
+                        <MobileCard key={b.id} title={b.name} sub={b.code} status={<ActivePill active={b.isActive} />} actions={editBtn(b.name, () => editBranch(b))}>
+                          {b.address && (
+                            <span className="flex items-start gap-1 text-xs text-muted-foreground">
+                              <MapPin className="mt-0.5 size-3.5 shrink-0" /> {b.address}
+                            </span>
+                          )}
+                          <span className="block text-xs text-muted-foreground">
+                            {b._count.departments} phòng ban · {b._count.users} nhân sự
+                          </span>
+                        </MobileCard>
+                      ))}
+                    </ul>
+                    <div className="hidden md:block">
+                      <Table>
+                        <TableHeader>
+                          <TableRow className="hover:bg-transparent">
+                            <Th className="pl-4">Chi nhánh</Th>
+                            <Th>Địa chỉ</Th>
+                            <Th className="text-right">Phòng ban</Th>
+                            <Th className="text-right">Nhân sự</Th>
+                            <Th>Trạng thái</Th>
+                            <Th />
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {branches.data.map((b) => (
+                            <TableRow key={b.id} className={b.isActive ? '' : 'opacity-60'}>
+                              <TableCell className="pl-4">
+                                <TitleCell icon={Building2} title={b.name} sub={b.code} />
+                              </TableCell>
+                              <TableCell className="max-w-80 min-w-48 whitespace-normal text-sm">{b.address ?? '—'}</TableCell>
+                              <TableCell className="text-right tabular-nums">{b._count.departments}</TableCell>
+                              <TableCell className="text-right tabular-nums">{b._count.users}</TableCell>
+                              <TableCell>
+                                <ActivePill active={b.isActive} />
+                              </TableCell>
+                              <TableCell className="pr-4 text-right">{editBtn(b.name, () => editBranch(b))}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+              </ListCard>
+            </TabsContent>
+          </Tabs>
+        </div>
       )}
       {dept && departments.data && branches.data && <DeptDialog draft={dept} departments={departments.data} branches={branches.data} onClose={() => setDept(null)} />}
       {branch && <BranchDialog draft={branch} onClose={() => setBranch(null)} />}

@@ -1,14 +1,13 @@
 'use client';
 
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { InitialsAvatar, ListCard, ListState, PersonCell, Th } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { AUDIT_ACTION_LABELS, formatDateTime } from '@/lib/format';
 import { type TenantRef, type TenantRow, usePlatformGate } from '@/lib/platform';
@@ -43,70 +42,73 @@ export default function PlatformAuditLogsPage() {
   });
   if (!allowed) return denied;
 
+  const tenantLink = (r: PlatformAuditRow) => (
+    <Link href={`/platform/tenants/${r.tenant.id}`} className="font-medium text-primary hover:underline">
+      {r.tenant.name}
+    </Link>
+  );
+
   return (
     <>
       <PageHeader title="Nhật ký hệ thống" description="Nhật ký của mọi doanh nghiệp; chỉ đọc." crumbs={[{ label: 'Super Admin' }, { label: 'Nhật ký hệ thống' }]} />
-      <div className="mb-3 flex flex-wrap gap-2">
-        <FilterSelect allLabel="Mọi hoạt động" value={scope} onChange={(v) => { setScope(v); setPage(1); }} options={[{ value: 'platform', label: 'Thao tác của Super Admin' }]} />
-        <FilterSelect className="w-64" allLabel="Mọi doanh nghiệp" value={tenantId} onChange={(v) => { setTenantId(v); setPage(1); }} options={(tenants.data?.items ?? []).map((t) => ({ value: t.id, label: t.name }))} />
-      </div>
-      {q.isError ? (
-        <ErrorState error={q.error} onRetry={() => q.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Thời gian</TableHead>
-                <TableHead>Doanh nghiệp</TableHead>
-                <TableHead>Người thực hiện</TableHead>
-                <TableHead>Hành động</TableHead>
-                <TableHead>IP</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {q.isPending ? (
-                <TableRow>
-                  <TableCell colSpan={5}>
-                    <Skeleton className="h-24" />
-                  </TableCell>
-                </TableRow>
-              ) : !q.data.items.length ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="p-4">
-                    <EmptyState title="Chưa có nhật ký" />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                q.data.items.map((r) => (
-                  <TableRow key={r.id}>
-                    <TableCell className="whitespace-nowrap">{formatDateTime(r.createdAt)}</TableCell>
-                    <TableCell>
-                      <Link href={`/platform/tenants/${r.tenant.id}`} className="hover:underline">
-                        {r.tenant.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell>{r.actorName ?? '—'}</TableCell>
-                    <TableCell>{AUDIT_ACTION_LABELS[r.action] ?? r.action}</TableCell>
-                    <TableCell className="text-xs text-muted-foreground">{r.ip ?? '—'}</TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <FilterSelect className="h-9 min-w-0 flex-1 sm:w-56 sm:flex-none" allLabel="Mọi hoạt động" ariaLabel="Phạm vi" value={scope} onChange={(v) => { setScope(v); setPage(1); }} options={[{ value: 'platform', label: 'Thao tác của Super Admin' }]} />
+            <FilterSelect className="h-9 min-w-0 flex-1 sm:w-64 sm:flex-none" allLabel="Mọi doanh nghiệp" ariaLabel="Doanh nghiệp" value={tenantId} onChange={(v) => { setTenantId(v); setPage(1); }} options={(tenants.data?.items ?? []).map((t) => ({ value: t.id, label: t.name }))} />
+          </>
+        }
+      >
+        <ListState query={q} empty={{ title: 'Chưa có nhật ký' }} />
+        {!!q.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {q.data.items.map((r) => (
+                <li key={r.id} className="flex items-start gap-3 px-4 py-3">
+                  <InitialsAvatar name={r.actorName ?? 'Hệ thống'} />
+                  <div className="min-w-0 flex-1 text-sm">
+                    <p>
+                      <span className="font-semibold">{r.actorName ?? 'Hệ thống'}</span> <span className="text-muted-foreground">{(AUDIT_ACTION_LABELS[r.action] ?? r.action).toLowerCase()}</span>
+                    </p>
+                    <p className="line-clamp-1">{tenantLink(r)}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {formatDateTime(r.createdAt)}
+                      {r.ip && ` · ${r.ip}`}
+                    </p>
+                  </div>
+                </li>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Người thực hiện</Th>
+                    <Th>Hành động</Th>
+                    <Th>Doanh nghiệp</Th>
+                    <Th>Thời gian</Th>
+                    <Th className="pr-4">IP</Th>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-      {q.data && q.data.totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            <ChevronLeft />
-          </Button>
-          Trang {q.data.page}/{q.data.totalPages}
-          <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={page >= q.data.totalPages} onClick={() => setPage(page + 1)}>
-            <ChevronRight />
-          </Button>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {q.data.items.map((r) => (
+                    <TableRow key={r.id}>
+                      <TableCell className="pl-4">
+                        <PersonCell name={r.actorName ?? 'Hệ thống'} />
+                      </TableCell>
+                      <TableCell className="max-w-80 whitespace-normal">{AUDIT_ACTION_LABELS[r.action] ?? r.action}</TableCell>
+                      <TableCell className="max-w-64 whitespace-normal">{tenantLink(r)}</TableCell>
+                      <TableCell className="tabular-nums">{formatDateTime(r.createdAt)}</TableCell>
+                      <TableCell className="pr-4 text-xs text-muted-foreground">{r.ip ?? '—'}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={q.data.page} totalPages={q.data.totalPages} total={q.data.total} pageSize={50} unit="bản ghi" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
     </>
   );
 }

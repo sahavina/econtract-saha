@@ -2,23 +2,22 @@
 
 import { renderCode, validateCodePattern } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, Pencil, Plus } from 'lucide-react';
+import { Building2, FileCode2, Loader2, type LucideIcon, Mail, Pencil, PenLine, Plug, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CompanyProfileCard } from '@/components/company-profile-card';
 import { EmailSettingsCard } from '@/components/email-settings-card';
+import { MobileCard, StatusPill, TitleCell, Th } from '@/components/list-ui';
 import { MisaEsignSettingsCard } from '@/components/misa-esign-settings-card';
 import { OdooSettingsCard } from '@/components/odoo-settings-card';
-import { ErrorState, PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
+import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import type { AdminContractType } from '@/lib/types';
@@ -120,6 +119,34 @@ function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
   );
 }
 
+/** Khung mục cấu hình kiểu FormSection: biểu tượng + tiêu đề + mô tả, nút bên phải, thân bên dưới. */
+function SettingsSection({ id, icon: Icon, title, description, action, children }: { id: string; icon: LucideIcon; title: string; description?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section id={id} className="scroll-mt-20 overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05),0_1px_2px_-1px_rgb(15_23_42/0.04)]">
+      <header className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-[18px]" aria-hidden />
+        </span>
+        <div className="min-w-0 flex-1 basis-56">
+          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
+          {description && <p className="text-xs text-muted-foreground">{description}</p>}
+        </div>
+        {action}
+      </header>
+      {children}
+    </section>
+  );
+}
+
+/** Mục điều hướng nhanh trong trang (liên kết neo tới từng khối cấu hình). */
+const SECTIONS: { id: string; icon: LucideIcon; label: string }[] = [
+  { id: 'company', icon: Building2, label: 'Thông tin doanh nghiệp' },
+  { id: 'contract-types', icon: FileCode2, label: 'Loại hợp đồng & mẫu mã' },
+  { id: 'email', icon: Mail, label: 'Email gửi đi (SMTP)' },
+  { id: 'odoo', icon: Plug, label: 'Tích hợp Odoo' },
+  { id: 'misa', icon: PenLine, label: 'Chữ ký số MISA eSign' },
+];
+
 export default function AdminSettingsPage() {
   const { can } = useAuth();
   const allowed = can('settings.manage');
@@ -128,75 +155,117 @@ export default function AdminSettingsPage() {
 
   if (!allowed) return <p className="text-sm text-muted-foreground">Bạn không có quyền quản lý cấu hình.</p>;
 
+  const edit = (t: AdminContractType) => setEditing({ id: t.id, code: t.code, name: t.name, codePattern: t.codePattern, isActive: t.isActive, kind: t.kind });
+  const editBtn = (t: AdminContractType) => (
+    <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${t.name}`} onClick={() => edit(t)}>
+      <Pencil />
+    </Button>
+  );
+  const kindPill = (t: AdminContractType) => (t.kind === 'ORDER' ? <StatusPill tone="teal">Đơn đặt hàng</StatusPill> : <StatusPill tone="indigo">Hợp đồng</StatusPill>);
+  const activePill = (t: AdminContractType) => (t.isActive ? <StatusPill tone="green">Đang dùng</StatusPill> : <StatusPill tone="gray">Ngừng</StatusPill>);
+
   return (
     <>
-      <PageHeader title="Cấu hình" crumbs={[{ label: 'Quản trị' }, { label: 'Cấu hình' }]} />
-      <div className="mb-4">
-        <CompanyProfileCard />
-      </div>
-      <Card>
-        <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
-          <div>
-            <CardTitle className="text-base">Loại hợp đồng & mẫu mã</CardTitle>
-            <CardDescription>Mã hợp đồng tự sinh theo mẫu của từng loại; hợp đồng không chọn loại dùng mẫu HD-{'{YYYY}'}-{'{SEQUENCE:5}'}.</CardDescription>
+      <PageHeader title="Cấu hình" description="Thông tin doanh nghiệp, mẫu mã hợp đồng và các kết nối bên ngoài." crumbs={[{ label: 'Quản trị' }, { label: 'Cấu hình' }]} />
+      <div className="grid items-start gap-4 lg:grid-cols-[220px_minmax(0,1fr)]">
+        <nav aria-label="Các mục cấu hình" className="hidden overflow-hidden rounded-xl border bg-card p-2 shadow-[0_1px_3px_0_rgb(15_23_42/0.05)] lg:sticky lg:top-4 lg:block">
+          {SECTIONS.map((s) => (
+            <a key={s.id} href={`#${s.id}`} className="flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+              <s.icon className="size-4 shrink-0" aria-hidden />
+              {s.label}
+            </a>
+          ))}
+        </nav>
+        <div className="min-w-0 space-y-4">
+          <div id="company" className="scroll-mt-20">
+            <CompanyProfileCard />
           </div>
-          <Button onClick={() => setEditing({ code: '', name: '', codePattern: '{TYPE}-{YYYY}-{SEQUENCE:4}', isActive: true, kind: 'CONTRACT' })}>
-            <Plus /> Thêm loại
-          </Button>
-        </CardHeader>
-        <CardContent>
-          {types.isError ? (
-            <ErrorState error={types.error} onRetry={() => types.refetch()} />
-          ) : !types.data ? (
-            <Skeleton className="h-40" />
-          ) : (
-            <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Mã</TableHead>
-                    <TableHead>Tên loại</TableHead>
-                    <TableHead>Mẫu mã</TableHead>
-                    <TableHead>Ví dụ</TableHead>
-                    <TableHead className="text-right">Hợp đồng</TableHead>
-                    <TableHead />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
+          <SettingsSection
+            id="contract-types"
+            icon={FileCode2}
+            title="Loại hợp đồng & mẫu mã"
+            description={<>Mã hợp đồng tự sinh theo mẫu của từng loại; hợp đồng không chọn loại dùng mẫu HD-{'{YYYY}'}-{'{SEQUENCE:5}'}.</>}
+            action={
+              <Button className="h-9" onClick={() => setEditing({ code: '', name: '', codePattern: '{TYPE}-{YYYY}-{SEQUENCE:4}', isActive: true, kind: 'CONTRACT' })}>
+                <Plus /> Thêm loại
+              </Button>
+            }
+          >
+            {types.isError ? (
+              <div className="p-5">
+                <ErrorState error={types.error} onRetry={() => types.refetch()} />
+              </div>
+            ) : !types.data ? (
+              <div className="p-5">
+                <Skeleton className="h-40" />
+              </div>
+            ) : types.data.length === 0 ? (
+              <div className="p-5">
+                <EmptyState title="Chưa có loại hợp đồng" />
+              </div>
+            ) : (
+              <>
+                <ul className="divide-y md:hidden">
                   {types.data.map((t) => (
-                    <TableRow key={t.id} className={t.isActive ? '' : 'opacity-50'}>
-                      <TableCell className="font-medium">{t.code}</TableCell>
-                      <TableCell>
-                        {t.name} {t.kind === 'ORDER' && <Badge variant="secondary">Đơn đặt hàng</Badge>} {!t.isActive && <Badge variant="outline">Ngừng</Badge>}
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-xs">{t.codePattern}</code>
-                      </TableCell>
-                      <TableCell>
-                        <code className="text-xs">{t.example}</code>
-                      </TableCell>
-                      <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
-                      <TableCell className="text-right">
-                        <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${t.name}`} onClick={() => setEditing({ id: t.id, code: t.code, name: t.name, codePattern: t.codePattern, isActive: t.isActive, kind: t.kind })}>
-                          <Pencil />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
+                    <MobileCard key={t.id} title={t.name} sub={t.code} status={activePill(t)} actions={editBtn(t)}>
+                      <span className="mb-1 flex flex-wrap items-center gap-2">
+                        {kindPill(t)}
+                        <span className="text-xs text-muted-foreground">{t._count.contracts} hợp đồng</span>
+                      </span>
+                      <code className="block text-xs break-all">{t.codePattern}</code>
+                      <span className="block text-xs text-muted-foreground">
+                        Ví dụ: <code className="break-all text-foreground">{t.example}</code>
+                      </span>
+                    </MobileCard>
                   ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-      <div className="mt-4">
-        <EmailSettingsCard />
-      </div>
-      <div className="mt-4">
-        <OdooSettingsCard />
-      </div>
-      <div className="mt-4">
-        <MisaEsignSettingsCard />
+                </ul>
+                <div className="hidden md:block">
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="hover:bg-transparent">
+                        <Th className="pl-5">Loại</Th>
+                        <Th>Dùng cho</Th>
+                        <Th>Mẫu mã</Th>
+                        <Th>Ví dụ</Th>
+                        <Th className="text-right">Hợp đồng</Th>
+                        <Th>Trạng thái</Th>
+                        <Th />
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {types.data.map((t) => (
+                        <TableRow key={t.id} className={t.isActive ? '' : 'opacity-60'}>
+                          <TableCell className="pl-5">
+                            <TitleCell icon={FileCode2} title={t.name} sub={t.code} />
+                          </TableCell>
+                          <TableCell>{kindPill(t)}</TableCell>
+                          <TableCell className="max-w-64 whitespace-normal">
+                            <code className="rounded bg-muted px-1.5 py-0.5 text-xs break-all">{t.codePattern}</code>
+                          </TableCell>
+                          <TableCell className="max-w-56 whitespace-normal">
+                            <code className="text-xs font-semibold break-all">{t.example}</code>
+                          </TableCell>
+                          <TableCell className="text-right tabular-nums">{t._count.contracts}</TableCell>
+                          <TableCell>{activePill(t)}</TableCell>
+                          <TableCell className="pr-5 text-right">{editBtn(t)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+              </>
+            )}
+          </SettingsSection>
+          <div id="email" className="scroll-mt-20">
+            <EmailSettingsCard />
+          </div>
+          <div id="odoo" className="scroll-mt-20">
+            <OdooSettingsCard />
+          </div>
+          <div id="misa" className="scroll-mt-20">
+            <MisaEsignSettingsCard />
+          </div>
+        </div>
       </div>
       {editing && <TypeDialog draft={editing} onClose={() => setEditing(null)} />}
     </>

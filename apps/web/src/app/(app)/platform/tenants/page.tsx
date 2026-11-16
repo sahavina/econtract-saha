@@ -2,34 +2,37 @@
 
 import { isStrongPassword, PASSWORD_RULE_MESSAGE } from '@saha/shared';
 import { keepPreviousData, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ChevronLeft, ChevronRight, Loader2, Plus } from 'lucide-react';
-import Link from 'next/link';
+import { Building2, Loader2, Plus } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { FilterSelect } from '@/components/filter-select';
-import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
+import { ListCard, ListState, MobileCard, SearchBox, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { PageHeader } from '@/components/page-header';
+import { Pager } from '@/components/pager';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Sheet, SheetContent, SheetDescription, SheetFooter, SheetHeader, SheetTitle } from '@/components/ui/sheet';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { api, type Paginated } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/format';
 import {
   errorList,
   FormErrors,
   formatStorage,
-  Pill,
   type Plan,
   SUBSCRIPTION_STATUS,
+  type SubscriptionStatus,
   TENANT_STATUS,
   type TenantRow,
   type TenantStatus,
   usePlatformGate,
 } from '@/lib/platform';
+
+const TENANT_TONE: Record<TenantStatus, Tone> = { ACTIVE: 'green', SUSPENDED: 'amber', CLOSED: 'gray' };
+const SUB_TONE: Record<SubscriptionStatus, Tone> = { TRIAL: 'sky', ACTIVE: 'green', PAST_DUE: 'amber', CANCELLED: 'gray', EXPIRED: 'gray' };
 
 const emptyDraft = {
   code: '',
@@ -217,10 +220,25 @@ export default function PlatformTenantsPage() {
   const plans = useQuery({ queryKey: ['platform', 'plans'], queryFn: () => api<Plan[]>('/platform/plans'), enabled: allowed });
   if (!allowed) return denied;
 
+  const statusOptions = (Object.keys(TENANT_STATUS) as TenantStatus[]).map((s) => ({ value: s, label: TENANT_STATUS[s].label }));
+
+  /** Gói hiện hành: tên gói + trạng thái thuê bao + ngày hết hạn. */
+  const planCell = (t: TenantRow) =>
+    t.subscription ? (
+      <span className="flex flex-wrap items-center gap-1.5">
+        <span className="font-medium">{t.subscription.plan.name}</span>
+        <StatusPill tone={SUB_TONE[t.subscription.status]}>{SUBSCRIPTION_STATUS[t.subscription.status].label}</StatusPill>
+        {t.subscription.endsAt && <span className="text-xs text-muted-foreground">đến {formatDate(t.subscription.endsAt)}</span>}
+      </span>
+    ) : (
+      <StatusPill tone="red">Không có gói hiệu lực</StatusPill>
+    );
+
   return (
     <>
       <PageHeader
         title="Doanh nghiệp"
+        description="Các doanh nghiệp dùng hệ thống, gói hiện hành và mức sử dụng."
         crumbs={[{ label: 'Super Admin' }, { label: 'Doanh nghiệp' }]}
         actions={
           <Button onClick={() => setCreating(true)} disabled={!plans.data}>
@@ -228,88 +246,85 @@ export default function PlatformTenantsPage() {
           </Button>
         }
       />
-      <div className="mb-3 flex flex-wrap gap-2">
-        <Input className="w-64" placeholder="Tìm tên, mã, MST, email…" value={search} onChange={(e) => setSearch(e.target.value)} aria-label="Tìm doanh nghiệp" />
-        <FilterSelect allLabel="Mọi trạng thái" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={(Object.keys(TENANT_STATUS) as TenantStatus[]).map((s) => ({ value: s, label: TENANT_STATUS[s].label }))} />
-        <FilterSelect allLabel="Mọi gói" value={planId} onChange={(v) => { setPlanId(v); setPage(1); }} options={(plans.data ?? []).map((p) => ({ value: p.id, label: p.name }))} />
-      </div>
-      {list.isError ? (
-        <ErrorState error={list.error} onRetry={() => list.refetch()} />
-      ) : (
-        <div className="overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Doanh nghiệp</TableHead>
-                <TableHead>Trạng thái</TableHead>
-                <TableHead>Gói hiện hành</TableHead>
-                <TableHead className="text-right">Người dùng</TableHead>
-                <TableHead className="text-right">HĐ trong năm</TableHead>
-                <TableHead className="text-right">Lưu trữ</TableHead>
-                <TableHead>Ngày tạo</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {list.isPending ? (
-                <TableRow>
-                  <TableCell colSpan={7}>
-                    <Skeleton className="h-24" />
-                  </TableCell>
-                </TableRow>
-              ) : !list.data.items.length ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="p-4">
-                    <EmptyState title="Không có doanh nghiệp phù hợp" />
-                  </TableCell>
-                </TableRow>
-              ) : (
-                list.data.items.map((t) => (
-                  <TableRow key={t.id}>
-                    <TableCell>
-                      <Link href={`/platform/tenants/${t.id}`} className="font-medium hover:underline">
-                        {t.name}
-                      </Link>
-                      <p className="text-xs text-muted-foreground">
-                        {t.code}
-                        {t.taxCode && ` · MST ${t.taxCode}`}
-                      </p>
-                    </TableCell>
-                    <TableCell>
-                      <Pill {...TENANT_STATUS[t.status]} />
-                    </TableCell>
-                    <TableCell>
-                      {t.subscription ? (
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          {t.subscription.plan.name}
-                          <Pill {...SUBSCRIPTION_STATUS[t.subscription.status]} />
-                          {t.subscription.endsAt && <span className="text-xs text-muted-foreground">đến {formatDate(t.subscription.endsAt)}</span>}
-                        </div>
-                      ) : (
-                        <span className="text-sm text-destructive">Không có gói hiệu lực</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-right tabular-nums">{t.usage.users}</TableCell>
-                    <TableCell className="text-right tabular-nums">{t.usage.contractsThisYear}</TableCell>
-                    <TableCell className="text-right tabular-nums">{formatStorage(t.usage.storageBytes)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDate(t.createdAt)}</TableCell>
+      <ListCard
+        toolbar={
+          <>
+            <SearchBox value={search} onChange={setSearch} placeholder="Tìm tên, mã, MST, email…" ariaLabel="Tìm doanh nghiệp" />
+            <FilterSelect className="h-9 min-w-0 flex-1 sm:w-44 sm:flex-none" allLabel="Mọi trạng thái" ariaLabel="Trạng thái" value={status} onChange={(v) => { setStatus(v); setPage(1); }} options={statusOptions} />
+            <FilterSelect className="h-9 min-w-0 flex-1 sm:w-44 sm:flex-none" allLabel="Mọi gói" ariaLabel="Gói dịch vụ" value={planId} onChange={(v) => { setPlanId(v); setPage(1); }} options={(plans.data ?? []).map((p) => ({ value: p.id, label: p.name }))} />
+          </>
+        }
+      >
+        <ListState query={list} empty={{ title: 'Không có doanh nghiệp phù hợp' }} />
+        {!!list.data?.items.length && (
+          <>
+            <ul className="divide-y md:hidden">
+              {list.data.items.map((t) => (
+                <MobileCard
+                  key={t.id}
+                  href={`/platform/tenants/${t.id}`}
+                  title={t.name}
+                  sub={
+                    <>
+                      {t.code}
+                      {t.taxCode && ` · MST ${t.taxCode}`}
+                    </>
+                  }
+                  status={<StatusPill tone={TENANT_TONE[t.status]}>{TENANT_STATUS[t.status].label}</StatusPill>}
+                >
+                  <span className="block">{planCell(t)}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground tabular-nums">
+                    {t.usage.users} người dùng · {t.usage.contractsThisYear} HĐ trong năm · {formatStorage(t.usage.storageBytes)}
+                  </span>
+                </MobileCard>
+              ))}
+            </ul>
+            <div className="hidden md:block">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <Th className="pl-4">Doanh nghiệp</Th>
+                    <Th>Trạng thái</Th>
+                    <Th>Gói hiện hành</Th>
+                    <Th className="text-right">Người dùng</Th>
+                    <Th className="text-right">HĐ trong năm</Th>
+                    <Th className="text-right">Lưu trữ</Th>
+                    <Th className="pr-4">Ngày tạo</Th>
                   </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
-      {list.data && list.data.totalPages > 1 && (
-        <div className="mt-3 flex items-center justify-end gap-2 text-sm text-muted-foreground">
-          <Button variant="outline" size="icon-sm" aria-label="Trang trước" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            <ChevronLeft />
-          </Button>
-          Trang {list.data.page}/{list.data.totalPages}
-          <Button variant="outline" size="icon-sm" aria-label="Trang sau" disabled={page >= list.data.totalPages} onClick={() => setPage(page + 1)}>
-            <ChevronRight />
-          </Button>
-        </div>
-      )}
+                </TableHeader>
+                <TableBody>
+                  {list.data.items.map((t) => (
+                    <TableRow key={t.id}>
+                      <TableCell className="pl-4">
+                        <TitleCell
+                          icon={Building2}
+                          href={`/platform/tenants/${t.id}`}
+                          title={t.name}
+                          sub={
+                            <>
+                              {t.code}
+                              {t.taxCode && ` · MST ${t.taxCode}`}
+                            </>
+                          }
+                        />
+                      </TableCell>
+                      <TableCell>
+                        <StatusPill tone={TENANT_TONE[t.status]}>{TENANT_STATUS[t.status].label}</StatusPill>
+                      </TableCell>
+                      <TableCell className="max-w-72 whitespace-normal">{planCell(t)}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.usage.users}</TableCell>
+                      <TableCell className="text-right tabular-nums">{t.usage.contractsThisYear}</TableCell>
+                      <TableCell className="text-right tabular-nums">{formatStorage(t.usage.storageBytes)}</TableCell>
+                      <TableCell className="pr-4 whitespace-nowrap tabular-nums">{formatDate(t.createdAt)}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+            <Pager className="mt-0 border-t px-4 py-3" page={list.data.page} totalPages={list.data.totalPages} total={list.data.total} pageSize={20} unit="doanh nghiệp" onPage={setPage} />
+          </>
+        )}
+      </ListCard>
       {creating && plans.data && <CreateTenantSheet plans={plans.data.filter((p) => p.isActive)} onClose={() => setCreating(false)} />}
     </>
   );

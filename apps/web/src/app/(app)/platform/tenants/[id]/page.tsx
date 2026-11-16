@@ -1,20 +1,21 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, Loader2, Pencil, Plus, Power, PowerOff, Repeat } from 'lucide-react';
+import { Building2, CalendarClock, Gauge, Hash, Info, Layers, Loader2, type LucideIcon, Mail, MapPin, Package, Pencil, Phone, Plus, Power, PowerOff, Receipt, Repeat, UserCog } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
-import { ErrorState, PageHeader } from '@/components/page-header';
+import { DetailHeader } from '@/components/detail-header';
+import { InitialsAvatar, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
+import { ErrorState } from '@/components/page-header';
 import { CreateInvoiceDialog, InvoiceTable } from '@/components/platform-invoices';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -24,7 +25,6 @@ import {
   FormErrors,
   formatQuotaMb,
   formatStorage,
-  Pill,
   type Plan,
   type Subscription,
   SUBSCRIPTION_STATUS,
@@ -37,6 +37,7 @@ import {
   UsageBar,
   usePlatformGate,
 } from '@/lib/platform';
+import { cn } from '@/lib/utils';
 
 const useInvalidate = () => {
   const qc = useQueryClient();
@@ -294,6 +295,56 @@ function EditSubscriptionDialog({ sub, onClose }: { sub: Subscription; onClose: 
   );
 }
 
+/** Thẻ có tiêu đề kèm biểu tượng (cùng kiểu thẻ trong form hợp đồng). */
+function Section({
+  icon: Icon,
+  title,
+  action,
+  bodyClassName,
+  children,
+}: {
+  icon: LucideIcon;
+  title: string;
+  action?: React.ReactNode;
+  bodyClassName?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="min-w-0 overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]">
+      <header className="flex min-h-14 flex-wrap items-center gap-x-3 gap-y-2 border-b px-4 py-2.5 sm:px-5">
+        <Icon className="size-5 shrink-0 text-primary" aria-hidden />
+        <h2 className="min-w-0 flex-1 text-base font-semibold tracking-tight">{title}</h2>
+        {action}
+      </header>
+      <div className={bodyClassName ?? 'p-4 sm:p-5'}>{children}</div>
+    </section>
+  );
+}
+
+/** Dòng nhãn – giá trị trong thẻ Thông tin. */
+function InfoRow({ icon: Icon, label, children }: { icon: LucideIcon; label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex items-start gap-3">
+      <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <Icon className="size-4" />
+      </span>
+      <div className="min-w-0">
+        <dt className="text-xs text-muted-foreground">{label}</dt>
+        <dd className="text-sm font-medium break-words">{children}</dd>
+      </div>
+    </div>
+  );
+}
+
+const TENANT_TONE: Record<TenantStatus, Tone> = { ACTIVE: 'green', SUSPENDED: 'amber', CLOSED: 'gray' };
+const SUB_TONE: Record<SubscriptionStatus, Tone> = { TRIAL: 'sky', ACTIVE: 'green', PAST_DUE: 'amber', CANCELLED: 'gray', EXPIRED: 'gray' };
+
+/** Nhãn thuê bao trong lịch sử (theo subscriptionPill: đã qua ngày kết thúc ⇒ "Đã kết thúc", màu xám). */
+function SubPill({ sub }: { sub: Subscription }) {
+  const p = subscriptionPill(sub);
+  return <StatusPill tone={p.label === SUBSCRIPTION_STATUS[sub.status].label ? SUB_TONE[sub.status] : 'gray'}>{p.label}</StatusPill>;
+}
+
 export default function PlatformTenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { user } = useAuth();
@@ -304,18 +355,34 @@ export default function PlatformTenantDetailPage() {
   if (!allowed) return denied;
   if (q.isError) return <ErrorState error={q.error} onRetry={() => q.refetch()} />;
   const t = q.data;
-  if (!t) return <Skeleton className="h-96" />;
+  if (!t)
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-40 rounded-xl" />
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Skeleton className="h-56 rounded-xl" />
+          <Skeleton className="h-56 rounded-xl" />
+          <Skeleton className="h-56 rounded-xl" />
+        </div>
+      </div>
+    );
   const isOwn = t.id === user?.tenant.id;
   const current = t.subscriptions.find((s) => s.id === t.currentSubscriptionId);
 
   return (
     <>
-      <PageHeader
-        title={t.name}
-        description={`Mã đăng nhập: ${t.code} · tạo ngày ${formatDate(t.createdAt)}`}
+      <DetailHeader
         crumbs={[{ label: 'Super Admin' }, { label: 'Doanh nghiệp', href: '/platform/tenants' }, { label: t.code }]}
+        icon={Building2}
+        title={t.name}
+        status={<StatusPill tone={TENANT_TONE[t.status]}>{TENANT_STATUS[t.status].label}</StatusPill>}
+        meta={
+          <span>
+            Mã đăng nhập: <span className="font-medium text-foreground">{t.code}</span> · tạo ngày {formatDate(t.createdAt)}
+          </span>
+        }
         actions={
-          <div className="flex flex-wrap gap-2">
+          <>
             <Button variant="outline" onClick={() => setDialog('edit')}>
               <Pencil /> Sửa thông tin
             </Button>
@@ -335,32 +402,38 @@ export default function PlatformTenantDetailPage() {
                 <Power /> Kích hoạt lại
               </Button>
             )}
-          </div>
+          </>
         }
-      />
+        facts={[
+          { label: 'Gói hiện hành', value: t.limits?.planName ?? <span className="text-destructive">Không có gói</span> },
+          { label: 'Thuê bao', value: current ? <SubPill sub={current} /> : '—' },
+          { label: 'Hết hạn', value: current ? (current.endsAt ? formatDate(current.endsAt) : 'Không thời hạn') : '—' },
+          { label: 'Đơn giá / tháng', value: current ? formatMoney(current.plan.priceMonthly) : '—' },
+        ]}
+      >
+        {isOwn ? 'Đây là doanh nghiệp chứa tài khoản Super Admin của bạn.' : undefined}
+      </DetailHeader>
+
       <div className="space-y-4">
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Thông tin</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-1.5 text-sm">
-              <p>
-                Trạng thái: <Pill {...TENANT_STATUS[t.status]} />
-              </p>
-              <p>Mã số thuế: {t.taxCode ?? '—'}</p>
-              <p>Email: {t.email ?? '—'}</p>
-              <p>Điện thoại: {t.phone ?? '—'}</p>
-              <p>Địa chỉ: {t.address ?? '—'}</p>
-              {isOwn && <p className="text-xs text-muted-foreground">Đây là doanh nghiệp chứa tài khoản Super Admin của bạn.</p>}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-base">Mức sử dụng</CardTitle>
-              <span className="text-sm text-muted-foreground">{t.limits?.planName ?? 'Không có gói'}</span>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <Section icon={Info} title="Thông tin">
+            <dl className="space-y-3">
+              <InfoRow icon={Hash} label="Mã số thuế">
+                {t.taxCode ?? '—'}
+              </InfoRow>
+              <InfoRow icon={Mail} label="Email">
+                {t.email ?? '—'}
+              </InfoRow>
+              <InfoRow icon={Phone} label="Điện thoại">
+                {t.phone ?? '—'}
+              </InfoRow>
+              <InfoRow icon={MapPin} label="Địa chỉ">
+                {t.address ?? '—'}
+              </InfoRow>
+            </dl>
+          </Section>
+          <Section icon={Gauge} title="Mức sử dụng" action={<span className="text-sm text-muted-foreground">{t.limits?.planName ?? 'Không có gói'}</span>}>
+            <div className="space-y-4">
               <UsageBar label="Người dùng" used={t.usage.users} limit={t.limits?.maxUsers ?? null} display={`${t.usage.users} / ${t.limits?.maxUsers ?? '—'}`} />
               <UsageBar
                 label="Hợp đồng trong năm"
@@ -374,65 +447,93 @@ export default function PlatformTenantDetailPage() {
                 limit={t.limits ? t.limits.storageQuotaMb * 1024 * 1024 : null}
                 display={`${formatStorage(t.usage.storageBytes)} / ${t.limits ? formatQuotaMb(t.limits.storageQuotaMb) : '—'}`}
               />
-              {!t.limits && <p className="text-sm text-destructive">Không có gói hiệu lực: doanh nghiệp không tạo được hợp đồng, người dùng hay tài liệu mới.</p>}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Quản trị viên</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              {t.admins.length === 0 ? (
-                <p className="text-muted-foreground">Không có quản trị viên.</p>
-              ) : (
-                t.admins.map((a) => (
-                  <div key={a.id}>
-                    <p className="font-medium">
-                      {a.fullName} {a.status !== 'ACTIVE' && <span className="text-xs text-muted-foreground">({a.status})</span>}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {a.email} · đăng nhập {formatDateTime(a.lastLoginAt)}
-                    </p>
-                  </div>
-                ))
+              {!t.limits && (
+                <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-700 dark:bg-red-950 dark:text-red-300">
+                  Không có gói hiệu lực: doanh nghiệp không tạo được hợp đồng, người dùng hay tài liệu mới.
+                </p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </Section>
+          <Section icon={UserCog} title="Quản trị viên" bodyClassName="p-0">
+            {t.admins.length === 0 ? (
+              <p className="p-4 text-sm text-muted-foreground sm:px-5">Không có quản trị viên.</p>
+            ) : (
+              <ul className="divide-y">
+                {t.admins.map((a) => (
+                  <li key={a.id} className="flex items-start gap-3 px-4 py-3 sm:px-5">
+                    <InitialsAvatar name={a.fullName} />
+                    <div className="min-w-0 flex-1">
+                      <p className="flex flex-wrap items-center gap-1.5 font-semibold">
+                        <span className="min-w-0 break-words">{a.fullName}</span>
+                        {a.status !== 'ACTIVE' && <StatusPill tone="gray">{a.status}</StatusPill>}
+                      </p>
+                      <p className="text-xs break-all text-muted-foreground">{a.email}</p>
+                      <p className="text-xs text-muted-foreground">Đăng nhập {formatDateTime(a.lastLoginAt)}</p>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Section>
         </div>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Gói dịch vụ</CardTitle>
+        <Section
+          icon={Layers}
+          title="Gói dịch vụ"
+          bodyClassName="p-0"
+          action={
             <Button size="sm" onClick={() => setDialog('plan')}>
               <Repeat /> Đổi gói / gia hạn
             </Button>
-          </CardHeader>
-          <CardContent>
+          }
+        >
+          <ul className="divide-y md:hidden">
+            {t.subscriptions.map((s) => (
+              <li key={s.id} className={cn('flex items-start gap-2 px-4 py-3', s.id === t.currentSubscriptionId && 'bg-primary/5')}>
+                <div className="min-w-0 flex-1 space-y-1">
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="font-semibold">
+                      {s.plan.name}
+                      {s.id === t.currentSubscriptionId && <span className="ml-1.5 text-xs font-normal text-primary">(hiện hành)</span>}
+                    </p>
+                    <SubPill sub={s} />
+                  </div>
+                  <p className="text-xs text-muted-foreground tabular-nums">
+                    {formatDate(s.startsAt)} → {s.endsAt ? formatDate(s.endsAt) : 'Không thời hạn'}
+                  </p>
+                  {s.note && <p className="text-sm text-muted-foreground">{s.note}</p>}
+                </div>
+                <Button variant="ghost" size="icon-sm" className="-mr-2 shrink-0" aria-label={`Sửa thuê bao ${s.plan.name}`} onClick={() => setEditingSub(s)}>
+                  <CalendarClock />
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <div className="hidden md:block">
             <Table>
               <TableHeader>
-                <TableRow>
-                  <TableHead>Gói</TableHead>
-                  <TableHead>Trạng thái</TableHead>
-                  <TableHead>Bắt đầu</TableHead>
-                  <TableHead>Kết thúc</TableHead>
-                  <TableHead>Ghi chú</TableHead>
-                  <TableHead />
+                <TableRow className="hover:bg-transparent">
+                  <Th className="pl-5">Gói</Th>
+                  <Th>Trạng thái</Th>
+                  <Th>Bắt đầu</Th>
+                  <Th>Kết thúc</Th>
+                  <Th>Ghi chú</Th>
+                  <Th className="pr-5" />
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {t.subscriptions.map((s) => (
                   <TableRow key={s.id} className={s.id === t.currentSubscriptionId ? 'bg-primary/5' : undefined}>
-                    <TableCell className="font-medium">
-                      {s.plan.name}
-                      {s.id === t.currentSubscriptionId && <span className="ml-1.5 text-xs text-primary">(hiện hành)</span>}
+                    <TableCell className="pl-5">
+                      <TitleCell icon={Package} title={s.plan.name} sub={s.id === t.currentSubscriptionId ? <span className="text-primary">Hiện hành</span> : s.plan.code} />
                     </TableCell>
                     <TableCell>
-                      <Pill {...subscriptionPill(s)} />
+                      <SubPill sub={s} />
                     </TableCell>
-                    <TableCell className="whitespace-nowrap">{formatDate(s.startsAt)}</TableCell>
-                    <TableCell className="whitespace-nowrap">{s.endsAt ? formatDate(s.endsAt) : 'Không thời hạn'}</TableCell>
-                    <TableCell className="text-sm text-muted-foreground">{s.note}</TableCell>
-                    <TableCell className="text-right">
+                    <TableCell className="whitespace-nowrap tabular-nums">{formatDate(s.startsAt)}</TableCell>
+                    <TableCell className="whitespace-nowrap tabular-nums">{s.endsAt ? formatDate(s.endsAt) : 'Không thời hạn'}</TableCell>
+                    <TableCell className="max-w-72 text-sm whitespace-normal text-muted-foreground">{s.note}</TableCell>
+                    <TableCell className="pr-5 text-right">
                       <Button variant="ghost" size="icon-sm" aria-label={`Sửa thuê bao ${s.plan.name}`} onClick={() => setEditingSub(s)}>
                         <CalendarClock />
                       </Button>
@@ -441,20 +542,21 @@ export default function PlatformTenantDetailPage() {
                 ))}
               </TableBody>
             </Table>
-          </CardContent>
-        </Card>
+          </div>
+        </Section>
 
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">Hóa đơn</CardTitle>
+        <Section
+          icon={Receipt}
+          title="Hóa đơn"
+          bodyClassName="px-2 py-1 sm:px-3"
+          action={
             <Button size="sm" onClick={() => setDialog('invoice')}>
               <Plus /> Phát hành hóa đơn
             </Button>
-          </CardHeader>
-          <CardContent>
-            <InvoiceTable invoices={t.invoices} />
-          </CardContent>
-        </Card>
+          }
+        >
+          <InvoiceTable invoices={t.invoices} />
+        </Section>
       </div>
 
       {dialog === 'edit' && <EditTenantDialog tenant={t} onClose={() => setDialog(null)} />}

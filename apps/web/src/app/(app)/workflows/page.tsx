@@ -9,14 +9,13 @@ import {
   type ApproverType,
 } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ArrowDown, ArrowUp, Loader2, Pencil, Plus, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ArrowUpNarrowWide, ChevronRight, Clock, Coins, FileText, GitBranch, Loader2, type LucideIcon, Pencil, Plus, Send, Trash2, UserCheck } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
+import { StatusPill } from '@/components/list-ui';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -28,6 +27,7 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatMoney } from '@/lib/format';
 import type { Workflow, WorkflowLookups } from '@/lib/types';
+import { cn } from '@/lib/utils';
 
 interface StepDraft {
   key: number;
@@ -104,6 +104,16 @@ function valueRange(w: Workflow) {
   if (!w.minValue) return `Dưới ${formatMoney(w.maxValue)}`;
   if (!w.maxValue) return `Từ ${formatMoney(w.minValue)}`;
   return `${formatMoney(w.minValue)} – dưới ${formatMoney(w.maxValue)}`;
+}
+
+/** Nhãn nhỏ cho điều kiện áp dụng (loại hợp đồng, khoảng giá trị). */
+function Chip({ icon: Icon, children }: { icon: LucideIcon; children: React.ReactNode }) {
+  return (
+    <span className="inline-flex max-w-full items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-foreground/80">
+      <Icon className="size-3 shrink-0 text-muted-foreground" />
+      <span className="truncate">{children}</span>
+    </span>
+  );
 }
 
 function WorkflowSheet({ draft: initial, lookups, onClose }: { draft: Draft; lookups: WorkflowLookups; onClose: () => void }) {
@@ -333,30 +343,40 @@ export default function WorkflowsPage() {
       {list.isError ? (
         <ErrorState error={list.error} onRetry={() => list.refetch()} />
       ) : !list.data ? (
-        <Skeleton className="h-64" />
+        <div className="grid gap-4 xl:grid-cols-2">
+          <Skeleton className="h-64 rounded-xl" />
+          <Skeleton className="h-64 rounded-xl" />
+        </div>
       ) : list.data.length === 0 ? (
         <EmptyState title="Chưa có quy trình phê duyệt" description="Hợp đồng sẽ không gửi duyệt được cho tới khi có quy trình phù hợp." />
       ) : (
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 xl:grid-cols-2">
           {list.data.map((w) => (
-            <Card key={w.id} className={w.isActive ? '' : 'opacity-60'}>
-              <CardHeader className="flex flex-row items-start justify-between gap-2">
-                <div>
-                  <CardTitle className="flex flex-wrap items-center gap-2 text-base">
-                    {w.name}
-                    {!w.isActive && <Badge variant="outline">Tạm dừng</Badge>}
-                  </CardTitle>
-                  <CardDescription>
-                    Ưu tiên {w.priority} · {valueRange(w)} · {w.contractTypeIds.length ? w.contractTypeIds.map(typeName).join(', ') : 'Mọi loại hợp đồng'}
-                  </CardDescription>
+            <section
+              key={w.id}
+              className={cn('flex flex-col overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05)]', !w.isActive && 'bg-muted/30')}
+            >
+              <header className="flex items-start gap-3 border-b px-4 py-3.5 sm:px-5">
+                <span className={cn('flex size-10 shrink-0 items-center justify-center rounded-xl', w.isActive ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
+                  <GitBranch className="size-5" />
+                </span>
+                <div className="min-w-0 flex-1">
+                  <h2 className="text-base leading-snug font-semibold break-words">{w.name}</h2>
+                  <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                    <StatusPill tone={w.isActive ? 'green' : 'gray'}>{w.isActive ? 'Đang áp dụng' : 'Tạm dừng'}</StatusPill>
+                    <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-xs text-muted-foreground" title="Số nhỏ được xét trước">
+                      <ArrowUpNarrowWide className="size-3" /> Ưu tiên {w.priority}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex shrink-0 gap-1">
+                <div className="-mr-1 flex shrink-0 gap-1">
                   <Button variant="ghost" size="icon-sm" aria-label={`Sửa ${w.name}`} onClick={() => setEditing(toDraft(w))} disabled={!lookups.data}>
                     <Pencil />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon-sm"
+                    className="text-muted-foreground hover:text-destructive"
                     aria-label={`Xóa ${w.name}`}
                     onClick={() =>
                       setConfirm({
@@ -371,23 +391,57 @@ export default function WorkflowsPage() {
                     <Trash2 />
                   </Button>
                 </div>
-              </CardHeader>
-              <CardContent>
-                <ol className="flex flex-wrap items-center gap-2 text-sm">
-                  {w.steps.map((s, i) => (
-                    <li key={i} className="flex items-center gap-2">
-                      {i > 0 && <span className="text-muted-foreground">→</span>}
-                      <span className="rounded-md border px-2 py-1" title={`${APPROVAL_MODE_LABELS[s.mode]}${s.dueHours ? ` · hạn ${s.dueHours} giờ` : ''}`}>
-                        <span className="font-medium">{s.name}</span>
-                        <span className="text-xs text-muted-foreground"> ({stepLabel(s)})</span>
-                      </span>
-                    </li>
-                  ))}
-                </ol>
-                {w.description && <p className="mt-2 text-xs text-muted-foreground">{w.description}</p>}
-                <p className="mt-2 text-xs text-muted-foreground">Đã dùng cho {w._count?.requests ?? 0} lượt gửi duyệt</p>
-              </CardContent>
-            </Card>
+              </header>
+              <div className="flex-1 space-y-4 p-4 sm:p-5">
+                <div>
+                  <p className="mb-1.5 text-xs font-medium text-muted-foreground">Điều kiện áp dụng</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {w.contractTypeIds.length ? (
+                      w.contractTypeIds.map((id) => (
+                        <Chip key={id} icon={FileText}>
+                          {typeName(id)}
+                        </Chip>
+                      ))
+                    ) : (
+                      <Chip icon={FileText}>Mọi loại hợp đồng</Chip>
+                    )}
+                    <Chip icon={Coins}>{valueRange(w)}</Chip>
+                  </div>
+                </div>
+                <div>
+                  <p className="mb-2 text-xs font-medium text-muted-foreground">Các bước phê duyệt ({w.steps.length})</p>
+                  <ol className="flex flex-wrap items-start gap-x-1.5 gap-y-3">
+                    {w.steps.map((s, i) => (
+                      <li key={i} className="flex min-w-0 items-start gap-1.5">
+                        {i > 0 && <ChevronRight aria-hidden className="mt-2 size-4 shrink-0 text-muted-foreground" />}
+                        <div className="flex min-w-0 items-start gap-2 rounded-lg border bg-background px-2.5 py-2" title={`${APPROVAL_MODE_LABELS[s.mode]}${s.dueHours ? ` · hạn ${s.dueHours} giờ` : ''}`}>
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{i + 1}</span>
+                          <span className="min-w-0 max-w-44">
+                            <span className="block text-sm leading-tight font-medium break-words">{s.name}</span>
+                            <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                              <UserCheck className="size-3 shrink-0" />
+                              <span className="truncate">{stepLabel(s)}</span>
+                            </span>
+                            <span className="mt-0.5 flex items-center gap-1 text-[11px] text-muted-foreground">
+                              {APPROVAL_MODE_LABELS[s.mode]}
+                              {s.dueHours ? (
+                                <>
+                                  <Clock className="ml-1 size-3 shrink-0" /> {s.dueHours} giờ
+                                </>
+                              ) : null}
+                            </span>
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+                {w.description && <p className="text-sm text-muted-foreground">{w.description}</p>}
+              </div>
+              <footer className="flex items-center gap-1.5 border-t bg-muted/30 px-4 py-2.5 text-xs text-muted-foreground sm:px-5">
+                <Send className="size-3.5" /> Đã dùng cho <span className="font-semibold text-foreground tabular-nums">{w._count?.requests ?? 0}</span> lượt gửi duyệt
+              </footer>
+            </section>
           ))}
         </div>
       )}
