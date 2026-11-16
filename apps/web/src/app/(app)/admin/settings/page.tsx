@@ -10,6 +10,7 @@ import { EmailSettingsCard } from '@/components/email-settings-card';
 import { MobileCard, StatusPill, TitleCell, Th } from '@/components/list-ui';
 import { MisaEsignSettingsCard } from '@/components/misa-esign-settings-card';
 import { OdooSettingsCard } from '@/components/odoo-settings-card';
+import { SettingsSection } from '@/components/settings-section';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -119,25 +120,6 @@ function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
   );
 }
 
-/** Khung mục cấu hình kiểu FormSection: biểu tượng + tiêu đề + mô tả, nút bên phải, thân bên dưới. */
-function SettingsSection({ id, icon: Icon, title, description, action, children }: { id: string; icon: LucideIcon; title: string; description?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
-  return (
-    <section id={id} className="scroll-mt-20 overflow-hidden rounded-xl border bg-card shadow-[0_1px_3px_0_rgb(15_23_42/0.05),0_1px_2px_-1px_rgb(15_23_42/0.04)]">
-      <header className="flex flex-wrap items-center gap-3 border-b px-5 py-3">
-        <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="size-[18px]" aria-hidden />
-        </span>
-        <div className="min-w-0 flex-1 basis-56">
-          <h2 className="text-base font-semibold tracking-tight">{title}</h2>
-          {description && <p className="text-xs text-muted-foreground">{description}</p>}
-        </div>
-        {action}
-      </header>
-      {children}
-    </section>
-  );
-}
-
 /** Mục điều hướng nhanh trong trang (liên kết neo tới từng khối cấu hình). */
 const SECTIONS: { id: string; icon: LucideIcon; label: string }[] = [
   { id: 'company', icon: Building2, label: 'Thông tin doanh nghiệp' },
@@ -177,9 +159,7 @@ export default function AdminSettingsPage() {
           ))}
         </nav>
         <div className="min-w-0 space-y-4">
-          <div id="company" className="scroll-mt-20">
-            <CompanyProfileCard />
-          </div>
+          <CompanyProfileCard id="company" />
           <SettingsSection
             id="contract-types"
             icon={FileCode2}
@@ -256,15 +236,9 @@ export default function AdminSettingsPage() {
               </>
             )}
           </SettingsSection>
-          <div id="email" className="scroll-mt-20">
-            <EmailSettingsCard />
-          </div>
-          <div id="odoo" className="scroll-mt-20">
-            <OdooSettingsCard />
-          </div>
-          <div id="misa" className="scroll-mt-20">
-            <MisaEsignSettingsCard />
-          </div>
+          <EmailSettingsCard id="email" />
+          <OdooSettingsCard id="odoo" />
+          <MisaEsignSettingsCard id="misa" />
         </div>
       </div>
       {editing && <TypeDialog draft={editing} onClose={() => setEditing(null)} />}

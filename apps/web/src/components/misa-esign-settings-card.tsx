@@ -1,12 +1,12 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, PlugZap, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, PenLine, PlugZap, Trash2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { IntegrationStatus, SettingsSection } from '@/components/settings-section';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,19 +18,21 @@ import { formatDateTime } from '@/lib/format';
 const formKey = (c: MisaConfig) => (c.configured ? [c.baseUrl, c.clientId, c.enabled].join('|') : 'new');
 
 /** Cấu hình ứng dụng MISA eSign (ClientID/ClientSecret). ClientSecret chỉ gửi lên, không bao giờ hiển thị lại. */
-export function MisaEsignSettingsCard() {
+export function MisaEsignSettingsCard({ id }: { id?: string }) {
   const cfg = useMisaConfig();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Chữ ký số MISA eSign</CardTitle>
-        <CardDescription>
+    <SettingsSection
+      id={id}
+      icon={PenLine}
+      title="Chữ ký số MISA eSign"
+      action={cfg.data && <IntegrationStatus configured={cfg.data.configured} enabled={cfg.data.enabled} />}
+      description={<>
           Ký số tệp PDF hợp đồng bằng chứng thư số từ xa MISA eSign. Nhập ClientID/ClientSecret của ứng dụng đã đăng ký trên MISA Developer (developer.misa.vn). Mỗi người ký liên kết tài
           khoản MISA eSign của chính mình khi ký (trong tab Tài liệu của hợp đồng) và xác nhận trên ứng dụng MISA eSign.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>{!cfg.data ? <Skeleton className="h-40" /> : <MisaSettingsForm key={formKey(cfg.data)} cfg={cfg.data} />}</CardContent>
-    </Card>
+      </>}
+    >
+      <div className="p-5">{!cfg.data ? <Skeleton className="h-40" /> : <MisaSettingsForm key={formKey(cfg.data)} cfg={cfg.data} />}</div>
+    </SettingsSection>
   );
 }
 

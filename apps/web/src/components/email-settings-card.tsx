@@ -1,12 +1,12 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, Send, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, Mail, Send, Trash2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { IntegrationStatus, SettingsSection } from '@/components/settings-section';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -41,22 +41,23 @@ const formKey = (c: EmailConfig) =>
   c.configured ? [c.host, c.port, c.username, c.fromName, c.fromEmail, c.enabled].join('|') : 'new';
 
 /** Máy chủ gửi email (SMTP) của doanh nghiệp: thư mời ký, OTP, nhắc hạn, link xem trước hợp đồng. */
-export function EmailSettingsCard() {
+export function EmailSettingsCard({ id }: { id?: string }) {
   const cfg = useQuery({ queryKey: ['mail', 'config'], queryFn: () => api<EmailConfig>('/integrations/smtp') });
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Email gửi đi (SMTP)</CardTitle>
-        <CardDescription>
-          Hộp thư dùng để gửi thư mời ký, mã OTP, nhắc hạn và link xem trước hợp đồng. Với Gmail: bật Xác minh 2 bước rồi tạo
-          Mật khẩu ứng dụng (Tài khoản Google → Bảo mật → Mật khẩu ứng dụng) và dán mật khẩu 16 ký tự đó vào đây, không dùng mật
-          khẩu đăng nhập Gmail.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <SettingsSection
+      id={id}
+      icon={Mail}
+      title="Email gửi đi (SMTP)"
+      description="Hộp thư dùng để gửi thư mời ký, mã OTP, nhắc hạn và link xem trước hợp đồng."
+      action={cfg.data && <IntegrationStatus configured={cfg.data.configured} enabled={cfg.data.enabled} fallback={cfg.data.serverFallback ? 'Dùng SMTP chung' : undefined} />}
+    >
+      <div className="p-5">
+        <p className="mb-3 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-xs text-sky-900 dark:border-sky-900 dark:bg-sky-950 dark:text-sky-200">
+          Với Gmail: bật Xác minh 2 bước rồi tạo Mật khẩu ứng dụng (Tài khoản Google → Bảo mật → Mật khẩu ứng dụng) và dán mật khẩu 16 ký tự đó vào đây, không dùng mật khẩu đăng nhập Gmail.
+        </p>
         {!cfg.data ? <Skeleton className="h-48" /> : <EmailSettingsForm key={formKey(cfg.data)} cfg={cfg.data} />}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 

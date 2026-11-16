@@ -548,7 +548,7 @@ export default function PlatformTenantDetailPage() {
         <Section
           icon={Receipt}
           title="Hóa đơn"
-          bodyClassName="px-2 py-1 sm:px-3"
+          bodyClassName="p-0"
           action={
             <Button size="sm" onClick={() => setDialog('invoice')}>
               <Plus /> Phát hành hóa đơn

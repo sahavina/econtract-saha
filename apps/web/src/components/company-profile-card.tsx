@@ -1,13 +1,14 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Loader2 } from 'lucide-react';
+import { Building2, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SettingsSection } from '@/components/settings-section';
+import { StatusPill } from '@/components/list-ui';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/lib/api';
 import { type CompanyProfile, useCompanyProfile } from '@/lib/company';
@@ -37,21 +38,21 @@ const toDraft = (p: CompanyProfile): Draft => ({
 });
 
 /** Khai báo thông tin pháp nhân – dùng để tự điền khi đánh dấu "Bên nội bộ" trong hợp đồng. */
-export function CompanyProfileCard() {
+export function CompanyProfileCard({ id }: { id?: string }) {
   const profile = useCompanyProfile();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Thông tin doanh nghiệp</CardTitle>
-        <CardDescription>
-          Thông tin pháp nhân của doanh nghiệp mình. Khi lập hợp đồng, tích “Bên nội bộ (doanh nghiệp mình)” ở một bên tham gia sẽ tự điền các thông tin này.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+    <SettingsSection
+      id={id}
+      icon={Building2}
+      title="Thông tin doanh nghiệp"
+      description="Thông tin pháp nhân của doanh nghiệp mình. Khi lập hợp đồng, tích “Bên nội bộ (doanh nghiệp mình)” ở một bên tham gia sẽ tự điền các thông tin này."
+      action={profile.data && (profile.data.configured ? <StatusPill tone="green">Đã khai báo</StatusPill> : <StatusPill tone="amber">Chưa khai báo</StatusPill>)}
+    >
+      <div className="p-5">
         {/* key: nạp lại form sau khi lưu (không đồng bộ state trong effect). */}
         {!profile.data ? <Skeleton className="h-56" /> : <CompanyProfileForm key={JSON.stringify(profile.data)} profile={profile.data} />}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 

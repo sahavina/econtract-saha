@@ -1,12 +1,12 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, PlugZap, Trash2, XCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, Plug, PlugZap, Trash2, XCircle } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { IntegrationStatus, SettingsSection } from '@/components/settings-section';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -18,26 +18,28 @@ import { type OdooConfig, useOdooConfig } from '@/lib/odoo';
 const formKey = (c: OdooConfig) => (c.configured ? [c.url, c.db, c.username, c.enabled].join('|') : 'new');
 
 /** Cấu hình kết nối Odoo (chỉ đọc khách hàng/nhà cung cấp). API key chỉ gửi lên, không bao giờ hiển thị lại. */
-export function OdooSettingsCard() {
+export function OdooSettingsCard({ id }: { id?: string }) {
   const cfg = useOdooConfig();
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="text-base">Tích hợp Odoo</CardTitle>
-        <CardDescription>
+    <SettingsSection
+      id={id}
+      icon={Plug}
+      title="Tích hợp Odoo"
+      action={cfg.data && <IntegrationStatus configured={cfg.data.configured} enabled={cfg.data.enabled} />}
+      description={<>
           Đọc khách hàng và nhà cung cấp từ Odoo để chọn khi tạo hợp đồng (không ghi ngược về Odoo). Nên dùng một tài khoản Odoo riêng chỉ có quyền xem Liên hệ và tạo API key cho tài khoản đó
           (Odoo: Hồ sơ của tôi → Bảo mật tài khoản → Khóa API mới).
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+      </>}
+    >
+      <div className="p-5">
         {!cfg.data ? (
           <Skeleton className="h-40" />
         ) : (
           // key: nạp lại giá trị form sau khi lưu/xóa cấu hình (không đồng bộ state trong effect).
           <OdooSettingsForm key={formKey(cfg.data)} cfg={cfg.data} />
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </SettingsSection>
   );
 }
 

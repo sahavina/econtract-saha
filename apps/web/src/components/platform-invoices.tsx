@@ -1,22 +1,23 @@
 'use client';
 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Ban, CircleCheck, Loader2 } from 'lucide-react';
+import { Ban, CircleCheck, Loader2, Receipt } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
+import { MobileCard, StatusPill, Th, TitleCell, type Tone } from '@/components/list-ui';
 import { EmptyState } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Table, TableBody, TableCell, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { api } from '@/lib/api';
 import { formatDate, formatMoney } from '@/lib/format';
-import { errorList, FormErrors, type Invoice, invoiceState, Pill, type TenantRef } from '@/lib/platform';
+import { errorList, FormErrors, type Invoice, invoiceState, type TenantRef } from '@/lib/platform';
 
 const firstOfMonth = () => {
   const d = new Date();
@@ -161,7 +162,14 @@ function VoidInvoiceDialog({ invoice, onClose }: { invoice: Invoice | null; onCl
   );
 }
 
-/** Bảng hóa đơn kèm thao tác ghi nhận thanh toán / hủy. */
+/** Màu nhãn trạng thái hóa đơn (cùng quy tắc với invoiceState). */
+const invoiceTone = (inv: Pick<Invoice, 'status' | 'overdue'>): Tone => (inv.status === 'PAID' ? 'green' : inv.status === 'VOID' ? 'gray' : inv.overdue ? 'red' : 'amber');
+
+function InvoiceStatus({ inv }: { inv: Invoice }) {
+  return <StatusPill tone={invoiceTone(inv)}>{invoiceState(inv).label}</StatusPill>;
+}
+
+/** Danh sách hóa đơn (thẻ trên điện thoại, bảng trên màn rộng) kèm thao tác ghi nhận thanh toán / hủy. */
 export function InvoiceTable({ invoices, showTenant }: { invoices: Invoice[]; showTenant?: boolean }) {
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
@@ -175,72 +183,94 @@ export function InvoiceTable({ invoices, showTenant }: { invoices: Invoice[]; sh
   });
 
   if (!invoices.length) return <EmptyState title="Chưa có hóa đơn" />;
+
+  /** Nút ghi nhận thanh toán / hủy – chỉ với hóa đơn đang chờ thanh toán. */
+  const actions = (inv: Invoice) =>
+    inv.status === 'ISSUED' && (
+      <>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label={`Ghi nhận thanh toán ${inv.number}`}
+          title="Ghi nhận đã thanh toán"
+          disabled={pay.isPending}
+          onClick={() =>
+            setConfirm({
+              title: `Ghi nhận đã thanh toán ${inv.number}?`,
+              description: `Số tiền ${formatMoney(inv.amount)}. Thao tác không thể hoàn tác.`,
+              confirmLabel: 'Đã thanh toán',
+              onConfirm: () => pay.mutateAsync(inv.id).then(() => undefined),
+            })
+          }
+        >
+          <CircleCheck />
+        </Button>
+        <Button variant="ghost" size="icon-sm" aria-label={`Hủy hóa đơn ${inv.number}`} title="Hủy hóa đơn" onClick={() => setVoiding(inv)}>
+          <Ban />
+        </Button>
+      </>
+    );
+  const tenantLink = (inv: Invoice) =>
+    showTenant && inv.tenant ? (
+      <Link href={`/platform/tenants/${inv.tenant.id}`} className="hover:text-primary hover:underline">
+        {inv.tenant.name}
+      </Link>
+    ) : undefined;
+
   return (
     <>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Số hóa đơn</TableHead>
-            {showTenant && <TableHead>Doanh nghiệp</TableHead>}
-            <TableHead>Diễn giải</TableHead>
-            <TableHead className="text-right">Số tiền</TableHead>
-            <TableHead>Hạn thanh toán</TableHead>
-            <TableHead>Trạng thái</TableHead>
-            <TableHead />
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {invoices.map((inv) => (
-            <TableRow key={inv.id}>
-              <TableCell className="font-medium whitespace-nowrap">{inv.number}</TableCell>
-              {showTenant && (
-                <TableCell>
-                  {inv.tenant && (
-                    <Link href={`/platform/tenants/${inv.tenant.id}`} className="hover:underline">
-                      {inv.tenant.name}
-                    </Link>
-                  )}
-                </TableCell>
-              )}
-              <TableCell className="min-w-56 text-sm whitespace-normal">
-                {inv.description}
-                {inv.note && <p className="text-xs text-muted-foreground">{inv.note}</p>}
-              </TableCell>
-              <TableCell className="text-right tabular-nums">{formatMoney(inv.amount)}</TableCell>
-              <TableCell className="whitespace-nowrap">{formatDate(inv.dueDate)}</TableCell>
-              <TableCell>
-                <Pill {...invoiceState(inv)} />
-                {inv.paidAt && <p className="text-xs text-muted-foreground">{formatDate(inv.paidAt)}</p>}
-              </TableCell>
-              <TableCell className="text-right whitespace-nowrap">
-                {inv.status === 'ISSUED' && (
-                  <>
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      aria-label={`Ghi nhận thanh toán ${inv.number}`}
-                      disabled={pay.isPending}
-                      onClick={() =>
-                        setConfirm({
-                          title: `Ghi nhận đã thanh toán ${inv.number}?`,
-                          description: `Số tiền ${formatMoney(inv.amount)}. Thao tác không thể hoàn tác.`,
-                          confirmLabel: 'Đã thanh toán',
-                          onConfirm: () => pay.mutateAsync(inv.id).then(() => undefined),
-                        })
-                      }
-                    >
-                      <CircleCheck />
-                    </Button>
-                    <Button variant="ghost" size="icon-sm" aria-label={`Hủy hóa đơn ${inv.number}`} onClick={() => setVoiding(inv)}>
-                      <Ban />
-                    </Button>
-                  </>
-                )}
-              </TableCell>
+      <ul className="divide-y md:hidden">
+        {invoices.map((inv) => (
+          <MobileCard
+            key={inv.id}
+            title={inv.number}
+            sub={showTenant ? inv.tenant?.name : undefined}
+            status={<InvoiceStatus inv={inv} />}
+            footer={inv.status === 'ISSUED' ? <span className="flex gap-1">{actions(inv)}</span> : undefined}
+          >
+            <span className="line-clamp-2 block text-muted-foreground">{inv.description}</span>
+            {inv.note && <span className="line-clamp-2 block text-xs text-muted-foreground">{inv.note}</span>}
+            <span className="mt-1 flex flex-wrap items-baseline justify-between gap-x-3">
+              <span className="font-semibold tabular-nums">{formatMoney(inv.amount)}</span>
+              <span className="text-xs text-muted-foreground">{inv.paidAt ? `Đã thu ${formatDate(inv.paidAt)}` : `Hạn ${formatDate(inv.dueDate)}`}</span>
+            </span>
+          </MobileCard>
+        ))}
+      </ul>
+      <div className="hidden md:block">
+        <Table>
+          <TableHeader>
+            <TableRow className="hover:bg-transparent">
+              <Th className="pl-4">Số hóa đơn</Th>
+              <Th>Diễn giải</Th>
+              <Th className="text-right">Số tiền</Th>
+              <Th>Hạn thanh toán</Th>
+              <Th>Trạng thái</Th>
+              <Th className="pr-4" />
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {invoices.map((inv) => (
+              <TableRow key={inv.id}>
+                <TableCell className="pl-4">
+                  <TitleCell icon={Receipt} title={inv.number} sub={tenantLink(inv)} />
+                </TableCell>
+                <TableCell className="max-w-80 min-w-56 text-sm whitespace-normal">
+                  <span className="line-clamp-2">{inv.description}</span>
+                  {inv.note && <p className="line-clamp-2 text-xs text-muted-foreground">{inv.note}</p>}
+                </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">{formatMoney(inv.amount)}</TableCell>
+                <TableCell className="whitespace-nowrap tabular-nums">{formatDate(inv.dueDate)}</TableCell>
+                <TableCell>
+                  <InvoiceStatus inv={inv} />
+                  {inv.paidAt && <p className="mt-0.5 text-xs text-muted-foreground">{formatDate(inv.paidAt)}</p>}
+                </TableCell>
+                <TableCell className="pr-4 text-right whitespace-nowrap">{actions(inv)}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
       <VoidInvoiceDialog invoice={voiding} onClose={() => setVoiding(null)} />
     </>
