@@ -4,13 +4,32 @@
     {
       "name": "web",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@saha/web", "dev"],
-      "port": 3000
+      "runtimeArgs": [
+        "--filter",
+        "@saha/web",
+        "dev"
+      ],
+      "port": 3000,
+      "autoPort": true
     },
     {
       "name": "api",
       "runtimeExecutable": "pnpm",
-      "runtimeArgs": ["--filter", "@saha/api", "dev"],
+      "runtimeArgs": [
+        "--filter",
+        "@saha/api",
+        "dev"
+      ],
+      "port": 4000
+    },
+    {
+      "name": "web (đang chạy)",
+      "url": "http://localhost:3000",
+      "port": 3000
+    },
+    {
+      "name": "api (đang chạy)",
+      "url": "http://localhost:4000",
       "port": 4000
     }
   ]
