@@ -1364,6 +1364,7 @@ model PaymentRequest {
   updatedAt      DateTime             @updatedAt
   contract       Contract?            @relation(fields: [contractId], references: [id], onDelete: SetNull)
   template       ContractTemplate?    @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  inspections    InspectionRequest[]
   createdBy      User                 @relation("PaymentRequestCreator", fields: [createdById], references: [id])
   sentBy         User?                @relation("PaymentRequestSender", fields: [sentById], references: [id], onDelete: SetNull)
   paidBy         User?                @relation("PaymentRequestPayer", fields: [paidById], references: [id], onDelete: SetNull)
@@ -1453,35 +1454,39 @@ enum InspectionStatus {
 
 /// Yêu cầu kiểm tra hợp đồng/đơn hàng giao cho người phụ trách; xử lý trên trang hàng chờ, in phiếu kèm QR.
 model InspectionRequest {
-  id            String           @id @default(uuid()) @db.Uuid
-  tenantId      String           @db.Uuid
-  code          String
-  contractId    String           @db.Uuid
+  id               String           @id @default(uuid()) @db.Uuid
+  tenantId         String           @db.Uuid
+  code             String
+  /// Hồ sơ được kiểm tra: hợp đồng/đơn, đề nghị thanh toán, hoặc cả hai (đề nghị gắn với đơn) – ít nhất một (CHECK trong migration)
+  contractId       String?          @db.Uuid
+  paymentRequestId String?          @db.Uuid
   /// Nội dung cần kiểm tra
-  content       String
-  dueDate       DateTime?        @db.Date
-  status        InspectionStatus @default(PENDING)
-  assigneeId    String           @db.Uuid
-  requestedById String           @db.Uuid
+  content          String
+  dueDate          DateTime?        @db.Date
+  status           InspectionStatus @default(PENDING)
+  assigneeId       String           @db.Uuid
+  requestedById    String           @db.Uuid
   /// Kết quả / ghi chú của người kiểm tra
-  result        String?
+  result           String?
   /// Kết quả từng dòng hàng: [{ itemId, ok: true|false|null, note }]
-  itemResults   Json             @default("[]")
-  startedAt     DateTime?
-  completedAt   DateTime?
+  itemResults      Json             @default("[]")
+  startedAt        DateTime?
+  completedAt      DateTime?
   /// Lần in phiếu gần nhất và số lần in
-  printedAt     DateTime?
-  printedById   String?          @db.Uuid
-  printCount    Int              @default(0)
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
-  contract      Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
-  printedBy     User?            @relation("InspectionPrinter", fields: [printedById], references: [id], onDelete: SetNull)
-  assignee      User             @relation("InspectionAssignee", fields: [assigneeId], references: [id])
-  requestedBy   User             @relation("InspectionRequester", fields: [requestedById], references: [id])
+  printedAt        DateTime?
+  printedById      String?          @db.Uuid
+  printCount       Int              @default(0)
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  contract         Contract?        @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  paymentRequest   PaymentRequest?  @relation(fields: [paymentRequestId], references: [id], onDelete: Cascade)
+  printedBy        User?            @relation("InspectionPrinter", fields: [printedById], references: [id], onDelete: SetNull)
+  assignee         User             @relation("InspectionAssignee", fields: [assigneeId], references: [id])
+  requestedBy      User             @relation("InspectionRequester", fields: [requestedById], references: [id])
 
   @@unique([tenantId, code])
   @@index([tenantId, status])
   @@index([assigneeId, status])
   @@index([contractId])
+  @@index([paymentRequestId])
 }

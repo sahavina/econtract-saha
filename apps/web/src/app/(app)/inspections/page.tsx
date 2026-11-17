@@ -11,7 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { api, type Paginated } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { formatDate } from '@/lib/format';
-import { customerOf, type InspectionListItem, isOverdue } from '@/lib/inspection';
+import { type InspectionListItem, isOverdue, targetOf } from '@/lib/inspection';
 import { cn } from '@/lib/utils';
 
 type Scope = 'mine' | 'sent' | 'all';
@@ -104,6 +104,7 @@ export default function InspectionsPage() {
 
 function InspectionCard({ r, scope }: { r: InspectionListItem; scope: Scope }) {
   const overdue = isOverdue(r);
+  const target = targetOf(r);
   const person = scope === 'mine' ? r.requestedBy : r.assignee;
   return (
     <Link
@@ -124,9 +125,9 @@ function InspectionCard({ r, scope }: { r: InspectionListItem; scope: Scope }) {
         </span>
       </span>
       <span className="mt-1 block text-sm font-medium break-words">
-        {r.contract.code} · {r.contract.title}
+        {target.code} · {target.title}
       </span>
-      {customerOf(r.contract) && <span className="block truncate text-xs text-muted-foreground">{customerOf(r.contract)}</span>}
+      {target.party && <span className="block truncate text-xs text-muted-foreground">{target.party}</span>}
       <span className="mt-1.5 line-clamp-2 block text-xs text-muted-foreground">{r.content}</span>
       <span className="mt-2 flex items-center justify-between gap-2 text-xs">
         <span className="flex min-w-0 items-center gap-1.5">

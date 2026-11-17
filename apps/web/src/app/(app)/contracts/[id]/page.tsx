@@ -444,7 +444,7 @@ export default function ContractDetailPage() {
 
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
       <LiquidateDialog contractId={c.id} code={c.code} open={liquidating} onClose={() => setLiquidating(false)} />
-      {inspecting && <InspectionRequestDialog open contract={c} onClose={() => setInspecting(false)} />}
+      {inspecting && <InspectionRequestDialog open target={{ contractId: c.id, code: c.code, kind: c.kind }} onClose={() => setInspecting(false)} />}
     </>
   );
 }

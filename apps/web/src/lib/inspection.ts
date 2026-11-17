@@ -32,12 +32,35 @@ export interface InspectionListItem {
   createdAt: string;
   assignee: UserRef;
   requestedBy: UserRef;
-  contract: { id: string; code: string; title: string; kind: ContractKind; status: string; parties: { name: string; isInternal: boolean }[] };
+  /** Hồ sơ được kiểm tra: hợp đồng/đơn, đề nghị thanh toán, hoặc cả hai (đề nghị gắn đơn). */
+  contract: InspectionContract | null;
+  paymentRequest: InspectionPaymentRequest | null;
+}
+
+interface InspectionContract {
+  id: string;
+  code: string;
+  title: string;
+  kind: ContractKind;
+  status: string;
+  parties: { name: string; isInternal: boolean }[];
+}
+
+export interface InspectionPaymentRequest {
+  id: string;
+  number: string;
+  date: string;
+  company: string;
+  recipient: string;
+  basis: string | null;
+  amount: string;
+  status: string;
+  contractId: string | null;
 }
 
 export interface InspectionDetail extends InspectionListItem {
   itemResults: InspectionItemResult[];
-  contract: InspectionListItem['contract'] & {
+  contract: (InspectionContract & {
     value: string;
     vatRate: string | null;
     currency: string;
@@ -46,7 +69,7 @@ export interface InspectionDetail extends InspectionListItem {
     deliveryAddress: string | null;
     owner: { fullName: string } | null;
     items: OrderItem[];
-  };
+  }) | null;
 }
 
 export const INSPECTION_TONE: Record<InspectionStatus, Tone> = {
@@ -57,7 +80,23 @@ export const INSPECTION_TONE: Record<InspectionStatus, Tone> = {
   CANCELLED: 'gray',
 };
 
-export const customerOf = (c: Pick<InspectionListItem['contract'], 'parties'>) => (c.parties.find((p) => !p.isInternal) ?? c.parties[0])?.name ?? '';
+const partyOf = (c: Pick<InspectionContract, 'parties'>) => (c.parties.find((p) => !p.isInternal) ?? c.parties[0])?.name ?? '';
+
+/** Hồ sơ được kiểm tra để hiển thị: số, tên, liên kết, khách hàng/đối tác (đề nghị thanh toán: bên nhận đề nghị). */
+export function targetOf(r: Pick<InspectionListItem, 'contract' | 'paymentRequest'>) {
+  if (r.contract) {
+    const c = r.contract;
+    return { code: c.code, title: c.title, href: `/contracts/${c.id}`, kind: c.kind === 'ORDER' ? 'Đơn hàng' : 'Hợp đồng', party: partyOf(c) };
+  }
+  const p = r.paymentRequest;
+  return {
+    code: p ? `ĐNTT ${p.number}` : '—',
+    title: p ? `Đề nghị thanh toán ${p.number}` : '',
+    href: p ? `/payment-requests/${p.id}` : '#',
+    kind: 'Đề nghị thanh toán',
+    party: p?.recipient ?? '',
+  };
+}
 
 /** Quá hạn: còn mở và hạn xử lý trước hôm nay. */
 export function isOverdue(r: Pick<InspectionListItem, 'status' | 'dueDate'>) {
@@ -86,10 +125,12 @@ export async function inspectionSlipPdf(r: InspectionDetail, company: CompanyPro
   const { default: pdfMake } = await import('pdfmake/build/pdfmake');
   const font = await setupPdfFonts(pdfMake);
   const c = r.contract;
+  const t = targetOf(r);
+  const pr = r.paymentRequest;
   const results = new Map(r.itemResults.map((x) => [x.itemId, x]));
   const info = (label: string, value: string | null | undefined): TableCell[] => [{ text: label, color: MUTED }, { text: value?.trim() || '—' }];
 
-  const itemsTable: Content = c.items.length
+  const itemsTable: Content = c?.items.length
     ? {
         table: {
           headerRows: 1,
@@ -153,11 +194,17 @@ export async function inspectionSlipPdf(r: InspectionDetail, company: CompanyPro
         table: {
           widths: [96, '*', 86, '*'],
           body: [
-            [...info(c.kind === 'ORDER' ? 'Đơn hàng' : 'Hợp đồng', `${c.code}`), ...info('Hạn xử lý', formatDateVi(r.dueDate))],
-            [{ text: 'Tên hồ sơ', color: MUTED }, { text: c.title, colSpan: 3 }, '', ''],
-            [{ text: 'Khách hàng / đối tác', color: MUTED }, { text: customerOf(c) || '—', colSpan: 3 }, '', ''],
+            [...info(t.kind, t.code), ...info('Hạn xử lý', formatDateVi(r.dueDate))],
+            [{ text: 'Tên hồ sơ', color: MUTED }, { text: t.title, colSpan: 3 }, '', ''],
+            [{ text: pr && !c ? 'Kính gửi' : 'Khách hàng / đối tác', color: MUTED }, { text: t.party || '—', colSpan: 3 }, '', ''],
+            ...(pr
+              ? [
+                  [...info('Đề nghị thanh toán', `${pr.number} · ${formatDateVi(pr.date) ?? ''}`), ...info('Số tiền', `${formatQtyVi(String(Math.round(Number(pr.amount) || 0)))} đồng`)],
+                  ...(pr.basis ? [[{ text: 'Căn cứ', color: MUTED }, { text: pr.basis, colSpan: 3 }, '', ''] as TableCell[]] : []),
+                ]
+              : []),
             [...info('Người yêu cầu', r.requestedBy.fullName), ...info('Người kiểm tra', r.assignee.fullName)],
-            ...(c.kind === 'ORDER' && (c.deliveryDate || c.deliveryAddress)
+            ...(c && c.kind === 'ORDER' && (c.deliveryDate || c.deliveryAddress)
               ? [[...info('Ngày giao', formatDateVi(c.deliveryDate)), ...info('Nơi giao', c.deliveryAddress)]]
               : []),
           ],

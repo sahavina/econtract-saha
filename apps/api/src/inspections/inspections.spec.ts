@@ -38,6 +38,7 @@ describe('InspectionsService', () => {
   const prisma = {
     inspectionRequest: { findFirst: vi.fn(async (_args: { where: { AND: unknown[] } }) => row) },
     user: { count: vi.fn(async () => 1) },
+    paymentRequest: { findFirst: vi.fn(async (_args: unknown) => ({ id: 'pr1', number: 'DN-01', contractId: null as string | null })) },
     $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
   };
   const audit = { log: vi.fn() };
@@ -69,6 +70,26 @@ describe('InspectionsService', () => {
     expect(data).toMatchObject({ tenantId: 't1', assigneeId: B, requestedById: A });
     expect(notifications.notify).toHaveBeenCalledWith('t1', [B], expect.objectContaining({ type: 'inspection.assigned', link: '/inspections/r1' }), tx);
     expect(audit.log).toHaveBeenCalledOnce();
+  });
+
+  it('yêu cầu kiểm tra đề nghị thanh toán: liên kết đơn của đề nghị (nếu có), nhật ký theo hồ sơ', async () => {
+    const pay = { ...staff(A), permissions: new Set(['inspection.create', 'payment_request.manage']) } as unknown as AuthUser;
+    prisma.paymentRequest.findFirst.mockResolvedValueOnce({ id: 'pr1', number: 'DN-01', contractId: null });
+    await service.create(pay, inspectionCreateSchema.parse({ paymentRequestId: A, assigneeId: B, content: 'Kiểm tra số tiền, tài khoản' }));
+    expect(tx.inspectionRequest.create.mock.calls[0][0].data).toMatchObject({ contractId: null, paymentRequestId: 'pr1' });
+    expect(audit.log.mock.calls[0][1]).toMatchObject({ entityType: 'payment_request', entityId: 'pr1' });
+    expect(notifications.notify.mock.calls[0][2].title).toContain('ĐNTT DN-01');
+
+    prisma.paymentRequest.findFirst.mockResolvedValueOnce({ id: 'pr1', number: 'DN-01', contractId: 'c9' });
+    await service.create(pay, inspectionCreateSchema.parse({ paymentRequestId: A, assigneeId: B, content: 'x' }));
+    expect(tx.inspectionRequest.create.mock.calls[1][0].data).toMatchObject({ contractId: 'c9', paymentRequestId: 'pr1' });
+    expect(contracts.get).not.toHaveBeenCalled();
+  });
+
+  it('gửi kiểm tra đề nghị thanh toán cần quyền xem đề nghị; phải chọn đúng một hồ sơ', async () => {
+    await expect(service.create(staff(A), inspectionCreateSchema.parse({ paymentRequestId: A, assigneeId: B, content: 'x' }))).rejects.toBeInstanceOf(ForbiddenException);
+    expect(inspectionCreateSchema.safeParse({ assigneeId: B, content: 'x' }).success).toBe(false);
+    expect(inspectionCreateSchema.safeParse({ contractId: A, paymentRequestId: A, assigneeId: B, content: 'x' }).success).toBe(false);
   });
 
   it('từ chối người phụ trách không thuộc doanh nghiệp', async () => {

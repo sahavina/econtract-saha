@@ -232,7 +232,7 @@ export class LifecycleJobs implements OnApplicationBootstrap {
   private async remindInspections(t: Date) {
     const rows = await this.prisma.inspectionRequest.findMany({
       where: { status: { in: ['PENDING', 'IN_PROGRESS'] }, dueDate: { lte: t } },
-      select: { id: true, tenantId: true, code: true, assigneeId: true, dueDate: true, contract: { select: { code: true } } },
+      select: { id: true, tenantId: true, code: true, assigneeId: true, dueDate: true, contract: { select: { code: true } }, paymentRequest: { select: { number: true } } },
     });
     let sent = 0;
     for (const r of rows) {
@@ -246,7 +246,7 @@ export class LifecycleJobs implements OnApplicationBootstrap {
             [r.assigneeId],
             {
               type: 'reminder.inspection',
-              title: `${overdue ? 'Quá hạn' : 'Đến hạn hôm nay'}: yêu cầu kiểm tra ${r.code} (${r.contract.code})`,
+              title: `${overdue ? 'Quá hạn' : 'Đến hạn hôm nay'}: yêu cầu kiểm tra ${r.code} (${r.contract?.code ?? `ĐNTT ${r.paymentRequest?.number ?? ''}`})`,
               body: `Hạn xử lý ${r.dueDate!.toISOString().slice(0, 10)}.`,
               link: `/inspections/${r.id}`,
             },

@@ -2,23 +2,30 @@
 
 import { PAYMENT_REQUEST_STATUS_LABELS } from '@saha/shared';
 import { useQuery } from '@tanstack/react-query';
-import { Receipt } from 'lucide-react';
+import { ClipboardCheck, Receipt } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
+import { useState } from 'react';
+import { TargetInspections } from '@/components/contract-inspections';
 import { DetailHeader } from '@/components/detail-header';
+import { InspectionRequestDialog } from '@/components/inspection-request-dialog';
 import { StatusPill } from '@/components/list-ui';
 import { ErrorState } from '@/components/page-header';
 import { PaymentRequestActions } from '@/components/payment-request-actions';
 import { PaymentRequestForm } from '@/components/payment-request-form';
 import { PaymentRequestProgress } from '@/components/payment-request-progress';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api } from '@/lib/api';
+import { useAuth } from '@/lib/auth';
 import { formatDate, formatMoney } from '@/lib/format';
 import { PAYMENT_REQUEST_TONE } from '@/lib/status-tones';
 import type { PaymentRequestDetail } from '@/lib/types';
 
 export default function PaymentRequestDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { can } = useAuth();
+  const [inspecting, setInspecting] = useState(false);
   const request = useQuery({ queryKey: ['payment-request', id], queryFn: () => api<PaymentRequestDetail>(`/payment-requests/${id}`) });
   if (request.isError) return <ErrorState error={request.error} onRetry={() => request.refetch()} />;
   if (!request.data) return <Skeleton className="h-96" />;
@@ -31,7 +38,16 @@ export default function PaymentRequestDetailPage() {
         title={`Đề nghị thanh toán ${r.number}`}
         status={<StatusPill tone={PAYMENT_REQUEST_TONE[r.status]}>{PAYMENT_REQUEST_STATUS_LABELS[r.status]}</StatusPill>}
         meta={<span>Ngày {formatDate(r.date)} · Người lập: {r.createdBy.fullName}</span>}
-        actions={<PaymentRequestActions request={r} />}
+        actions={
+          <>
+            {can('inspection.create') && (
+              <Button variant="outline" onClick={() => setInspecting(true)}>
+                <ClipboardCheck /> Yêu cầu kiểm tra
+              </Button>
+            )}
+            <PaymentRequestActions request={r} />
+          </>
+        }
         facts={[
           { label: 'Kính gửi', value: r.recipient },
           { label: 'Số tiền', value: <span className="tabular-nums">{formatMoney(r.amount)}</span> },
@@ -50,7 +66,11 @@ export default function PaymentRequestDetailPage() {
       >
         <PaymentRequestProgress request={r} />
       </DetailHeader>
+      <div className="my-4">
+        <TargetInspections filter={{ paymentRequestId: r.id }} onRequest={can('inspection.create') ? () => setInspecting(true) : undefined} />
+      </div>
       <PaymentRequestForm key={r.id} saved={r} />
+      {inspecting && <InspectionRequestDialog open target={{ paymentRequestId: r.id, code: `ĐNTT ${r.number}`, kind: 'PAYMENT_REQUEST' }} onClose={() => setInspecting(false)} />}
     </>
   );
 }

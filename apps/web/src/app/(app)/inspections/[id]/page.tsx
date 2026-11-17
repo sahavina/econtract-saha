@@ -20,7 +20,7 @@ import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useCompanyProfile } from '@/lib/company';
 import { formatDate, formatDateTime } from '@/lib/format';
-import { customerOf, INSPECTION_TONE, type InspectionDetail, inspectionSlipPdf, isOverdue } from '@/lib/inspection';
+import { INSPECTION_TONE, type InspectionDetail, inspectionSlipPdf, isOverdue, targetOf } from '@/lib/inspection';
 import { cn } from '@/lib/utils';
 
 export default function InspectionDetailPage() {
@@ -42,6 +42,8 @@ function InspectionView({ r }: { r: InspectionDetail }) {
   const open = r.status === 'PENDING' || r.status === 'IN_PROGRESS';
   const canProcess = open && (isAssignee || manager);
   const c = r.contract;
+  const target = targetOf(r);
+  const items = c?.items ?? [];
 
   const [result, setResult] = useState(r.result ?? '');
   const [checks, setChecks] = useState<Record<string, InspectionItemResult>>(() => Object.fromEntries(r.itemResults.map((x) => [x.itemId, x])));
@@ -77,7 +79,7 @@ function InspectionView({ r }: { r: InspectionDetail }) {
   const setCheck = (itemId: string, patch: Partial<InspectionItemResult>) =>
     setChecks((x) => ({ ...x, [itemId]: { itemId, ok: x[itemId]?.ok ?? null, note: x[itemId]?.note ?? null, ...patch } }));
   const failed = Object.values(checks).filter((x) => x.ok === false).length;
-  const checked = c.items.filter((i) => checks[i.id]?.ok != null).length;
+  const checked = items.filter((i) => checks[i.id]?.ok != null).length;
 
   const print = async () => {
     setPrinting(true);
@@ -107,7 +109,7 @@ function InspectionView({ r }: { r: InspectionDetail }) {
       <DetailHeader
         crumbs={[{ label: 'Yêu cầu kiểm tra', href: '/inspections' }, { label: r.code }]}
         icon={ClipboardCheck}
-        title={`Kiểm tra ${c.code}`}
+        title={`Kiểm tra ${target.code}`}
         status={
           <span className="flex flex-wrap gap-1.5">
             <StatusPill tone={INSPECTION_TONE[r.status]}>{INSPECTION_STATUS_LABELS[r.status]}</StatusPill>
@@ -115,7 +117,7 @@ function InspectionView({ r }: { r: InspectionDetail }) {
             {r.printedAt ? <StatusPill tone="teal">Đã in{r.printCount > 1 ? ` ${r.printCount} lần` : ''}</StatusPill> : <StatusPill tone="gray">Chưa in phiếu</StatusPill>}
           </span>
         }
-        meta={`${r.code} · ${c.title}`}
+        meta={`${r.code} · ${target.title}`}
         actions={
           <>
             {r.status === 'PENDING' && (isAssignee || manager) && (
@@ -147,7 +149,7 @@ function InspectionView({ r }: { r: InspectionDetail }) {
           { label: 'Người phụ trách', value: r.assignee.fullName },
           { label: 'Người yêu cầu', value: r.requestedBy.fullName },
           { label: 'Hạn xử lý', value: r.dueDate ? formatDate(r.dueDate) : '—' },
-          { label: 'Khách hàng / đối tác', value: customerOf(c) || '—' },
+          { label: c ? 'Khách hàng / đối tác' : 'Kính gửi', value: target.party || '—' },
         ]}
       >
         <p className="text-xs text-muted-foreground">
@@ -155,9 +157,17 @@ function InspectionView({ r }: { r: InspectionDetail }) {
           {r.startedAt && ` · Nhận xử lý ${formatDateTime(r.startedAt)}`}
           {r.completedAt && ` · Kết thúc ${formatDateTime(r.completedAt)}`}
           {r.printedAt && ` · In phiếu lần cuối ${formatDateTime(r.printedAt)}${r.printedBy ? ` bởi ${r.printedBy.fullName}` : ''}`} ·{' '}
-          <Link href={`/contracts/${c.id}`} className="text-primary hover:underline">
-            Mở {c.kind === 'ORDER' ? 'đơn hàng' : 'hợp đồng'} {c.code}
+          <Link href={target.href} className="text-primary hover:underline">
+            Mở {target.kind.toLowerCase()} {target.code}
           </Link>
+          {c && r.paymentRequest && (
+            <>
+              {' · '}
+              <Link href={`/payment-requests/${r.paymentRequest.id}`} className="text-primary hover:underline">
+                Đề nghị thanh toán {r.paymentRequest.number}
+              </Link>
+            </>
+          )}
         </p>
       </DetailHeader>
 
@@ -176,12 +186,12 @@ function InspectionView({ r }: { r: InspectionDetail }) {
             <CardHeader>
               <CardTitle className="text-base">Hàng hóa</CardTitle>
               <CardDescription>
-                {c.items.length ? `Đã kiểm ${checked}/${c.items.length} dòng${failed ? ` · ${failed} dòng không đạt` : ''}.` : 'Hồ sơ không có dòng hàng – kiểm tra theo nội dung yêu cầu.'}
+                {items.length ? `Đã kiểm ${checked}/${items.length} dòng${failed ? ` · ${failed} dòng không đạt` : ''}.` : 'Hồ sơ không có dòng hàng – kiểm tra theo nội dung yêu cầu.'}
               </CardDescription>
             </CardHeader>
-            {c.items.length > 0 && (
+            {items.length > 0 && (
               <CardContent className="space-y-2 px-3 sm:px-6">
-                {c.items.map((i, k) => {
+                {items.map((i, k) => {
                   const res = checks[i.id];
                   return (
                     <div key={i.id} className={cn('rounded-lg border p-3', res?.ok === false && 'border-red-300 bg-red-50/50 dark:border-red-900 dark:bg-red-950/30', res?.ok === true && 'border-emerald-300 bg-emerald-50/40 dark:border-emerald-900 dark:bg-emerald-950/20')}>

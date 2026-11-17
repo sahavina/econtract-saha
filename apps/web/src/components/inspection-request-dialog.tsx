@@ -14,28 +14,34 @@ import { Textarea } from '@/components/ui/textarea';
 import { api, ApiError } from '@/lib/api';
 import { useLookups } from '@/lib/queries';
 
-/** Gửi yêu cầu kiểm tra hồ sơ (hợp đồng/đơn) cho một người phụ trách; xong thì mở trang yêu cầu. */
+/** Hồ sơ cần kiểm tra: hợp đồng/đơn hoặc đề nghị thanh toán. */
+export type InspectionTarget = { kind: string; code: string } & ({ contractId: string; paymentRequestId?: never } | { paymentRequestId: string; contractId?: never });
+
+/** Gửi yêu cầu kiểm tra hồ sơ (hợp đồng/đơn, đề nghị thanh toán) cho một người phụ trách; xong thì mở trang yêu cầu. */
 export function InspectionRequestDialog({
   open,
   onClose,
-  contract,
+  target,
 }: {
   open: boolean;
   onClose: () => void;
-  contract: { id: string; code: string; kind: string; ownerId?: string | null };
+  target: InspectionTarget;
 }) {
   const router = useRouter();
   const qc = useQueryClient();
   const lookups = useLookups();
-  const isOrder = contract.kind === 'ORDER';
+  const isOrder = target.kind === 'ORDER';
+  const isPayment = target.kind === 'PAYMENT_REQUEST';
   const [assigneeId, setAssigneeId] = useState<string | undefined>();
-  const [content, setContent] = useState(isOrder ? 'Kiểm tra số lượng, quy cách, chất lượng hàng hóa trước khi giao.' : '');
+  const [content, setContent] = useState(
+    isOrder ? 'Kiểm tra số lượng, quy cách, chất lượng hàng hóa trước khi giao.' : isPayment ? 'Kiểm tra số tiền, căn cứ thanh toán và thông tin tài khoản thụ hưởng trước khi gửi khách.' : '',
+  );
   const [dueDate, setDueDate] = useState('');
   const [errors, setErrors] = useState<string[]>([]);
 
   const send = useMutation({
     meta: { silent: true },
-    mutationFn: () => api<{ id: string; code: string }>('/inspections', { method: 'POST', body: { contractId: contract.id, assigneeId, content, dueDate } }),
+    mutationFn: () => api<{ id: string; code: string }>('/inspections', { method: 'POST', body: { contractId: target.contractId, paymentRequestId: target.paymentRequestId, assigneeId, content, dueDate } }),
     onSuccess: (r) => {
       toast.success(`Đã gửi yêu cầu kiểm tra ${r.code}`);
       qc.invalidateQueries({ queryKey: ['inspections'] });
@@ -49,7 +55,7 @@ export function InspectionRequestDialog({
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Yêu cầu kiểm tra {contract.code}</DialogTitle>
+          <DialogTitle>Yêu cầu kiểm tra {target.code}</DialogTitle>
           <DialogDescription>Người phụ trách nhận thông báo và thấy yêu cầu trong mục Yêu cầu kiểm tra; có thể in phiếu kèm mã QR.</DialogDescription>
         </DialogHeader>
         <form

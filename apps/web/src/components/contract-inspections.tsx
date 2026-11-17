@@ -14,18 +14,28 @@ import { api, type Paginated } from '@/lib/api';
 import { formatDate, formatDateTime } from '@/lib/format';
 import { INSPECTION_TONE, type InspectionListItem, isOverdue } from '@/lib/inspection';
 
-export const contractInspectionsKey = (contractId: string) => ['inspections', 'contract', contractId] as const;
+/** Bộ lọc theo hồ sơ: hợp đồng/đơn hoặc đề nghị thanh toán. */
+type TargetFilter = { contractId: string } | { paymentRequestId: string };
 
 export function useContractInspections(contractId: string) {
+  return useTargetInspections({ contractId });
+}
+
+export function useTargetInspections(filter: TargetFilter) {
   return useQuery({
-    queryKey: contractInspectionsKey(contractId),
-    queryFn: () => api<Paginated<InspectionListItem>>('/inspections', { query: { contractId, pageSize: 100 } }),
+    queryKey: ['inspections', 'target', filter],
+    queryFn: () => api<Paginated<InspectionListItem>>('/inspections', { query: { ...filter, pageSize: 100 } }),
   });
 }
 
 /** Tab "Kiểm tra" của hợp đồng/đơn: các lần yêu cầu kiểm tra, trạng thái, người phụ trách, đã in phiếu. */
 export function ContractInspectionsTab({ contractId, onRequest }: { contractId: string; onRequest?: () => void }) {
-  const list = useContractInspections(contractId);
+  return <TargetInspections filter={{ contractId }} onRequest={onRequest} />;
+}
+
+/** Danh sách yêu cầu kiểm tra của một hồ sơ (hợp đồng/đơn hoặc đề nghị thanh toán). */
+export function TargetInspections({ filter, onRequest }: { filter: TargetFilter; onRequest?: () => void }) {
+  const list = useTargetInspections(filter);
   const items = list.data?.items ?? [];
   const status = (r: InspectionListItem) => (
     <span className="flex flex-wrap gap-1">

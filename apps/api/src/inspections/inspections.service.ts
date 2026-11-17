@@ -20,7 +20,17 @@ const contractSelect = {
     parties: { orderBy: { sortOrder: 'asc' as const }, select: { name: true, isInternal: true } },
   },
 } as const;
-const listInclude = { contract: contractSelect, assignee: userSelect, requestedBy: userSelect, printedBy: userSelect } as const;
+const paymentRequestSelect = {
+  select: { id: true, number: true, date: true, company: true, recipient: true, basis: true, amount: true, status: true, contractId: true },
+} as const;
+const listInclude = { contract: contractSelect, paymentRequest: paymentRequestSelect, assignee: userSelect, requestedBy: userSelect, printedBy: userSelect } as const;
+
+/** Tên hồ sơ trong thông báo: số hợp đồng/đơn, không có thì số đề nghị thanh toán. */
+const targetLabel = (r: { contract: { code: string } | null; paymentRequest: { number: string } | null }) =>
+  r.contract?.code ?? (r.paymentRequest ? `ĐNTT ${r.paymentRequest.number}` : '');
+/** Nhật ký ghi theo hồ sơ: hợp đồng/đơn nếu có, không thì đề nghị thanh toán. */
+const auditTarget = (r: { contractId: string | null; paymentRequestId: string | null }) =>
+  r.contractId ? { entityType: 'contract', entityId: r.contractId } : { entityType: 'payment_request', entityId: r.paymentRequestId };
 
 const isCodeConflict = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
 const OPEN = new Set(['PENDING', 'IN_PROGRESS']);
@@ -49,18 +59,26 @@ export class InspectionsService {
     return user.permissions.has(PERMISSIONS.INSPECTION_MANAGE);
   }
 
+  private canViewPaymentRequests(user: AuthUser) {
+    return user.permissions.has(PERMISSIONS.PAYMENT_REQUEST_MANAGE) || user.permissions.has(PERMISSIONS.CONTRACT_VIEW_ALL);
+  }
+
   /**
    * Người dùng thấy yêu cầu được giao cho mình, mình gửi, hoặc của hồ sơ mình xem được (chỉ xem; xử lý vẫn theo
    * người phụ trách/quản lý); quản lý thấy tất cả.
    */
   private visibleWhere(user: AuthUser): Prisma.InspectionRequestWhereInput {
     if (this.canManage(user)) return { tenantId: user.tenantId };
-    return { tenantId: user.tenantId, OR: [{ assigneeId: user.userId }, { requestedById: user.userId }, { contract: this.contracts.scopeWhere(user) }] };
+    const or: Prisma.InspectionRequestWhereInput[] = [{ assigneeId: user.userId }, { requestedById: user.userId }, { contract: this.contracts.scopeWhere(user) }];
+    // Người xem được đề nghị thanh toán (lập đề nghị hoặc xem mọi hợp đồng) xem được yêu cầu kiểm tra của đề nghị.
+    if (this.canViewPaymentRequests(user)) or.push({ paymentRequestId: { not: null } });
+    return { tenantId: user.tenantId, OR: or };
   }
 
   async list(user: AuthUser, q: InspectionQuery) {
-    // Theo hồ sơ (tab Kiểm tra của hợp đồng/đơn): mọi yêu cầu xem được của hồ sơ đó, kể cả đã hủy.
-    const scope: Prisma.InspectionRequestWhereInput = q.contractId
+    // Theo hồ sơ (tab Kiểm tra của hợp đồng/đơn, mục kiểm tra của đề nghị thanh toán): mọi yêu cầu xem được, kể cả đã hủy.
+    const byTarget = !!(q.contractId || q.paymentRequestId);
+    const scope: Prisma.InspectionRequestWhereInput = byTarget
       ? {}
       : q.scope === 'sent'
         ? { requestedById: user.userId }
@@ -71,8 +89,9 @@ export class InspectionsService {
       AND: [
         this.visibleWhere(user),
         scope,
-        q.status ? { status: q.status } : q.contractId ? {} : { status: { not: 'CANCELLED' } },
+        q.status ? { status: q.status } : byTarget ? {} : { status: { not: 'CANCELLED' } },
         q.contractId ? { contractId: q.contractId } : {},
+        q.paymentRequestId ? { paymentRequestId: q.paymentRequestId } : {},
         q.q
           ? {
               OR: [
@@ -80,6 +99,8 @@ export class InspectionsService {
                 { content: { contains: q.q, mode: 'insensitive' } },
                 { contract: { code: { contains: q.q, mode: 'insensitive' } } },
                 { contract: { title: { contains: q.q, mode: 'insensitive' } } },
+                { paymentRequest: { number: { contains: q.q, mode: 'insensitive' } } },
+                { paymentRequest: { recipient: { contains: q.q, mode: 'insensitive' } } },
               ],
             }
           : {},
@@ -114,6 +135,7 @@ export class InspectionsService {
         assignee: userSelect,
         requestedBy: userSelect,
         printedBy: userSelect,
+        paymentRequest: paymentRequestSelect,
         contract: {
           select: {
             ...contractSelect.select,
@@ -140,9 +162,7 @@ export class InspectionsService {
   }
 
   async create(user: AuthUser, input: InspectionCreate) {
-    // Chỉ gửi yêu cầu cho hồ sơ mình xem được (kiểm tra phạm vi xem hợp đồng).
-    const contract = await this.contracts.get(user, input.contractId);
-    if (contract.deletedAt) throw new BadRequestException('Hồ sơ đã ở thùng rác');
+    const target = await this.resolveTarget(user, input);
     await this.assertAssignee(user, input.assigneeId);
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
@@ -152,7 +172,8 @@ export class InspectionsService {
             data: {
               tenantId: user.tenantId,
               code,
-              contractId: contract.id,
+              contractId: target.contractId,
+              paymentRequestId: target.paymentRequestId,
               assigneeId: input.assigneeId,
               requestedById: user.userId,
               content: input.content,
@@ -161,7 +182,7 @@ export class InspectionsService {
           });
           await this.audit.log(
             user,
-            { action: 'inspection.create', entityType: 'contract', entityId: contract.id, data: { code, assigneeId: input.assigneeId } },
+            { action: 'inspection.create', ...auditTarget(target), data: { code, assigneeId: input.assigneeId } },
             tx,
           );
           if (input.assigneeId !== user.userId) {
@@ -170,7 +191,7 @@ export class InspectionsService {
               [input.assigneeId],
               {
                 type: 'inspection.assigned',
-                title: `Yêu cầu kiểm tra ${code}: ${contract.code}`,
+                title: `Yêu cầu kiểm tra ${code}: ${target.label}`,
                 body: `${user.fullName} đề nghị kiểm tra: ${input.content.slice(0, 200)}`,
                 link: `/inspections/${created.id}`,
               },
@@ -184,6 +205,25 @@ export class InspectionsService {
       }
     }
     throw new ConflictException('Không sinh được số yêu cầu, vui lòng thử lại');
+  }
+
+  /**
+   * Hồ sơ được kiểm tra. Đề nghị thanh toán: cần quyền xem đề nghị; đề nghị gắn đơn/hợp đồng thì liên kết luôn hồ sơ đó.
+   * Hợp đồng/đơn: phải xem được (phạm vi xem hợp đồng) và chưa ở thùng rác.
+   */
+  private async resolveTarget(user: AuthUser, input: InspectionCreate) {
+    if (input.paymentRequestId) {
+      if (!this.canViewPaymentRequests(user)) throw new ForbiddenException('Bạn không có quyền xem đề nghị thanh toán');
+      const pr = await this.prisma.paymentRequest.findFirst({
+        where: { id: input.paymentRequestId, tenantId: user.tenantId },
+        select: { id: true, number: true, contractId: true },
+      });
+      if (!pr) throw new NotFoundException('Không tìm thấy đề nghị thanh toán');
+      return { contractId: pr.contractId, paymentRequestId: pr.id, label: `ĐNTT ${pr.number}` };
+    }
+    const contract = await this.contracts.get(user, input.contractId!);
+    if (contract.deletedAt) throw new BadRequestException('Hồ sơ đã ở thùng rác');
+    return { contractId: contract.id, paymentRequestId: null, label: contract.code };
   }
 
   async update(user: AuthUser, id: string, input: InspectionUpdate) {
@@ -203,12 +243,12 @@ export class InspectionsService {
           ...(reassigned && { status: 'PENDING', startedAt: null }),
         },
       });
-      await this.audit.log(user, { action: 'inspection.update', entityType: 'contract', entityId: current.contractId, data: { code: current.code, changes: Object.keys(input) } }, tx);
+      await this.audit.log(user, { action: 'inspection.update', ...auditTarget(current), data: { code: current.code, changes: Object.keys(input) } }, tx);
       if (reassigned && input.assigneeId !== user.userId) {
         await this.notifications.notify(
           user.tenantId,
           [input.assigneeId],
-          { type: 'inspection.assigned', title: `Yêu cầu kiểm tra ${current.code}: ${current.contract.code}`, body: `Bạn được giao kiểm tra: ${updated.content.slice(0, 200)}`, link: `/inspections/${id}` },
+          { type: 'inspection.assigned', title: `Yêu cầu kiểm tra ${current.code}: ${targetLabel(current)}`, body: `Bạn được giao kiểm tra: ${updated.content.slice(0, 200)}`, link: `/inspections/${id}` },
           tx,
         );
       }
@@ -223,7 +263,7 @@ export class InspectionsService {
     if (current.status !== 'PENDING') throw new BadRequestException('Chỉ nhận xử lý yêu cầu đang chờ');
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.inspectionRequest.update({ where: { id }, data: { status: 'IN_PROGRESS', startedAt: new Date() } });
-      await this.audit.log(user, { action: 'inspection.start', entityType: 'contract', entityId: current.contractId, data: { code: current.code } }, tx);
+      await this.audit.log(user, { action: 'inspection.start', ...auditTarget(current), data: { code: current.code } }, tx);
       return updated;
     });
   }
@@ -234,7 +274,7 @@ export class InspectionsService {
     this.assertProcessor(user, current);
     if (!OPEN.has(current.status)) throw new BadRequestException('Yêu cầu đã kết thúc; mở lại trước khi sửa kết quả');
     const itemResults = mergeItemResults(
-      current.contract.items.map((i) => i.id),
+      (current.contract?.items ?? []).map((i) => i.id),
       (current.itemResults ?? []) as unknown as InspectionItemResult[],
       input.itemResults,
     );
@@ -257,7 +297,7 @@ export class InspectionsService {
       if (input.finish) {
         await this.audit.log(
           user,
-          { action: 'inspection.finish', entityType: 'contract', entityId: current.contractId, data: { code: current.code, status: input.finish } },
+          { action: 'inspection.finish', ...auditTarget(current), data: { code: current.code, status: input.finish } },
           tx,
         );
         if (current.requestedById !== user.userId) {
@@ -266,7 +306,7 @@ export class InspectionsService {
             [current.requestedById],
             {
               type: 'inspection.finished',
-              title: `${current.code} ${input.finish === 'DONE' ? 'đã kiểm tra – Đạt' : 'có vấn đề'}: ${current.contract.code}`,
+              title: `${current.code} ${input.finish === 'DONE' ? 'đã kiểm tra – Đạt' : 'có vấn đề'}: ${targetLabel(current)}`,
               body: (input.result ?? current.result)?.slice(0, 300) ?? null,
               link: `/inspections/${id}`,
             },
@@ -288,7 +328,7 @@ export class InspectionsService {
         where: { id },
         data: { status: current.status === 'CANCELLED' ? 'PENDING' : 'IN_PROGRESS', completedAt: null },
       });
-      await this.audit.log(user, { action: 'inspection.reopen', entityType: 'contract', entityId: current.contractId, data: { code: current.code } }, tx);
+      await this.audit.log(user, { action: 'inspection.reopen', ...auditTarget(current), data: { code: current.code } }, tx);
       return updated;
     });
   }
@@ -302,7 +342,7 @@ export class InspectionsService {
         data: { printedAt: new Date(), printedById: user.userId, printCount: { increment: 1 } },
         select: { id: true, printedAt: true, printCount: true },
       });
-      await this.audit.log(user, { action: 'inspection.print', entityType: 'contract', entityId: current.contractId, data: { code: current.code, count: updated.printCount } }, tx);
+      await this.audit.log(user, { action: 'inspection.print', ...auditTarget(current), data: { code: current.code, count: updated.printCount } }, tx);
       return updated;
     });
   }
@@ -314,7 +354,7 @@ export class InspectionsService {
     if (!OPEN.has(current.status)) throw new BadRequestException('Chỉ hủy được yêu cầu chưa kết thúc');
     return this.prisma.$transaction(async (tx) => {
       const updated = await tx.inspectionRequest.update({ where: { id }, data: { status: 'CANCELLED', completedAt: new Date() } });
-      await this.audit.log(user, { action: 'inspection.cancel', entityType: 'contract', entityId: current.contractId, data: { code: current.code } }, tx);
+      await this.audit.log(user, { action: 'inspection.cancel', ...auditTarget(current), data: { code: current.code } }, tx);
       return updated;
     });
   }
