@@ -59,6 +59,29 @@ export function paymentValues(r: PaymentRequest): Record<string, string | null> 
   };
 }
 
+/** Đợt thanh toán: số tiền = tỷ lệ % của tổng giá trị hồ sơ; câu ghi chú thêm vào cuối phần Căn cứ. */
+export interface PaymentStage {
+  id: string;
+  label: string;
+  percent: number;
+  /** null ⇒ thanh toán toàn bộ, không thêm câu nào. */
+  note: ((doc: string, total: string) => string) | null;
+}
+
+export const PAYMENT_STAGES: PaymentStage[] = [
+  { id: 'full', label: 'Thanh toán toàn bộ (100%)', percent: 100, note: null },
+  { id: 'deposit50', label: 'Đặt cọc 50%', percent: 50, note: (doc, total) => `Đề nghị thanh toán tiền đặt cọc 50% giá trị ${doc} (tổng giá trị ${total} đồng).` },
+  { id: 'deposit30', label: 'Đặt cọc 30%', percent: 30, note: (doc, total) => `Đề nghị thanh toán tiền đặt cọc 30% giá trị ${doc} (tổng giá trị ${total} đồng).` },
+  { id: 'rest50', label: 'Thanh toán 50% còn lại', percent: 50, note: (doc, total) => `Đề nghị thanh toán 50% giá trị còn lại của ${doc} (tổng giá trị ${total} đồng; đã đặt cọc 50%).` },
+  { id: 'rest70', label: 'Thanh toán 70% còn lại', percent: 70, note: (doc, total) => `Đề nghị thanh toán 70% giá trị còn lại của ${doc} (tổng giá trị ${total} đồng; đã đặt cọc 30%).` },
+];
+
+/** Số tiền theo tỷ lệ, làm tròn đến đồng. */
+export function stageAmount(total: string, percent: number): string {
+  const n = Number(amountDigits(total));
+  return n ? String(Math.round((n * percent) / 100)) : '';
+}
+
 export function dateLine(r: PaymentRequest): string {
   const [y, m, d] = r.date.split('-');
   return `${r.place.trim() || 'Hà Nội'}, ngày ${d ?? '…'} tháng ${m ?? '…'} năm ${y ?? '…'}`;

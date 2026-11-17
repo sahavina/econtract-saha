@@ -1,6 +1,6 @@
 'use client';
 
-import { buildTemplateValues, formatDateVi, orderTotals, PAYMENT_REQUEST_STATUS_LABELS, PAYMENT_REQUEST_STATUSES, type PaymentRequestStatus, renderTemplate } from '@saha/shared';
+import { buildTemplateValues, formatDateVi, formatQtyVi, orderTotals, PAYMENT_REQUEST_STATUS_LABELS, PAYMENT_REQUEST_STATUSES, type PaymentRequestStatus, renderTemplate } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, FileText, Loader2, Printer, Save } from 'lucide-react';
 import { useRouter } from 'next/navigation';
@@ -26,9 +26,11 @@ import {
   fileBase,
   isPaymentTemplate,
   openPaymentRequestPdf,
+  PAYMENT_STAGES,
   paymentRequestHtml,
   paymentValues,
   requestFromSaved,
+  stageAmount,
   type PaymentRequest,
 } from '@/lib/payment-request';
 import type { ContractDetail, PaymentRequestDetail, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
@@ -124,7 +126,29 @@ export function PaymentRequestForm({ contractId = '', quoteId = '', saved }: { c
   const [quoteApplied, setQuoteApplied] = useState(false);
 
   const set = (patch: Partial<PaymentRequest>) => setR((x) => ({ ...x, ...patch }));
+  // Đợt thanh toán: tổng giá trị gốc của hồ sơ, tên hồ sơ trong câu ghi chú và câu đã thêm vào Căn cứ (để thay khi đổi đợt).
+  const [stageId, setStageId] = useState('full');
+  const [baseTotal, setBaseTotal] = useState('');
+  const [docName, setDocName] = useState('');
+  const [stageNote, setStageNote] = useState('');
+  const resetStage = (total: string, doc: string) => {
+    setStageId('full');
+    setStageNote('');
+    setBaseTotal(total);
+    setDocName(doc);
+  };
+  const applyStage = (id: string) => {
+    const stage = PAYMENT_STAGES.find((s) => s.id === id) ?? PAYMENT_STAGES[0];
+    const total = baseTotal || amountDigits(r.amount);
+    if (!baseTotal) setBaseTotal(total);
+    const note = stage.note ? stage.note(docName || 'đơn hàng/hợp đồng', formatQtyVi(total)) : '';
+    const basis = (stageNote && r.basis.endsWith(stageNote) ? r.basis.slice(0, -stageNote.length) : r.basis).trimEnd();
+    set({ amount: stageAmount(total, stage.percent) || r.amount, basis: note ? `${basis}${basis ? ' ' : ''}${note}` : basis });
+    setStageNote(note);
+    setStageId(stage.id);
+  };
   const apply = (c: ContractDetail) => {
+    resetStage(payableAmount(c), c.kind === 'ORDER' ? `đơn đặt hàng số ${c.code}` : `hợp đồng số ${c.code}`);
     setR((x) => fromContract(c, company.data, x));
     setPicked(c);
     setFilledFrom(c.code);
@@ -148,6 +172,7 @@ export function PaymentRequestForm({ contractId = '', quoteId = '', saved }: { c
       amount: String(Math.round(Number(q.total)) || ''),
     }));
     setFilledFrom(q.code);
+    resetStage(String(Math.round(Number(q.total)) || ''), `báo giá số ${q.code}`);
   }
 
   const pick = (id: string) => api<ContractDetail>(`/contracts/${id}`).then(apply).catch((e: Error) => toast.error(e.message));
@@ -243,6 +268,28 @@ export function PaymentRequestForm({ contractId = '', quoteId = '', saved }: { c
             </Field>
             <Field label="Căn cứ" className="sm:col-span-2">
               <Textarea rows={3} value={r.basis} onChange={(e) => set({ basis: e.target.value })} placeholder="Căn cứ vào báo giá … ngày … giữa … và …" />
+            </Field>
+            <Field
+              label="Đợt thanh toán"
+              className="sm:col-span-2"
+              hint={
+                baseTotal
+                  ? `Tính theo tổng giá trị ${formatQtyVi(baseTotal)} đồng${docName ? ` của ${docName}` : ''}; tự ghi thêm câu vào phần Căn cứ.`
+                  : 'Chọn đơn/hợp đồng (hoặc nhập số tiền tổng) rồi chọn đợt: số tiền tự tính theo tỷ lệ.'
+              }
+            >
+              <Select value={stageId} onValueChange={applyStage}>
+                <SelectTrigger className="w-full" aria-label="Đợt thanh toán">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {PAYMENT_STAGES.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>
+                      {s.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </Field>
             <Field label="Số tiền (đồng) *" className="sm:col-span-2" hint={words || 'Số tiền bằng chữ tự đọc theo số đã nhập.'}>
               <Input inputMode="numeric" value={amountText(r).figure.replace(/ đồng$/, '')} onChange={(e) => set({ amount: e.target.value.replace(/\D/g, '') })} />
