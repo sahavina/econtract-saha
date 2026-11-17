@@ -303,7 +303,7 @@ export default function ContractDetailPage() {
       <Tabs value={tab} onValueChange={setTab}>
         <TabsList variant="line" className="h-auto w-full justify-start gap-0 overflow-x-auto [scrollbar-width:thin] rounded-none border-b p-0 pb-px **:data-[slot=tabs-trigger]:h-10 **:data-[slot=tabs-trigger]:flex-none **:data-[slot=tabs-trigger]:px-3 **:data-[slot=tabs-trigger]:after:bottom-0 **:data-[slot=tabs-trigger]:after:bg-primary">
           <TabsTrigger value="overview">Tổng quan</TabsTrigger>
-          {isOrder && <TabsTrigger value="items">Hàng hóa & giao hàng ({c.items.length})</TabsTrigger>}
+          {(isOrder || c.items.length > 0) && <TabsTrigger value="items">{isOrder ? 'Hàng hóa & giao hàng' : 'Hàng hóa'} ({c.items.length})</TabsTrigger>}
           <TabsTrigger value="content">{isOrder ? 'Nội dung đơn hàng' : 'Nội dung hợp đồng'}</TabsTrigger>
           {!isOrder && <TabsTrigger value="orders">Đơn đặt hàng ({c._count?.orders ?? 0})</TabsTrigger>}
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
@@ -323,11 +323,11 @@ export default function ContractDetailPage() {
           <ContractOverview contract={c} editInfo={editInfo} onOpenTab={openTab} />
         </TabsContent>
 
-        {isOrder && (
+        {(isOrder || c.items.length > 0) && (
           <TabsContent value="items" className="mt-4">
             {/* key: dữ liệu giao hàng đổi (sau khi lưu) thì khởi tạo lại ô nhập. */}
             <OrderItemsTab key={c.items.map((i) => `${i.id}:${i.deliveredQty}`).join('|')} order={c} />
-            <OrderDeliveries orderId={c.id} />
+            {isOrder && <OrderDeliveries orderId={c.id} />}
           </TabsContent>
         )}
         {!isOrder && (

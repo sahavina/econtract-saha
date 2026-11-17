@@ -22,11 +22,12 @@ import type { ContractDetail, ContractListItem, OrderSummary } from '@/lib/types
 const QTY = /^\d{1,15}(\.\d{1,3})?$/;
 const num = (v: string) => String(Number(v));
 
-/** Hàng hóa của đơn và cập nhật số lượng đã giao (khi đơn đã ký). */
+/** Hàng hóa của đơn và cập nhật số lượng đã giao (khi đơn đã ký). Hợp đồng có dòng hàng: chỉ xem. */
 export function OrderItemsTab({ order }: { order: ContractDetail }) {
+  const isOrder = order.kind === 'ORDER';
   const { can } = useAuth();
   const qc = useQueryClient();
-  const canDeliver = ['SIGNED', 'ACTIVE'].includes(order.status) && !order.archivedAt && !order.deletedAt && can('contract.update');
+  const canDeliver = isOrder && ['SIGNED', 'ACTIVE'].includes(order.status) && !order.archivedAt && !order.deletedAt && can('contract.update');
   // Giá trị đang sửa; khóa theo id dòng (khởi tạo từ dữ liệu đã lưu, không đồng bộ trong effect).
   const [draft, setDraft] = useState<Record<string, string>>(() => Object.fromEntries(order.items.map((i) => [i.id, num(i.deliveredQty)])));
   const save = useMutation({
@@ -52,13 +53,15 @@ export function OrderItemsTab({ order }: { order: ContractDetail }) {
       <CardHeader className="flex flex-row flex-wrap items-start justify-between gap-2">
         <div>
           <CardTitle className="flex items-center gap-2 text-base">
-            Hàng hóa & giao hàng
-            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${FULFILLMENT_BADGE[fulfillment]}`}>{ORDER_FULFILLMENT_LABELS[fulfillment]}</span>
+            {isOrder ? 'Hàng hóa & giao hàng' : 'Hàng hóa'}
+            {isOrder && <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${FULFILLMENT_BADGE[fulfillment]}`}>{ORDER_FULFILLMENT_LABELS[fulfillment]}</span>}
           </CardTitle>
           <CardDescription>
             {canDeliver
               ? 'Nhập số lượng đã giao của từng dòng rồi bấm Lưu; mỗi lần cập nhật được ghi vào lịch sử hoạt động.'
-              : 'Cập nhật số lượng đã giao khi đơn đã ký.'}
+              : isOrder
+                ? 'Cập nhật số lượng đã giao khi đơn đã ký.'
+                : 'Dòng hàng của hợp đồng – sửa ở trang Sửa hợp đồng; theo dõi giao hàng qua các đơn đặt hàng.'}
           </CardDescription>
         </div>
         {canDeliver && (

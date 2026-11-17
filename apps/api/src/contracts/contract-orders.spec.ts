@@ -75,10 +75,20 @@ describe('ContractsService – đơn đặt hàng', () => {
     expect(tx.contract.create.mock.calls[0][0].data.kind).toBe('ORDER');
   });
 
-  it('đơn không dùng loại hợp đồng thường; hợp đồng thường không có dòng hàng', async () => {
+  it('đơn không dùng loại hợp đồng thường; hợp đồng thường không gắn hợp đồng nguyên tắc', async () => {
     const normal = { ...ORDER_TYPE, kind: 'CONTRACT' };
     await expect(setup({ type: normal }).svc.create(user, orderInput({ kind: 'ORDER' }))).rejects.toBeInstanceOf(BadRequestException);
-    await expect(setup({ type: normal }).svc.create(user, orderInput())).rejects.toThrow('Chỉ đơn đặt hàng');
+    await expect(setup({ type: normal, parent: { id: PARENT } }).svc.create(user, orderInput({ parentContractId: PARENT }))).rejects.toThrow('Chỉ đơn đặt hàng');
+  });
+
+  it('hợp đồng mua bán có dòng hàng: lưu dòng hàng, giá trị = cộng tiền hàng', async () => {
+    const normal = { ...ORDER_TYPE, kind: 'CONTRACT' };
+    const ok = setup({ type: normal });
+    await ok.svc.create(user, orderInput({ value: '1' }));
+    const data = ok.tx.contract.create.mock.calls[0][0].data;
+    expect(data.kind).toBe('CONTRACT');
+    expect(data.value).toBe('14950000.00');
+    expect((data.items as { create: unknown[] }).create).toHaveLength(2);
   });
 
   it('hợp đồng nguyên tắc phải là hợp đồng xem được trong cùng doanh nghiệp', async () => {

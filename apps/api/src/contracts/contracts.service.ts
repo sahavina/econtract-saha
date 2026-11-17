@@ -227,8 +227,9 @@ export class ContractsService {
     if (kind === 'ORDER' && refs.type && refs.type.kind !== 'ORDER') {
       throw new BadRequestException('Loại hợp đồng đã chọn không dùng cho đơn đặt hàng');
     }
-    if (kind !== 'ORDER' && (input.items.length || input.parentContractId)) {
-      throw new BadRequestException('Chỉ đơn đặt hàng mới có dòng hàng và hợp đồng nguyên tắc');
+    // Hợp đồng (vd mua bán) cũng có thể có dòng hàng; chỉ đơn mới gắn hợp đồng nguyên tắc.
+    if (kind !== 'ORDER' && input.parentContractId) {
+      throw new BadRequestException('Chỉ đơn đặt hàng mới gắn hợp đồng nguyên tắc');
     }
     const items = this.mapItems(user, input.items);
     for (let attempt = 0; attempt < 3; attempt++) {
@@ -244,7 +245,7 @@ export class ContractsService {
                 ...input,
                 // Đơn soạn từ đầu ⇒ nội dung mặc định có sẵn bảng hàng hóa và các biến đơn hàng.
                 contentHtml: input.contentHtml ?? (kind === 'ORDER' ? DEFAULT_ORDER_HTML : input.contentHtml),
-                ...(kind === 'ORDER' && { value: this.itemsValue(items, input.value) }),
+                ...((kind === 'ORDER' || items.length > 0) && { value: this.itemsValue(items, input.value) }),
               }),
               tenantId: user.tenantId,
               kind,
@@ -311,8 +312,8 @@ export class ContractsService {
     if (refs.type && (refs.type.kind === 'ORDER') !== (current.kind === 'ORDER')) {
       throw new BadRequestException(current.kind === 'ORDER' ? 'Đơn đặt hàng phải dùng loại "Đơn đặt hàng"' : 'Loại "Đơn đặt hàng" chỉ dùng cho đơn đặt hàng');
     }
-    if (current.kind !== 'ORDER' && ((input.items && input.items.length) || input.parentContractId)) {
-      throw new BadRequestException('Chỉ đơn đặt hàng mới có dòng hàng và hợp đồng nguyên tắc');
+    if (current.kind !== 'ORDER' && input.parentContractId) {
+      throw new BadRequestException('Chỉ đơn đặt hàng mới gắn hợp đồng nguyên tắc');
     }
     if (input.code !== undefined && input.code !== current.code) {
       const check = await this.codeCheck(user, input.code);
@@ -336,7 +337,7 @@ export class ContractsService {
     input: ContractUpdate,
     opts: { restoredFromSeq?: number },
   ) {
-    const items = input.items && current.kind === 'ORDER' ? this.mapItems(user, input.items) : null;
+    const items = input.items ? this.mapItems(user, input.items) : null;
     return this.prisma.$transaction(async (tx) => {
       if (input.parties) {
         const parties = await syncPartyPartners(tx, user, this.audit, input.parties);
@@ -700,7 +701,7 @@ export class ContractsService {
     }));
   }
 
-  /** Giá trị đơn = cộng tiền hàng (chưa gồm VAT); đơn chưa có dòng hàng thì giữ giá trị nhập tay. */
+  /** Giá trị = cộng tiền hàng (chưa gồm VAT); chưa có dòng hàng thì giữ giá trị nhập tay. */
   private itemsValue(items: { amount: string }[], fallback: string | undefined) {
     return items.length ? orderTotals(items.map((i) => ({ name: '', quantity: 0, unitPrice: 0, amount: i.amount }))).subtotal : fallback;
   }

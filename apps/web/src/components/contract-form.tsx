@@ -318,18 +318,20 @@ function toPayload(v: FormValues, isEdit: boolean, kind: ContractKind) {
           deliveryDate: nul(v.deliveryDate),
           deliveryAddress: nul(v.deliveryAddress),
           paymentTerms: nul(v.paymentTerms),
-          items: v.items.map((i) => ({
-            productId: nul(i.productId),
-            code: nul(i.code),
-            name: i.name,
-            unit: nul(i.unit),
-            quantity: i.quantity,
-            unitPrice: i.unitPrice,
-          })),
         }
       : {};
+  // Dòng hàng: đơn đặt hàng và hợp đồng (vd mua bán) đều dùng; có dòng hàng thì giá trị tự tính từ dòng hàng.
+  const items = v.items.map((i) => ({
+    productId: nul(i.productId),
+    code: nul(i.code),
+    name: i.name,
+    unit: nul(i.unit),
+    quantity: i.quantity,
+    unitPrice: i.unitPrice,
+  }));
   const payload = {
     ...order,
+    items,
     title: v.title,
     contractTypeId: nul(v.contractTypeId),
     // Đơn đặt hàng luôn là hợp đồng khách hàng (máy chủ tự gán khi tạo).
@@ -999,7 +1001,9 @@ export function ContractForm({
   // Tóm tắt và danh sách kiểm tra cập nhật theo dữ liệu đang nhập.
   const w = useWatch({ control });
   const orderItems = (w.items ?? []).filter((i): i is { name: string; quantity: string; unitPrice: string } => !!i && qtyRegex.test(i.quantity ?? '') && moneyRegex.test(i.unitPrice ?? ''));
-  const pretax = isOrder ? Number(orderItems.length ? orderTotals(orderItems).subtotal : 0) : moneyRegex.test(w.value ?? '') ? Number(w.value) : 0;
+  // Có dòng hàng (đơn, hoặc hợp đồng mua bán có bảng hàng) ⇒ giá trị trước thuế tự tính từ dòng hàng.
+  const itemPriced = isOrder || (w.items?.length ?? 0) > 0;
+  const pretax = itemPriced ? Number(orderItems.length ? orderTotals(orderItems).subtotal : 0) : moneyRegex.test(w.value ?? '') ? Number(w.value) : 0;
   const vatPercent = w.vatRate && /^\d{1,3}(\.\d{1,2})?$/.test(w.vatRate) ? Number(w.vatRate) : 0;
   const vatAmount = Math.round((pretax * vatPercent) / 100);
   const currency = w.currency || 'VND';
@@ -1385,7 +1389,7 @@ export function ContractForm({
             <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_1px_minmax(0,1fr)] md:gap-8">
               <div className="space-y-3">
                 <PartyRow label={req(isOrder ? 'Giá trị (chưa VAT)' : 'Giá trị trước thuế')} labelClassName="w-32" error={errors.value?.message}>
-                  {isOrder ? (
+                  {itemPriced ? (
                     <OrderValue form={form} />
                   ) : (
                     <div className="relative">
@@ -1436,7 +1440,7 @@ export function ContractForm({
           </FormSection>
 
           {isOrder && <OrderDeliveryCard form={form} onParentPicked={applyParentParties} />}
-          {isOrder && <OrderItemsCard form={form} />}
+          <OrderItemsCard form={form} isOrder={isOrder} />
 
           <div ref={moreRef} className="scroll-mt-20">
             <FormSection
@@ -1793,7 +1797,7 @@ function OrderDeliveryCard({ form, onParentPicked }: { form: OrderForm; onParent
 }
 
 /** Dòng hàng: chọn từ danh mục sản phẩm (điền mã, tên, ĐVT, đơn giá) hoặc nhập tay. */
-function OrderItemsCard({ form }: { form: OrderForm }) {
+function OrderItemsCard({ form, isOrder }: { form: OrderForm; isOrder: boolean }) {
   const { control, register, setValue, formState } = form;
   const items = useFieldArray({ control, name: 'items' });
   const watched = useWatch({ control, name: 'items' });
@@ -1821,7 +1825,8 @@ function OrderItemsCard({ form }: { form: OrderForm }) {
         <div>
           <CardTitle>Hàng hóa</CardTitle>
           <CardDescription>
-            Thành tiền và tổng tiền tự tính; bảng hàng hóa chèn vào nội dung đơn bằng biến {'{{order.items_table}}'}. Quản lý danh mục ở Đơn đặt hàng → Sản phẩm.
+            {isOrder ? '' : 'Không bắt buộc – dùng cho hợp đồng mua bán. Có dòng hàng thì giá trị hợp đồng tự tính từ dòng hàng. '}
+            Thành tiền và tổng tiền tự tính; bảng hàng hóa chèn vào nội dung {isOrder ? 'đơn' : 'hợp đồng'} bằng biến {'{{order.items_table}}'}. Quản lý danh mục ở Đơn đặt hàng → Sản phẩm.
           </CardDescription>
         </div>
         <Button type="button" variant="outline" size="sm" onClick={() => items.append({ productId: '', code: '', name: '', unit: '', quantity: '1', unitPrice: '0' })}>
