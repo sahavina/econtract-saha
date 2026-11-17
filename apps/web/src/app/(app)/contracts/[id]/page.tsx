@@ -17,6 +17,7 @@ import { ContractOrdersTab, OrderItemsTab } from '@/components/contract-orders';
 import { ContractOverview } from '@/components/contract-overview';
 import { OrderDeliveries } from '@/components/order-deliveries';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
+import { ContractInspectionsTab, useContractInspections } from '@/components/contract-inspections';
 import { InspectionRequestDialog } from '@/components/inspection-request-dialog';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
@@ -113,6 +114,7 @@ export default function ContractDetailPage() {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [liquidating, setLiquidating] = useState(false);
   const [inspecting, setInspecting] = useState(false);
+  const inspections = useContractInspections(id);
   const [tab, setTab] = useState(initialTab);
   /** Mở một tab từ nút trong tab Tổng quan và cuộn tới thanh tab. */
   const openTab = (value: string) => {
@@ -313,6 +315,7 @@ export default function ContractDetailPage() {
           {(isOrder || c.items.length > 0) && <TabsTrigger value="items">{isOrder ? 'Hàng hóa & giao hàng' : 'Hàng hóa'} ({c.items.length})</TabsTrigger>}
           <TabsTrigger value="content">{isOrder ? 'Nội dung đơn hàng' : 'Nội dung hợp đồng'}</TabsTrigger>
           {!isOrder && <TabsTrigger value="orders">Đơn đặt hàng ({c._count?.orders ?? 0})</TabsTrigger>}
+          <TabsTrigger value="inspections">Kiểm tra{inspections.data ? ` (${inspections.data.total})` : ''}</TabsTrigger>
           <TabsTrigger value="parties">Các bên tham gia ({c.parties.length})</TabsTrigger>
           <TabsTrigger value="approval">Phê duyệt</TabsTrigger>
           <TabsTrigger value="signature">Ký điện tử</TabsTrigger>
@@ -325,6 +328,10 @@ export default function ContractDetailPage() {
           <TabsTrigger value="revisions">Lịch sử chỉnh sửa</TabsTrigger>
           <TabsTrigger value="history">Lịch sử hoạt động</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="inspections" className="mt-4">
+          <ContractInspectionsTab contractId={c.id} onRequest={can('inspection.create') && !c.deletedAt ? () => setInspecting(true) : undefined} />
+        </TabsContent>
 
         <TabsContent value="overview" className="mt-4">
           <ContractOverview contract={c} editInfo={editInfo} onOpenTab={openTab} />

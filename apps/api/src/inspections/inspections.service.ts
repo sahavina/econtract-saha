@@ -49,20 +49,29 @@ export class InspectionsService {
     return user.permissions.has(PERMISSIONS.INSPECTION_MANAGE);
   }
 
-  /** Người dùng thấy yêu cầu được giao cho mình hoặc mình gửi; quản lý thấy tất cả. */
+  /**
+   * Người dùng thấy yêu cầu được giao cho mình, mình gửi, hoặc của hồ sơ mình xem được (chỉ xem; xử lý vẫn theo
+   * người phụ trách/quản lý); quản lý thấy tất cả.
+   */
   private visibleWhere(user: AuthUser): Prisma.InspectionRequestWhereInput {
     if (this.canManage(user)) return { tenantId: user.tenantId };
-    return { tenantId: user.tenantId, OR: [{ assigneeId: user.userId }, { requestedById: user.userId }] };
+    return { tenantId: user.tenantId, OR: [{ assigneeId: user.userId }, { requestedById: user.userId }, { contract: this.contracts.scopeWhere(user) }] };
   }
 
   async list(user: AuthUser, q: InspectionQuery) {
-    const scope: Prisma.InspectionRequestWhereInput =
-      q.scope === 'sent' ? { requestedById: user.userId } : q.scope === 'all' && this.canManage(user) ? {} : { assigneeId: user.userId };
+    // Theo hồ sơ (tab Kiểm tra của hợp đồng/đơn): mọi yêu cầu xem được của hồ sơ đó, kể cả đã hủy.
+    const scope: Prisma.InspectionRequestWhereInput = q.contractId
+      ? {}
+      : q.scope === 'sent'
+        ? { requestedById: user.userId }
+        : q.scope === 'all' && this.canManage(user)
+          ? {}
+          : { assigneeId: user.userId };
     const where: Prisma.InspectionRequestWhereInput = {
       AND: [
         this.visibleWhere(user),
         scope,
-        q.status ? { status: q.status } : { status: { not: 'CANCELLED' } },
+        q.status ? { status: q.status } : q.contractId ? {} : { status: { not: 'CANCELLED' } },
         q.contractId ? { contractId: q.contractId } : {},
         q.q
           ? {

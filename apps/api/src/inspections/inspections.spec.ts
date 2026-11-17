@@ -41,7 +41,7 @@ describe('InspectionsService', () => {
     $transaction: vi.fn(async (fn: (t: unknown) => unknown) => fn(tx)),
   };
   const audit = { log: vi.fn() };
-  const contracts = { get: vi.fn(async () => ({ id: 'c1', code: 'HD-1', deletedAt: null })) };
+  const contracts = { get: vi.fn(async () => ({ id: 'c1', code: 'HD-1', deletedAt: null })), scopeWhere: vi.fn(() => ({ SCOPE: true })) };
   const notifications = { notify: vi.fn() };
   const service = new InspectionsService(prisma as never, audit as never, contracts as never, notifications as never);
 
@@ -111,9 +111,9 @@ describe('InspectionsService', () => {
     expect(audit.log).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ action: 'inspection.print' }), tx);
   });
 
-  it('người không có quyền quản lý chỉ thấy việc của mình hoặc mình gửi', async () => {
+  it('người không có quyền quản lý chỉ thấy việc của mình, mình gửi hoặc của hồ sơ mình xem được', async () => {
     await service.get(staff(A), 'r1');
-    expect(prisma.inspectionRequest.findFirst.mock.calls[0][0].where.AND[0]).toEqual({ tenantId: 't1', OR: [{ assigneeId: A }, { requestedById: A }] });
+    expect(prisma.inspectionRequest.findFirst.mock.calls[0][0].where.AND[0]).toEqual({ tenantId: 't1', OR: [{ assigneeId: A }, { requestedById: A }, { contract: { SCOPE: true } }] });
     await service.get(staff('m', true), 'r1');
     expect(prisma.inspectionRequest.findFirst.mock.calls[1][0].where.AND[0]).toEqual({ tenantId: 't1' });
   });

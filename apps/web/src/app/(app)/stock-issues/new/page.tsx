@@ -6,6 +6,7 @@ import { Loader2, Plus, Save, Trash2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { InspectionWarning } from '@/components/contract-inspections';
 import { FilterSelect } from '@/components/filter-select';
 import { PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -194,6 +195,7 @@ function IssueForm({ orderParam }: { orderParam: string }) {
             options={(orders.data?.items ?? []).map((o) => ({ value: o.id, label: `${o.code} · ${o.parties[0]?.name ?? o.title}` }))}
             ariaLabel="Đơn đặt hàng"
           />
+          {order && <InspectionWarning contractId={order.id} />}
         </CardContent>
       </Card>
 

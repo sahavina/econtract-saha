@@ -46,6 +46,8 @@ export interface NavItem {
   /** Chưa có href ⇒ phân hệ chưa triển khai, hiển thị mờ kèm nhãn "Sắp có". */
   href?: string;
   permissions?: Permission[];
+  /** Hiện số đếm cạnh mục menu (vd việc kiểm tra đang chờ tôi xử lý). */
+  countKey?: 'inspections';
   /** Chỉ hiển thị cho Super Admin (quản trị nền tảng). */
   platformOnly?: boolean;
 }
@@ -63,7 +65,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Dashboard', icon: LayoutDashboard, href: '/', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
       { title: 'Công việc của tôi', icon: ClipboardList, href: '/tasks', permissions: VIEW_CONTRACT },
-      { title: 'Yêu cầu kiểm tra', icon: ClipboardCheck, href: '/inspections' },
+      { title: 'Yêu cầu kiểm tra', icon: ClipboardCheck, href: '/inspections', countKey: 'inspections' },
       { title: 'Thông báo', icon: Bell, href: '/notifications' },
       { title: 'Lịch hợp đồng', icon: CalendarDays, href: '/calendar', permissions: VIEW_CONTRACT },
     ],

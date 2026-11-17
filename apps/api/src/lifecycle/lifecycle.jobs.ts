@@ -220,6 +220,47 @@ export class LifecycleJobs implements OnApplicationBootstrap {
         `/contracts/${o.contract.id}?tab=lifecycle`,
       );
     }
+
+    sent += await this.remindInspections(t);
+    return sent;
+  }
+
+  /**
+   * Yêu cầu kiểm tra còn mở đến hạn hôm nay hoặc đã quá hạn: thông báo trong ứng dụng cho người phụ trách,
+   * mỗi mốc (đến hạn / quá hạn) một lần – việc nội bộ nên không phụ thuộc cấu hình email.
+   */
+  private async remindInspections(t: Date) {
+    const rows = await this.prisma.inspectionRequest.findMany({
+      where: { status: { in: ['PENDING', 'IN_PROGRESS'] }, dueDate: { lte: t } },
+      select: { id: true, tenantId: true, code: true, assigneeId: true, dueDate: true, contract: { select: { code: true } } },
+    });
+    let sent = 0;
+    for (const r of rows) {
+      const overdue = r.dueDate! < t;
+      const key = `insp:${r.id}:${overdue ? 'overdue' : 'due'}:${r.dueDate!.toISOString().slice(0, 10)}`;
+      try {
+        await this.prisma.$transaction(async (tx) => {
+          await tx.reminderLog.create({ data: { key, tenantId: r.tenantId } });
+          await this.notifications.notify(
+            r.tenantId,
+            [r.assigneeId],
+            {
+              type: 'reminder.inspection',
+              title: `${overdue ? 'Quá hạn' : 'Đến hạn hôm nay'}: yêu cầu kiểm tra ${r.code} (${r.contract.code})`,
+              body: `Hạn xử lý ${r.dueDate!.toISOString().slice(0, 10)}.`,
+              link: `/inspections/${r.id}`,
+            },
+            tx,
+          );
+        });
+        sent++;
+      } catch (err) {
+        // Đã nhắc mốc này (trùng khóa) ⇒ bỏ qua; lỗi khác ghi log, lần chạy sau thử lại.
+        if (!(err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002')) {
+          this.logger.warn(`Nhắc hạn kiểm tra thất bại (${key}): ${String(err)}`);
+        }
+      }
+    }
     return sent;
   }
 }

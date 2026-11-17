@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from '@tanstack/react-query';
 import { FileSignature } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
@@ -12,10 +13,12 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
 } from '@/components/ui/sidebar';
+import { api } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { NAV, type NavItem } from './nav-config';
 
@@ -37,6 +40,15 @@ export function AppSidebar() {
   const { user, can } = useAuth();
   const pathname = usePathname();
   const search = useSearchParams();
+
+  // Số yêu cầu kiểm tra đang chờ tôi xử lý (Chờ xử lý + Đang kiểm tra).
+  const inspections = useQuery({
+    queryKey: ['inspections', 'open-count'],
+    queryFn: () => api<{ count: number }>('/inspections/open-count'),
+    enabled: !!user,
+    refetchInterval: 60_000,
+  });
+  const counts: Record<NonNullable<NavItem['countKey']>, number> = { inspections: inspections.data?.count ?? 0 };
 
   const visible = (item: NavItem) =>
     item.platformOnly ? !!user?.isPlatformAdmin : !item.permissions || can(...item.permissions);
@@ -82,7 +94,13 @@ export function AppSidebar() {
                           <span>{item.title}</span>
                         </Link>
                       </SidebarMenuButton>
-                    ) : (
+                    ) : null}
+                    {item.href && item.countKey && counts[item.countKey] > 0 && (
+                      <SidebarMenuBadge className="rounded-full bg-primary px-1.5 text-[10px] text-primary-foreground" aria-label={`${counts[item.countKey]} việc đang chờ`}>
+                        {counts[item.countKey]}
+                      </SidebarMenuBadge>
+                    )}
+                    {item.href ? null : (
                       <SidebarMenuButton disabled tooltip={`${item.title} – sắp có`} className="opacity-50">
                         <item.icon />
                         <span>{item.title}</span>
