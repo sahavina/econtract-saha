@@ -52,9 +52,15 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
-      - run: pnpm build
+      - name: pnpm build
         env:
           NODE_OPTIONS: --max-old-space-size=4096
+        run: |
+          set -o pipefail
+          if ! pnpm build 2>&1 | tee /tmp/build.log; then
+            echo "::error title=pnpm build::$(tail -n 40 /tmp/build.log | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+            exit 1
+          fi
 
   docker:
     runs-on: ubuntu-latest
