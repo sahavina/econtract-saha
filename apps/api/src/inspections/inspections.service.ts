@@ -20,7 +20,7 @@ const contractSelect = {
     parties: { orderBy: { sortOrder: 'asc' as const }, select: { name: true, isInternal: true } },
   },
 } as const;
-const listInclude = { contract: contractSelect, assignee: userSelect, requestedBy: userSelect } as const;
+const listInclude = { contract: contractSelect, assignee: userSelect, requestedBy: userSelect, printedBy: userSelect } as const;
 
 const isCodeConflict = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
 const OPEN = new Set(['PENDING', 'IN_PROGRESS']);
@@ -104,6 +104,7 @@ export class InspectionsService {
       include: {
         assignee: userSelect,
         requestedBy: userSelect,
+        printedBy: userSelect,
         contract: {
           select: {
             ...contractSelect.select,
@@ -279,6 +280,20 @@ export class InspectionsService {
         data: { status: current.status === 'CANCELLED' ? 'PENDING' : 'IN_PROGRESS', completedAt: null },
       });
       await this.audit.log(user, { action: 'inspection.reopen', entityType: 'contract', entityId: current.contractId, data: { code: current.code } }, tx);
+      return updated;
+    });
+  }
+
+  /** Ghi nhận đã in phiếu (ai xem được yêu cầu đều in được): lần in gần nhất, người in, số lần in. */
+  async markPrinted(user: AuthUser, id: string) {
+    const current = await this.get(user, id);
+    return this.prisma.$transaction(async (tx) => {
+      const updated = await tx.inspectionRequest.update({
+        where: { id },
+        data: { printedAt: new Date(), printedById: user.userId, printCount: { increment: 1 } },
+        select: { id: true, printedAt: true, printCount: true },
+      });
+      await this.audit.log(user, { action: 'inspection.print', entityType: 'contract', entityId: current.contractId, data: { code: current.code, count: updated.printCount } }, tx);
       return updated;
     });
   }

@@ -68,6 +68,11 @@ class InspectionsController {
     return this.inspections.reopen(user, id);
   }
 
+  @Post(':id/printed')
+  markPrinted(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
+    return this.inspections.markPrinted(user, id);
+  }
+
   @Post(':id/cancel')
   cancel(@CurrentUser() user: AuthUser, @Param('id', ParseUUIDPipe) id: string) {
     return this.inspections.cancel(user, id);

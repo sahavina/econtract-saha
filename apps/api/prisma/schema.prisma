@@ -202,6 +202,7 @@ model User {
   sentQuotes          Quote[]                   @relation("QuoteSender")
   assignedInspections InspectionRequest[]       @relation("InspectionAssignee")
   askedInspections    InspectionRequest[]       @relation("InspectionRequester")
+  printedInspections  InspectionRequest[]       @relation("InspectionPrinter")
   uploadedDocuments   ContractDocument[]
   createdTemplates    ContractTemplate[]        @relation("TemplateCreator")
   templateVersions    ContractTemplateVersion[]
@@ -1468,9 +1469,14 @@ model InspectionRequest {
   itemResults   Json             @default("[]")
   startedAt     DateTime?
   completedAt   DateTime?
+  /// Lần in phiếu gần nhất và số lần in
+  printedAt     DateTime?
+  printedById   String?          @db.Uuid
+  printCount    Int              @default(0)
   createdAt     DateTime         @default(now())
   updatedAt     DateTime         @updatedAt
   contract      Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  printedBy     User?            @relation("InspectionPrinter", fields: [printedById], references: [id], onDelete: SetNull)
   assignee      User             @relation("InspectionAssignee", fields: [assigneeId], references: [id])
   requestedBy   User             @relation("InspectionRequester", fields: [requestedById], references: [id])
 

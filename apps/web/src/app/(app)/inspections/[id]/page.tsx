@@ -92,6 +92,8 @@ function InspectionView({ r }: { r: InspectionDetail }) {
         a.click();
       }
       setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      // Ghi nhận đã in (nhãn "Đã in" trên hàng chờ); lỗi ghi nhận không chặn việc in.
+      await api(`/inspections/${r.id}/printed`, { method: 'POST' }).then(refresh).catch(() => undefined);
     } catch (e) {
       err(e);
     } finally {
@@ -110,6 +112,7 @@ function InspectionView({ r }: { r: InspectionDetail }) {
           <span className="flex flex-wrap gap-1.5">
             <StatusPill tone={INSPECTION_TONE[r.status]}>{INSPECTION_STATUS_LABELS[r.status]}</StatusPill>
             {isOverdue(r) && <StatusPill tone="red">Quá hạn</StatusPill>}
+            {r.printedAt ? <StatusPill tone="teal">Đã in{r.printCount > 1 ? ` ${r.printCount} lần` : ''}</StatusPill> : <StatusPill tone="gray">Chưa in phiếu</StatusPill>}
           </span>
         }
         meta={`${r.code} · ${c.title}`}
@@ -150,7 +153,8 @@ function InspectionView({ r }: { r: InspectionDetail }) {
         <p className="text-xs text-muted-foreground">
           Gửi lúc {formatDateTime(r.createdAt)}
           {r.startedAt && ` · Nhận xử lý ${formatDateTime(r.startedAt)}`}
-          {r.completedAt && ` · Kết thúc ${formatDateTime(r.completedAt)}`} ·{' '}
+          {r.completedAt && ` · Kết thúc ${formatDateTime(r.completedAt)}`}
+          {r.printedAt && ` · In phiếu lần cuối ${formatDateTime(r.printedAt)}${r.printedBy ? ` bởi ${r.printedBy.fullName}` : ''}`} ·{' '}
           <Link href={`/contracts/${c.id}`} className="text-primary hover:underline">
             Mở {c.kind === 'ORDER' ? 'đơn hàng' : 'hợp đồng'} {c.code}
           </Link>

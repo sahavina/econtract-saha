@@ -25,6 +25,10 @@ export interface InspectionListItem {
   result: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  /** Lần in phiếu gần nhất, người in, số lần in. */
+  printedAt: string | null;
+  printCount: number;
+  printedBy: UserRef | null;
   createdAt: string;
   assignee: UserRef;
   requestedBy: UserRef;

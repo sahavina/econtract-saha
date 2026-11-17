@@ -133,6 +133,7 @@ export const AUDIT_ACTION_LABELS: Record<string, string> = {
   'inspection.finish': 'Kết thúc kiểm tra',
   'inspection.reopen': 'Mở lại yêu cầu kiểm tra',
   'inspection.cancel': 'Hủy yêu cầu kiểm tra',
+  'inspection.print': 'In phiếu kiểm tra',
   'partner.odoo_import': 'Nhập đối tác từ Odoo',
   'partner.odoo_sync': 'Cập nhật đối tác từ Odoo',
   'partner.odoo_link': 'Ánh xạ đối tác với Odoo',

@@ -2,7 +2,7 @@
 
 import { INSPECTION_BOARD, INSPECTION_STATUS_LABELS, type InspectionStatus } from '@saha/shared';
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { CalendarClock, ClipboardCheck } from 'lucide-react';
+import { CalendarClock, ClipboardCheck, Printer } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { InitialsAvatar, SearchBox, StatusPill } from '@/components/list-ui';
@@ -112,7 +112,16 @@ function InspectionCard({ r, scope }: { r: InspectionListItem; scope: Scope }) {
     >
       <span className="flex items-start justify-between gap-2">
         <span className="font-mono text-xs font-semibold text-primary">{r.code}</span>
-        {overdue && <StatusPill tone="red">Quá hạn</StatusPill>}
+        <span className="flex flex-wrap justify-end gap-1">
+          {overdue && <StatusPill tone="red">Quá hạn</StatusPill>}
+          {r.printedAt ? (
+            <StatusPill tone="teal" className="gap-1">
+              <Printer className="size-3" aria-hidden /> Đã in{r.printCount > 1 ? ` ×${r.printCount}` : ''}
+            </StatusPill>
+          ) : (
+            <StatusPill tone="gray">Chưa in</StatusPill>
+          )}
+        </span>
       </span>
       <span className="mt-1 block text-sm font-medium break-words">
         {r.contract.code} · {r.contract.title}

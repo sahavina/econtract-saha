@@ -103,6 +103,14 @@ describe('InspectionsService', () => {
     await expect(service.cancel(staff(A), 'r1')).rejects.toBeInstanceOf(BadRequestException);
   });
 
+  it('ghi nhận đã in: thời điểm, người in, tăng số lần in, ghi nhật ký', async () => {
+    tx.inspectionRequest.update.mockResolvedValueOnce({ id: 'r1', printedAt: new Date(), printCount: 2 } as never);
+    const r = await service.markPrinted(staff(A), 'r1');
+    expect(tx.inspectionRequest.update.mock.calls[0][0].data).toMatchObject({ printedById: A, printCount: { increment: 1 } });
+    expect(r.printCount).toBe(2);
+    expect(audit.log).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ action: 'inspection.print' }), tx);
+  });
+
   it('người không có quyền quản lý chỉ thấy việc của mình hoặc mình gửi', async () => {
     await service.get(staff(A), 'r1');
     expect(prisma.inspectionRequest.findFirst.mock.calls[0][0].where.AND[0]).toEqual({ tenantId: 't1', OR: [{ assigneeId: A }, { requestedById: A }] });
