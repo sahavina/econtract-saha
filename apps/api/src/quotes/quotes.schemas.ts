@@ -1,4 +1,4 @@
-import { PAYMENT_SEND_METHODS, QUOTE_DECISIONS, QUOTE_FILTER_STATUSES } from '@saha/shared';
+import { PAYMENT_SEND_METHODS, QUOTE_CODE_TOKENS, QUOTE_DECISIONS, QUOTE_FILTER_STATUSES, validateCodePattern } from '@saha/shared';
 import { z } from 'zod';
 import { optionalString, paginationSchema } from '../common/pagination.js';
 
@@ -84,3 +84,16 @@ export const quoteQuerySchema = paginationSchema.extend({
   to: optionalDate,
 });
 export type QuoteQuery = z.infer<typeof quoteQuerySchema>;
+
+/** Cấu hình mã báo giá của doanh nghiệp (lưu trong Tenant.settings). */
+export const quoteCodeSettingsSchema = z.object({
+  pattern: z
+    .string()
+    .trim()
+    .max(100, 'Mẫu mã tối đa 100 ký tự')
+    .superRefine((v, ctx) => {
+      const err = validateCodePattern(v, QUOTE_CODE_TOKENS, 'mẫu mã báo giá');
+      if (err) ctx.addIssue({ code: 'custom', message: err });
+    }),
+});
+export type QuoteCodeSettings = z.infer<typeof quoteCodeSettingsSchema>;

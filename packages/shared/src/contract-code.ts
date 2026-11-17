@@ -13,6 +13,10 @@ export const DEFAULT_CONTRACT_CODE_PATTERN = 'HD-{YYYY}-{SEQUENCE:5}';
 
 export const CODE_TOKENS = ['{TYPE}', '{DEPT}', '{BRANCH}', '{YYYY}', '{YY}', '{MM}', '{DD}', '{PARTNER}'] as const;
 
+/** Mã báo giá: ngày báo giá và khách hàng ({PARTNER}: tên viết tắt của khách), cùng {SEQUENCE}/{SEQUENCE:n}. */
+export const DEFAULT_QUOTE_CODE_PATTERN = 'BG-{YYYY}-{SEQUENCE:4}';
+export const QUOTE_CODE_TOKENS = ['{YYYY}', '{YY}', '{MM}', '{DD}', '{PARTNER}'] as const;
+
 export interface CodeContext {
   /** Ngày dùng cho {YYYY}/{YY}/{MM}/{DD}: ngày dự kiến ký, không có thì ngày tạo. */
   date: Date;
@@ -29,13 +33,13 @@ export function hasSequence(pattern: string): boolean {
   return (pattern.match(SEQ_RE)?.length ?? 0) > 0;
 }
 
-export function validateCodePattern(pattern: string): string | null {
-  if (!pattern.trim()) return 'Vui lòng nhập mẫu mã hợp đồng';
+export function validateCodePattern(pattern: string, tokens: readonly string[] = CODE_TOKENS, label = 'mẫu mã hợp đồng'): string | null {
+  if (!pattern.trim()) return `Vui lòng nhập ${label}`;
   if ((pattern.match(SEQ_RE)?.length ?? 0) > 1) return 'Mẫu mã chỉ được chứa tối đa một token {SEQUENCE} hoặc {SEQUENCE:n}';
   const unknown = pattern
     .replace(SEQ_RE, '')
     .match(/\{[^}]*\}/g)
-    ?.filter((t) => !(CODE_TOKENS as readonly string[]).includes(t));
+    ?.filter((t) => !tokens.includes(t));
   if (unknown?.length) return `Token không hợp lệ: ${unknown.join(', ')}`;
   return null;
 }

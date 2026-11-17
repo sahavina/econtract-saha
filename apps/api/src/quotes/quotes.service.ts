@@ -1,5 +1,15 @@
 import { BadRequestException, ConflictException, HttpException, Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { itemAmount, orderTotals } from '@saha/shared';
+import {
+  type CodeContext,
+  DEFAULT_QUOTE_CODE_PATTERN,
+  hasSequence,
+  itemAmount,
+  orderTotals,
+  partnerAbbreviation,
+  renderCode,
+  sequenceKey,
+  withDuplicateSuffix,
+} from '@saha/shared';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
 import { paginated } from '../common/pagination.js';
@@ -7,7 +17,10 @@ import { ContractsService } from '../contracts/contracts.service.js';
 import { Prisma } from '../generated/prisma/client.js';
 import { MailService } from '../mail/mail.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { QuoteCreate, QuoteDecision, QuoteLinkOrder, QuoteMarkSent, QuoteQuery, QuoteSendEmail, QuoteUpdate } from './quotes.schemas.js';
+import type { QuoteCodeSettings, QuoteCreate, QuoteDecision, QuoteLinkOrder, QuoteMarkSent, QuoteQuery, QuoteSendEmail, QuoteUpdate } from './quotes.schemas.js';
+
+/** Cấu hình lưu trong Tenant.settings. */
+type TenantSettings = { quoteCodePattern?: string } & Record<string, unknown>;
 
 const isCodeConflict = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestError && e.code === 'P2002';
 /** Hết hạn tính đến hết ngày hiệu lực. */
@@ -83,10 +96,7 @@ export class QuotesService {
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
         return await this.prisma.$transaction(async (tx) => {
-          const prefix = `BG-${date.slice(0, 4)}-`;
-          const last = await tx.quote.findFirst({ where: { tenantId: user.tenantId, code: { startsWith: prefix } }, orderBy: { code: 'desc' }, select: { code: true } });
-          const n = last ? Number(last.code.slice(prefix.length)) || 0 : 0;
-          const code = `${prefix}${String(n + 1).padStart(4, '0')}`;
+          const code = await this.nextCode(tx, user, date, input);
           const quote = await tx.quote.create({
             data: {
               ...header,
@@ -197,6 +207,60 @@ export class QuotesService {
       await this.audit.log(user, { action: 'quote.link_order', entityType: 'quote', entityId: id, data: { code: current.code, order: order.code } }, tx);
       return quote;
     });
+  }
+
+  /** Mẫu mã báo giá của doanh nghiệp (Cấu hình → Mã báo giá); chưa đặt ⇒ mặc định BG-{YYYY}-{SEQUENCE:4}. */
+  async codeSettings(user: AuthUser) {
+    const t = await this.prisma.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { settings: true } });
+    const pattern = (t.settings as TenantSettings | null)?.quoteCodePattern || DEFAULT_QUOTE_CODE_PATTERN;
+    return { pattern, defaultPattern: DEFAULT_QUOTE_CODE_PATTERN, example: renderCode(pattern, { date: new Date(), partnerCode: 'ABC' }, 1) };
+  }
+
+  async updateCodeSettings(user: AuthUser, input: QuoteCodeSettings) {
+    await this.prisma.$transaction(async (tx) => {
+      const t = await tx.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { settings: true } });
+      const before = (t.settings as TenantSettings | null)?.quoteCodePattern || DEFAULT_QUOTE_CODE_PATTERN;
+      const settings = { ...((t.settings ?? {}) as TenantSettings), quoteCodePattern: input.pattern };
+      await tx.tenant.update({ where: { id: user.tenantId }, data: { settings: settings as Prisma.InputJsonValue } });
+      await this.audit.log(user, { action: 'quote.code_settings', entityType: 'tenant', entityId: user.tenantId, data: { pattern: `${before} → ${input.pattern}` } }, tx);
+    });
+    return this.codeSettings(user);
+  }
+
+  /**
+   * Sinh mã báo giá theo mẫu của doanh nghiệp. Có {SEQUENCE}: bộ đếm riêng theo phần mã cố định (vd theo năm),
+   * luôn lớn hơn số lớn nhất đã dùng (kể cả báo giá tạo trước khi có bộ đếm hoặc khi đổi mẫu). Không có {SEQUENCE}:
+   * trùng thì thêm "-2", "-3"…
+   */
+  private async nextCode(tx: Prisma.TransactionClient, user: AuthUser, date: string, input: Pick<QuoteCreate, 'partnerId' | 'customerName'>) {
+    const t = await tx.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { settings: true } });
+    const pattern = (t.settings as TenantSettings | null)?.quoteCodePattern || DEFAULT_QUOTE_CODE_PATTERN;
+    const [y, m, d] = date.split('-').map(Number);
+    const partner = input.partnerId
+      ? await tx.partner.findFirst({ where: { id: input.partnerId, tenantId: user.tenantId }, select: { shortName: true, code: true } })
+      : null;
+    const ctx: CodeContext = { date: new Date(y, m - 1, d), partnerCode: partner ? partner.shortName || partner.code : partnerAbbreviation(input.customerName) };
+    if (!hasSequence(pattern)) {
+      const base = renderCode(pattern, ctx, 0);
+      const taken = await tx.quote.findMany({ where: { tenantId: user.tenantId, code: { startsWith: base } }, select: { code: true } });
+      return withDuplicateSuffix(base, taken.map((x) => x.code));
+    }
+    // Phần mã quanh số thứ tự, vd "BG-2026-" và "" ⇒ số lớn nhất đã dùng trong các mã dạng BG-2026-<số>.
+    const fixed = sequenceKey(pattern, ctx).slice('contract:'.length);
+    const at = fixed.indexOf('#');
+    const [prefix, suffix] = [fixed.slice(0, at), fixed.slice(at + 1)];
+    const used = await tx.quote.findMany({ where: { tenantId: user.tenantId, code: { startsWith: prefix, endsWith: suffix } }, select: { code: true } });
+    const maxUsed = used.reduce((max, x) => {
+      const mid = x.code.slice(prefix.length, x.code.length - suffix.length);
+      return /^\d+$/.test(mid) ? Math.max(max, Number(mid)) : max;
+    }, 0);
+    const key = `quote:${fixed}`;
+    const rows = await tx.$queryRaw<{ current: number }[]>`
+      INSERT INTO "NumberSequence" ("tenantId", "key", "current", "updatedAt")
+      VALUES (${user.tenantId}::uuid, ${key}, ${maxUsed + 1}, now())
+      ON CONFLICT ("tenantId", "key") DO UPDATE SET "current" = GREATEST("NumberSequence"."current" + 1, ${maxUsed + 1}), "updatedAt" = now()
+      RETURNING "current"`;
+    return renderCode(pattern, ctx, rows[0].current);
   }
 
   private assertOpen(status: string) {

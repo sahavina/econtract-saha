@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, Module, Param, ParseUUIDPipe, Patch, Post, Put, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger';
 import { PERMISSIONS } from '@saha/shared';
@@ -8,6 +8,8 @@ import { CurrentUser, RequireAnyPermission, RequirePermissions } from '../common
 import { ZodPipe } from '../common/zod.pipe.js';
 import { ContractsModule } from '../contracts/contracts.module.js';
 import {
+  type QuoteCodeSettings,
+  quoteCodeSettingsSchema,
   type QuoteCreate,
   quoteCreateSchema,
   type QuoteDecision,
@@ -39,6 +41,19 @@ class QuotesController {
   @RequireAnyPermission(...VIEW)
   list(@CurrentUser() user: AuthUser, @Query(new ZodPipe(quoteQuerySchema)) query: QuoteQuery) {
     return this.quotes.list(user, query);
+  }
+
+  /** Mẫu mã báo giá (Cấu hình → Mã báo giá). */
+  @Get('code-settings')
+  @RequireAnyPermission(PERMISSIONS.SETTINGS_MANAGE, PERMISSIONS.QUOTE_MANAGE)
+  codeSettings(@CurrentUser() user: AuthUser) {
+    return this.quotes.codeSettings(user);
+  }
+
+  @Put('code-settings')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  updateCodeSettings(@CurrentUser() user: AuthUser, @Body(new ZodPipe(quoteCodeSettingsSchema)) body: QuoteCodeSettings) {
+    return this.quotes.updateCodeSettings(user, body);
   }
 
   @Get(':id')

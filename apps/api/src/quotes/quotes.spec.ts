@@ -2,7 +2,7 @@ import { BadRequestException } from '@nestjs/common';
 import { quoteDisplayStatus } from '@saha/shared';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../common/auth-user.js';
-import { quoteCreateSchema } from './quotes.schemas.js';
+import { quoteCodeSettingsSchema, quoteCreateSchema } from './quotes.schemas.js';
 import { QuotesService } from './quotes.service.js';
 
 const user = { userId: 'u1', tenantId: 't1' } as AuthUser;
@@ -20,7 +20,17 @@ describe('QuotesService', () => {
   const update = vi.fn(async ({ data }) => ({ ...row, ...data }));
   const create = vi.fn(async ({ data }) => ({ id: 'q1', ...data }));
   const findLast = vi.fn();
-  const tx = { quote: { create, update, findFirst: findLast }, quoteItem: { deleteMany: vi.fn() } };
+  const usedCodes = vi.fn();
+  const settings = vi.fn();
+  // Bộ đếm: trả về giá trị khởi tạo (số lớn nhất đã dùng + 1) như khi chưa có bộ đếm.
+  const queryRaw = vi.fn(async (_s: TemplateStringsArray, ..._v: unknown[]) => [{ current: Number(_v[2]) }]);
+  const tx = {
+    quote: { create, update, findFirst: findLast, findMany: usedCodes },
+    quoteItem: { deleteMany: vi.fn() },
+    tenant: { findUniqueOrThrow: settings },
+    partner: { findFirst: vi.fn(async () => ({ shortName: 'APOLLO', code: 'KH01' })) },
+    $queryRaw: queryRaw,
+  };
   const prisma = {
     quote: { findFirst: vi.fn(async () => row), update },
     partner: { count: vi.fn(async () => 1) },
@@ -36,18 +46,42 @@ describe('QuotesService', () => {
     vi.clearAllMocks();
     mail.send.mockResolvedValue(undefined);
     findLast.mockResolvedValue(null);
+    usedCodes.mockResolvedValue([]);
+    settings.mockResolvedValue({ settings: {} });
     prisma.partner.count.mockResolvedValue(1);
     row = { id: 'q1', code: 'BG-2026-0001', status: 'DRAFT', sentAt: null, decidedAt: null, orderId: null, order: null, vatRate: null, items: [] };
   });
 
   it('tự sinh số theo năm và tính tiền phía máy chủ', async () => {
-    findLast.mockResolvedValue({ code: 'BG-2026-0007' });
+    usedCodes.mockResolvedValue([{ code: 'BG-2026-0007' }, { code: 'BG-2026-0003' }, { code: 'BG-2026-0009-2' }]);
     await service.create(user, quoteCreateSchema.parse(input));
     const data = create.mock.calls[0][0].data;
+    expect(usedCodes.mock.calls[0][0].where.code).toEqual({ startsWith: 'BG-2026-', endsWith: '' });
+    expect(queryRaw.mock.calls[0][2]).toBe('quote:BG-2026-#');
     expect(data.code).toBe('BG-2026-0008');
     expect(data).toMatchObject({ subtotal: '250000.00', vatAmount: '20000.00', total: '270000.00', tenantId: 't1', createdById: 'u1' });
     expect(data.items.create[0].amount).toBe('250000.00');
     expect(audit.log).toHaveBeenCalledOnce();
+  });
+
+  it('theo mẫu mã doanh nghiệp tự đặt: ngày và tên viết tắt của khách', async () => {
+    settings.mockResolvedValue({ settings: { quoteCodePattern: '{PARTNER}/{YY}{MM}/BG-{SEQUENCE:3}' } });
+    await service.create(user, quoteCreateSchema.parse({ ...input, partnerId: '6f1c1b1e-1d2a-4c3b-9a8b-7c6d5e4f3a2b' }));
+    expect(create.mock.calls[0][0].data.code).toBe('APOLLO/2611/BG-001');
+  });
+
+  it('mẫu không có số thứ tự: trùng thì thêm hậu tố', async () => {
+    settings.mockResolvedValue({ settings: { quoteCodePattern: 'BG-{DD}{MM}{YYYY}' } });
+    usedCodes.mockResolvedValue([{ code: 'BG-05112026' }]);
+    await service.create(user, quoteCreateSchema.parse(input));
+    expect(create.mock.calls[0][0].data.code).toBe('BG-05112026-2');
+  });
+
+  it('mẫu mã báo giá chỉ nhận token của báo giá', () => {
+    expect(quoteCodeSettingsSchema.safeParse({ pattern: 'BG-{YYYY}-{SEQUENCE:4}' }).success).toBe(true);
+    const bad = quoteCodeSettingsSchema.safeParse({ pattern: 'BG-{DEPT}-{SEQUENCE}' });
+    expect(bad.success).toBe(false);
+    expect(bad.error?.issues[0].message).toContain('{DEPT}');
   });
 
   it('từ chối đối tác của doanh nghiệp khác', async () => {

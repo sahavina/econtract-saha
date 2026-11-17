@@ -2,7 +2,7 @@
 
 import { renderCode, validateCodePattern } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, FileCode2, Loader2, type LucideIcon, Mail, Pencil, PenLine, Plug, Plus } from 'lucide-react';
+import { Building2, FileCode2, Hash, Loader2, type LucideIcon, Mail, Pencil, PenLine, Plug, Plus } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CompanyProfileCard } from '@/components/company-profile-card';
@@ -10,6 +10,7 @@ import { EmailSettingsCard } from '@/components/email-settings-card';
 import { MobileCard, StatusPill, TitleCell, Th } from '@/components/list-ui';
 import { MisaEsignSettingsCard } from '@/components/misa-esign-settings-card';
 import { OdooSettingsCard } from '@/components/odoo-settings-card';
+import { QuoteCodeSettingsCard } from '@/components/quote-code-settings-card';
 import { SettingsSection } from '@/components/settings-section';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { Button } from '@/components/ui/button';
@@ -124,6 +125,7 @@ function TypeDialog({ draft, onClose }: { draft: Draft; onClose: () => void }) {
 const SECTIONS: { id: string; icon: LucideIcon; label: string }[] = [
   { id: 'company', icon: Building2, label: 'Thông tin doanh nghiệp' },
   { id: 'contract-types', icon: FileCode2, label: 'Loại hợp đồng & mẫu mã' },
+  { id: 'quote-code', icon: Hash, label: 'Mã báo giá' },
   { id: 'email', icon: Mail, label: 'Email gửi đi (SMTP)' },
   { id: 'odoo', icon: Plug, label: 'Tích hợp Odoo' },
   { id: 'misa', icon: PenLine, label: 'Chữ ký số MISA eSign' },
@@ -236,6 +238,7 @@ export default function AdminSettingsPage() {
               </>
             )}
           </SettingsSection>
+          <QuoteCodeSettingsCard id="quote-code" />
           <EmailSettingsCard id="email" />
           <OdooSettingsCard id="odoo" />
           <MisaEsignSettingsCard id="misa" />
