@@ -39,7 +39,14 @@ jobs:
           # Cùng phiên bản với image production (infra/docker/*.Dockerfile: node:24-alpine).
           node-version: 24
           cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - name: pnpm install --frozen-lockfile
+        # Lỗi cài đặt hiện cả ở mục Annotations (xem được không cần mở log).
+        run: |
+          set -o pipefail
+          if ! pnpm install --frozen-lockfile 2>&1 | tee /tmp/install.log; then
+            echo "::error title=pnpm install::$(tail -n 40 /tmp/install.log | sed 's/%/%25/g' | sed ':a;N;$!ba;s/\n/%0A/g')"
+            exit 1
+          fi
       - run: pnpm --filter @saha/shared build
       - run: pnpm --filter @saha/api prisma:deploy
       - run: pnpm typecheck
