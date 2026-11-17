@@ -25,6 +25,8 @@ export const PERMISSIONS = {
   DELIVERY_MANAGE: 'delivery.manage',
   PAYMENT_REQUEST_MANAGE: 'payment_request.manage',
   QUOTE_MANAGE: 'quote.manage',
+  INSPECTION_CREATE: 'inspection.create',
+  INSPECTION_MANAGE: 'inspection.manage',
 
   TEMPLATE_VIEW: 'template.view',
   TEMPLATE_MANAGE: 'template.manage',
@@ -64,6 +66,8 @@ export const PERMISSION_LABELS: Record<Permission, string> = {
   'delivery.manage': 'Lập phiếu xuất kho, phiếu gửi hàng',
   'payment_request.manage': 'Lập, lưu đề nghị thanh toán',
   'quote.manage': 'Lập, gửi báo giá',
+  'inspection.create': 'Gửi yêu cầu kiểm tra hợp đồng/đơn hàng',
+  'inspection.manage': 'Xem và xử lý mọi yêu cầu kiểm tra (không chỉ việc được giao)',
   'template.view': 'Xem mẫu hợp đồng, điều khoản',
   'template.manage': 'Quản lý mẫu hợp đồng, điều khoản',
   'clause.approve': 'Phê duyệt điều khoản',

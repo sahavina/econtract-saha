@@ -200,6 +200,8 @@ model User {
   paidPaymentRequests PaymentRequest[]          @relation("PaymentRequestPayer")
   quotes              Quote[]                   @relation("QuoteCreator")
   sentQuotes          Quote[]                   @relation("QuoteSender")
+  assignedInspections InspectionRequest[]       @relation("InspectionAssignee")
+  askedInspections    InspectionRequest[]       @relation("InspectionRequester")
   uploadedDocuments   ContractDocument[]
   createdTemplates    ContractTemplate[]        @relation("TemplateCreator")
   templateVersions    ContractTemplateVersion[]
@@ -451,6 +453,7 @@ model Contract {
   shippingNotes     ShippingNote[]
   paymentRequests   PaymentRequest[]
   quotes            Quote[]
+  inspections       InspectionRequest[]
   contractTypeId    String?              @db.Uuid
   group             String?
   description       String?
@@ -1435,4 +1438,44 @@ model QuoteItem {
   product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
 
   @@index([quoteId])
+}
+
+// ───────────────────────────── Yêu cầu kiểm tra ─────────────────────────────
+
+enum InspectionStatus {
+  PENDING
+  IN_PROGRESS
+  DONE
+  ISSUE
+  CANCELLED
+}
+
+/// Yêu cầu kiểm tra hợp đồng/đơn hàng giao cho người phụ trách; xử lý trên trang hàng chờ, in phiếu kèm QR.
+model InspectionRequest {
+  id            String           @id @default(uuid()) @db.Uuid
+  tenantId      String           @db.Uuid
+  code          String
+  contractId    String           @db.Uuid
+  /// Nội dung cần kiểm tra
+  content       String
+  dueDate       DateTime?        @db.Date
+  status        InspectionStatus @default(PENDING)
+  assigneeId    String           @db.Uuid
+  requestedById String           @db.Uuid
+  /// Kết quả / ghi chú của người kiểm tra
+  result        String?
+  /// Kết quả từng dòng hàng: [{ itemId, ok: true|false|null, note }]
+  itemResults   Json             @default("[]")
+  startedAt     DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+  contract      Contract         @relation(fields: [contractId], references: [id], onDelete: Cascade)
+  assignee      User             @relation("InspectionAssignee", fields: [assigneeId], references: [id])
+  requestedBy   User             @relation("InspectionRequester", fields: [requestedById], references: [id])
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([assigneeId, status])
+  @@index([contractId])
 }

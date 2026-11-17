@@ -25,6 +25,7 @@ import { NotificationsModule } from './notifications/notifications.module.js';
 import { PartnersModule } from './partners/partners.module.js';
 import { DeliveriesModule } from './deliveries/deliveries.module.js';
 import { PaymentRequestsModule } from './payment-requests/payment-requests.module.js';
+import { InspectionsModule } from './inspections/inspections.module.js';
 import { QuotesModule } from './quotes/quotes.module.js';
 import { ProductsModule } from './products/products.module.js';
 import { PlatformModule } from './platform/platform.module.js';
@@ -52,6 +53,7 @@ import { WorkflowsModule } from './workflows/workflows.module.js';
     DeliveriesModule,
     PaymentRequestsModule,
     QuotesModule,
+    InspectionsModule,
     ContractsModule,
     ContractShareModule,
     DashboardModule,

@@ -24,7 +24,7 @@ const GROUPS: { label: string; icon: LucideIcon; prefixes: string[] }[] = [
   { label: 'Tổng quan & báo cáo', icon: LayoutDashboard, prefixes: ['dashboard.', 'report.'] },
   { label: 'Hợp đồng', icon: FileText, prefixes: ['contract.'] },
   { label: 'Đối tác', icon: Users, prefixes: ['partner.'] },
-  { label: 'Bán hàng & giao nhận', icon: ShoppingCart, prefixes: ['quote.', 'product.', 'delivery.', 'payment_request.'] },
+  { label: 'Bán hàng & giao nhận', icon: ShoppingCart, prefixes: ['quote.', 'product.', 'delivery.', 'payment_request.', 'inspection.'] },
   { label: 'Mẫu & điều khoản', icon: BookOpen, prefixes: ['template.', 'clause.'] },
   { label: 'Quản trị', icon: Settings2, prefixes: ['user.', 'role.', 'org.', 'settings.', 'workflow.', 'audit.'] },
 ];

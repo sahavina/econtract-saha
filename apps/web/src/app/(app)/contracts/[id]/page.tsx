@@ -2,7 +2,7 @@
 
 import { type ContractStatus } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, CheckCircle2, ChevronRight, Copy, FileText, FileX2, MoreHorizontal, Package, PackageMinus, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
+import { Archive, ArchiveRestore, CheckCircle2, ChevronRight, ClipboardCheck, Copy, FileText, FileX2, MoreHorizontal, Package, PackageMinus, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -17,6 +17,7 @@ import { ContractOrdersTab, OrderItemsTab } from '@/components/contract-orders';
 import { ContractOverview } from '@/components/contract-overview';
 import { OrderDeliveries } from '@/components/order-deliveries';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
+import { InspectionRequestDialog } from '@/components/inspection-request-dialog';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
 import { EmptyState, ErrorState } from '@/components/page-header';
@@ -111,6 +112,7 @@ export default function ContractDetailPage() {
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [liquidating, setLiquidating] = useState(false);
+  const [inspecting, setInspecting] = useState(false);
   const [tab, setTab] = useState(initialTab);
   /** Mở một tab từ nút trong tab Tổng quan và cuộn tới thanh tab. */
   const openTab = (value: string) => {
@@ -214,6 +216,11 @@ export default function ContractDetailPage() {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end" className="min-w-52">
+                    {can('inspection.create') && (
+                      <DropdownMenuItem onSelect={() => setInspecting(true)}>
+                        <ClipboardCheck /> Yêu cầu kiểm tra
+                      </DropdownMenuItem>
+                    )}
                     {isOrder && can('delivery.manage') && (
                       <DropdownMenuItem asChild>
                         <Link href={`/stock-issues/new?order=${c.id}`}>
@@ -430,6 +437,7 @@ export default function ContractDetailPage() {
 
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
       <LiquidateDialog contractId={c.id} code={c.code} open={liquidating} onClose={() => setLiquidating(false)} />
+      {inspecting && <InspectionRequestDialog open contract={c} onClose={() => setInspecting(false)} />}
     </>
   );
 }

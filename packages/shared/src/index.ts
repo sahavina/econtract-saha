@@ -10,3 +10,4 @@ export * from './order-extract.js';
 export * from './delivery.js';
 export * from './quote.js';
 export * from './xlsx.js';
+export * from './inspection.js';

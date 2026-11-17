@@ -28,6 +28,8 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.CLAUSE_APPROVE,
       P.AUDIT_VIEW,
       P.REPORT_VIEW,
+      P.INSPECTION_CREATE,
+      P.INSPECTION_MANAGE,
     ],
   },
   {
@@ -47,6 +49,7 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.PAYMENT_REQUEST_MANAGE,
       P.QUOTE_MANAGE,
       P.TEMPLATE_VIEW,
+      P.INSPECTION_CREATE,
     ],
   },
   {
@@ -66,12 +69,13 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.PAYMENT_REQUEST_MANAGE,
       P.QUOTE_MANAGE,
       P.TEMPLATE_VIEW,
+      P.INSPECTION_CREATE,
     ],
   },
   {
     code: 'accountant',
     name: 'Kế toán',
-    permissions: [P.DASHBOARD_VIEW, P.CONTRACT_VIEW_ALL, P.CONTRACT_EXPORT, P.PARTNER_VIEW, P.PAYMENT_REQUEST_MANAGE, P.QUOTE_MANAGE, P.REPORT_VIEW],
+    permissions: [P.DASHBOARD_VIEW, P.CONTRACT_VIEW_ALL, P.CONTRACT_EXPORT, P.PARTNER_VIEW, P.PAYMENT_REQUEST_MANAGE, P.QUOTE_MANAGE, P.REPORT_VIEW, P.INSPECTION_CREATE],
   },
   {
     code: 'director',
@@ -85,6 +89,8 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.TEMPLATE_VIEW,
       P.AUDIT_VIEW,
       P.REPORT_VIEW,
+      P.INSPECTION_CREATE,
+      P.INSPECTION_MANAGE,
     ],
   },
   {
@@ -98,6 +104,8 @@ export const DEFAULT_ROLES: { code: string; name: string; permissions: Permissio
       P.TEMPLATE_VIEW,
       P.AUDIT_VIEW,
       P.REPORT_VIEW,
+      P.INSPECTION_CREATE,
+      P.INSPECTION_MANAGE,
     ],
   },
 ];

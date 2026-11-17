@@ -63,6 +63,7 @@ export const NAV: NavGroup[] = [
     items: [
       { title: 'Dashboard', icon: LayoutDashboard, href: '/', permissions: [PERMISSIONS.DASHBOARD_VIEW] },
       { title: 'Công việc của tôi', icon: ClipboardList, href: '/tasks', permissions: VIEW_CONTRACT },
+      { title: 'Yêu cầu kiểm tra', icon: ClipboardCheck, href: '/inspections' },
       { title: 'Thông báo', icon: Bell, href: '/notifications' },
       { title: 'Lịch hợp đồng', icon: CalendarDays, href: '/calendar', permissions: VIEW_CONTRACT },
     ],
