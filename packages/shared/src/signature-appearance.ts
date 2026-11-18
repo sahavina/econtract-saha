@@ -28,6 +28,19 @@ export interface SignatureAppearance {
   language: (typeof SIGNATURE_LANGUAGES)[number];
 }
 
+/**
+ * Khung chữ ký đã đóng lên PDF khi ký số (lưu vào bằng chứng của người ký): các dòng chữ đúng như gửi MISA
+ * và kiểu hiển thị lúc ký ⇒ văn bản đã ký trên màn hình/PDF hiển thị giống hệt dù cấu hình đổi sau đó.
+ */
+export interface SignatureStamp {
+  lines: string[];
+  layout: SignatureAppearance['layout'];
+  imageSize: SignatureAppearance['imageSize'];
+  fontSize: number;
+  showLogo: boolean;
+  showCheck: boolean;
+}
+
 export const DEFAULT_SIGNATURE_APPEARANCE: SignatureAppearance = {
   showOwner: true,
   showLogo: false,

@@ -36,21 +36,30 @@ function withColumnPercents(html: string): string {
 
 /** Chữ ký của người ký số MISA vẽ theo Cấu hình → Hiển thị chữ ký số (ảnh logo/con dấu, dấu tích, các dòng chữ). */
 function misaMark(s: DocSigner, info: SignatureAppearanceInfo): Content {
-  const a = info.appearance;
+  const st = s.evidence?.stamp;
+  // Khung đã đóng lên PDF lúc ký (nếu có) ⇒ hiển thị đúng như vậy; không thì theo cấu hình hiện tại.
+  const a = st ? { ...info.appearance, layout: st.layout, imageSize: st.imageSize, fontSize: st.fontSize, showLogo: st.showLogo, showCheck: st.showCheck } : info.appearance;
   const { width, height } = signatureBoxSize(a);
-  const lines = signatureTextLines(a, { owner: misaOwner(s), signedAt: new Date(s.signedAt!) });
+  const lines = st?.lines ?? signatureTextLines(a, { owner: misaOwner(s), signedAt: new Date(s.signedAt!) });
   const vertical = a.layout === 'VERTICAL';
-  const text: Content = { stack: lines.map((l) => ({ text: l })), fontSize: a.fontSize, alignment: vertical ? 'center' : 'left', color: '#111111' };
-  const images: Content[] = [
-    ...(a.showLogo && info.logo
-      ? [{ image: info.logo, fit: (vertical ? [width, height * 0.45] : [width * 0.4, height]) as [number, number], alignment: 'center' as const }]
-      : []),
-    ...(a.showCheck ? [{ image: `data:image/png;base64,${SIGNATURE_CHECK_PNG_BASE64}`, fit: [16, 16] as [number, number], alignment: 'center' as const }] : []),
-  ];
-  const body: Content = vertical
+  const text: Content = { stack: lines.map((l) => ({ text: l })), font: 'Roboto', fontSize: a.fontSize, alignment: vertical ? 'center' : 'left', color: '#111111' };
+  // Ảnh logo/con dấu giữ nguyên màu gốc của ảnh đã tải lên.
+  const images: Content[] =
+    a.showLogo && info.logo ? [{ image: info.logo, fit: (vertical ? [width, height * 0.45] : [width * 0.4, height]) as [number, number], alignment: 'center' as const }] : [];
+  const content: Content = vertical
     ? { stack: [...images, ...(lines.length ? [text] : [])] }
     : { columns: [...images.map((im) => ({ width: 'auto' as const, stack: [im] })), ...(lines.length ? [{ width: '*' as const, stack: [text] }] : [])], columnGap: 4 };
-  return { table: { widths: [width], body: [[body]] }, layout: 'noBorders', alignment: 'center', margin: [0, 4, 0, 4] } as Content;
+  // Dấu tích xanh: nền mờ (25%) ở giữa khung, nằm sau chữ – giống bản xem trước; không chiếm chỗ trong bố cục.
+  const check = Math.round(height * 0.7);
+  const body: Content = a.showCheck
+    ? {
+        stack: [
+          { image: `data:image/png;base64,${SIGNATURE_CHECK_PNG_BASE64}`, fit: [check, check], opacity: 0.25, relativePosition: { x: (width - check) / 2, y: (height - check) / 2 } },
+          content,
+        ],
+      }
+    : content;
+  return { table: { widths: [width], heights: [height], body: [[body]] }, layout: 'noBorders', alignment: 'center', margin: [0, 4, 0, 4] } as Content;
 }
 
 function signatureBlock(s: DocSigner, misa?: SignatureAppearanceInfo | null): Content {

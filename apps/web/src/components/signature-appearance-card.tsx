@@ -5,6 +5,7 @@ import {
   SIGNATURE_CHECK_PNG_BASE64,
   SIGNATURE_FONT_SIZES,
   type SignatureAppearance,
+  type SignatureStamp,
   signatureBoxSize,
   signatureTextLines,
 } from '@saha/shared';
@@ -90,9 +91,12 @@ export function SignaturePreview({
   logo,
   owner,
   signedAt,
+  stamp,
   framed = true,
   scale = 1.25,
 }: {
+  /** Khung đã đóng lên PDF lúc ký: dùng đúng dòng chữ và kiểu hiển thị đó. */
+  stamp?: SignatureStamp | null;
   appearance: SignatureAppearance;
   logo: string | null;
   owner: string;
@@ -102,11 +106,12 @@ export function SignaturePreview({
   /** px trên mỗi pt. */
   scale?: number;
 }) {
-  const { width, height } = signatureBoxSize(a);
   // Thời điểm mẫu cố định khi mở thẻ (không đổi theo mỗi lần vẽ lại).
   const [sampleAt] = useState(() => new Date());
+  if (stamp) a = { ...a, layout: stamp.layout, imageSize: stamp.imageSize, fontSize: stamp.fontSize, showLogo: stamp.showLogo, showCheck: stamp.showCheck };
+  const { width, height } = signatureBoxSize(a);
   const at = signedAt ?? sampleAt;
-  const lines = signatureTextLines(a, {
+  const lines = stamp?.lines ?? signatureTextLines(a, {
     owner,
     signedAt: at,
     cert: signedAt ? null : { serial: '54010C478754CBA588A73F5C9CD0B850', issuer: 'MISA eSign CA', validTo: new Date(sampleAt.getTime() + 3 * 365 * 86_400_000) },
@@ -116,7 +121,8 @@ export function SignaturePreview({
   return (
     <div
       className={cn('relative flex overflow-hidden bg-white p-1 text-[#111]', framed && 'rounded-md border border-dashed border-gray-300', vertical ? 'flex-col items-center' : 'items-center')}
-      style={{ width: width * scale, height: height * scale }}
+      // Khung chữ ký luôn dùng phông không chân (giống khung MISA), không theo phông văn bản.
+      style={{ width: width * scale, height: height * scale, fontFamily: "'Roboto', Arial, sans-serif" }}
       aria-label={signedAt ? `Chữ ký số của ${owner}` : 'Xem trước khung chữ ký'}
     >
       {a.showCheck && (

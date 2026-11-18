@@ -415,7 +415,7 @@ export class SignaturesService {
   async completeDigital(
     user: AuthUser,
     signerId: string,
-    info: { documentId: string; sha256: string; transactionId: string | null; certSubject: string | null },
+    info: { documentId: string; sha256: string; transactionId: string | null; certSubject: string | null; stamp?: unknown },
   ) {
     const signer = await this.prisma.signer.findFirst({
       where: { id: signerId, tenantId: user.tenantId, userId: user.userId, method: 'MISA_ESIGN' },
@@ -430,7 +430,17 @@ export class SignaturesService {
       const o = await this.markSigned(tx, request, signer, { typedName: `Ký số MISA eSign – ${info.certSubject ?? signer.name}` }, {}, afterCommit);
       await tx.signer.update({
         where: { id: signer.id },
-        data: { evidence: { provider: 'MISA_ESIGN', transactionId: info.transactionId, certSubject: info.certSubject, documentId: info.documentId, pdfSha256: info.sha256 } },
+        data: {
+          evidence: {
+            provider: 'MISA_ESIGN',
+            transactionId: info.transactionId,
+            certSubject: info.certSubject,
+            documentId: info.documentId,
+            pdfSha256: info.sha256,
+            // Khung chữ ký đúng như đã đóng lên PDF (hiển thị lại trên văn bản đã ký).
+            ...(info.stamp ? { stamp: info.stamp } : {}),
+          } as Prisma.InputJsonValue,
+        },
       });
       await tx.signatureRequest.update({ where: { id: request.id }, data: { signedDocumentId: info.documentId } });
       await this.audit.log(

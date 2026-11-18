@@ -10,6 +10,7 @@ import {
   SIGNATURE_LANGUAGES,
   SIGNATURE_LAYOUTS,
   type SignatureAppearance,
+  type SignatureStamp,
   signatureBoxSize,
   signatureTextLines,
 } from '@saha/shared';
@@ -139,6 +140,8 @@ interface HashData {
   cert: { certificate: string; certificateChain: string[] };
   fileName: string;
   sourceVersion: number;
+  /** Khung chữ ký đã gửi MISA (dòng chữ + kiểu hiển thị). */
+  stamp?: SignatureStamp;
 }
 
 /** Tên chủ thể (CN) của chứng thư để hiển thị. */
@@ -523,7 +526,15 @@ export class EsignService {
         display: `Ký số ${contract.code} – ${doc.fileName}`,
       }),
     );
-    const data: HashData = { hash, cert: { certificate: cert.certificate, certificateChain: cert.certificateChain }, fileName: doc.fileName, sourceVersion: doc.version };
+    const stamp: SignatureStamp = {
+      lines,
+      layout: appearance.layout,
+      imageSize: appearance.imageSize,
+      fontSize: appearance.fontSize,
+      showLogo: appearance.showLogo && !!logo,
+      showCheck: appearance.showCheck,
+    };
+    const data: HashData = { hash, cert: { certificate: cert.certificate, certificateChain: cert.certificateChain }, fileName: doc.fileName, sourceVersion: doc.version, stamp };
     const session = await this.prisma.$transaction(async (tx) => {
       const s = await tx.esignSession.create({
         data: {
@@ -589,6 +600,7 @@ export class EsignService {
           sha256: saved.sha256,
           transactionId: s.transactionId,
           certSubject: account?.certSubject ?? null,
+          stamp: data.stamp ?? null,
         });
       }
       return this.sessionView(await this.prisma.esignSession.update({ where: { id: s.id }, data: { status: 'SUCCESS', resultDocumentId: saved.id } }));

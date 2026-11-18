@@ -1,4 +1,4 @@
-import type { ContractCategory, ContractStatus, PartnerType, Permission, DocumentFont } from '@saha/shared';
+import type { ContractCategory, ContractStatus, PartnerType, Permission, DocumentFont, SignatureStamp } from '@saha/shared';
 
 export interface Me {
   id: string;
@@ -359,7 +359,7 @@ export interface SignerInfo {
   ip: string | null;
   rejectReason: string | null;
   /** Ký số MISA: mã giao dịch, chứng thư, SHA-256 bản PDF đã ký. */
-  evidence?: { transactionId?: string | null; certSubject?: string | null; pdfSha256?: string; documentId?: string } | null;
+  evidence?: { transactionId?: string | null; certSubject?: string | null; pdfSha256?: string; documentId?: string; stamp?: SignatureStamp } | null;
 }
 
 export interface SignatureRequestInfo {

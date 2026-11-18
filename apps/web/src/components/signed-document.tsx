@@ -1,3 +1,4 @@
+import type { SignatureStamp } from '@saha/shared';
 import { SignatureMarkView } from '@/components/signature-pad';
 import { type SignatureAppearanceInfo, SignaturePreview } from '@/components/signature-appearance-card';
 import { formatDateTime } from '@/lib/format';
@@ -17,6 +18,7 @@ export interface DocSigner {
   method?: string;
   ip?: string | null;
   signedHash?: string | null;
+  evidence?: { stamp?: SignatureStamp } | null;
 }
 
 /** Tên chủ chứng thư của người ký số MISA (lưu dạng "text:Ký số MISA eSign – <tên>"). */
@@ -61,7 +63,7 @@ export function SignedDocument({
               {s.title && <p className="italic">{s.title}</p>}
               <div className="flex min-h-20 items-center justify-center">
                 {misaAppearance && isMisaSigned(s) && s.signedAt ? (
-                  <SignaturePreview appearance={misaAppearance.appearance} logo={misaAppearance.logo} owner={misaOwner(s)} signedAt={new Date(s.signedAt)} framed={false} scale={1.1} />
+                  <SignaturePreview appearance={misaAppearance.appearance} logo={misaAppearance.logo} owner={misaOwner(s)} signedAt={new Date(s.signedAt)} stamp={s.evidence?.stamp} framed={false} scale={1.1} />
                 ) : s.status === 'SIGNED' ? (
                   <SignatureMarkView value={s.signatureImage} />
                 ) : (
