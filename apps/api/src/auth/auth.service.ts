@@ -1,7 +1,7 @@
 import { Injectable, UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { JwtService } from '@nestjs/jwt';
-import { ALL_PERMISSIONS, type Permission } from '@saha/shared';
+import { ALL_PERMISSIONS, parseDocumentFont, type Permission } from '@saha/shared';
 import bcrypt from 'bcryptjs';
 import { createHash, randomBytes } from 'node:crypto';
 import { z } from 'zod';
@@ -153,11 +153,15 @@ export class AuthService {
         department: { select: { id: true, name: true } },
         branch: { select: { id: true, name: true } },
         roles: { select: { role: { select: { code: true, name: true } } } },
-        tenant: { select: { id: true, code: true, name: true } },
+        tenant: { select: { id: true, code: true, name: true, settings: true } },
       },
     });
+    const { settings, ...tenant } = user.tenant;
     return {
       ...user,
+      tenant,
+      // Phông chữ văn bản của doanh nghiệp: áp dụng khi xem/in/xuất PDF ở mọi trang.
+      documentFont: parseDocumentFont((settings as { documentFont?: unknown } | null)?.documentFont),
       roles: user.roles.map((r) => r.role),
       permissions: [...authUser.permissions].sort(),
     };

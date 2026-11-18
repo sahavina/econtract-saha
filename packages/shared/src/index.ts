@@ -11,3 +11,4 @@ export * from './delivery.js';
 export * from './quote.js';
 export * from './xlsx.js';
 export * from './inspection.js';
+export * from './document-font.js';

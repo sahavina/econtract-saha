@@ -139,13 +139,18 @@
 @font-face { font-family: 'Tinos'; src: url('/fonts/tinos/Tinos-Bold.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
 @font-face { font-family: 'Tinos'; src: url('/fonts/tinos/Tinos-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
 @font-face { font-family: 'Tinos'; src: url('/fonts/tinos/Tinos-BoldItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
+/* Roboto (chép từ pdfmake khi build – scripts/copy-pdf-worker.mjs): phông văn bản khi chọn Roboto, dự phòng cho Arial/Tahoma. */
+@font-face { font-family: 'Roboto'; src: url('/fonts/roboto/Roboto-Regular.ttf') format('truetype'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Roboto'; src: url('/fonts/roboto/Roboto-Medium.ttf') format('truetype'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'Roboto'; src: url('/fonts/roboto/Roboto-Italic.ttf') format('truetype'); font-weight: 400; font-style: italic; font-display: swap; }
+@font-face { font-family: 'Roboto'; src: url('/fonts/roboto/Roboto-MediumItalic.ttf') format('truetype'); font-weight: 700; font-style: italic; font-display: swap; }
 
 /* ───────── Nội dung hợp đồng (trình soạn thảo, xem trước A4, bản in) ───────── */
 @layer components {
   .contract-content {
-    /* Văn bản hợp đồng dùng font Times New Roman như bản Word/PDF, không theo font giao diện. */
-    font-family: 'Times New Roman', 'Tinos', serif;
-    font-size: 0.95rem;
+    /* Văn bản hợp đồng dùng phông văn bản của doanh nghiệp (mặc định Times New Roman như bản Word/PDF), không theo font giao diện. */
+    font-family: var(--doc-font-family, 'Times New Roman', 'Tinos', serif);
+    font-size: var(--doc-font-size, 0.95rem);
     line-height: 1.65;
   }
   .contract-content > * + * {
@@ -216,7 +221,7 @@
     background: #fff;
     color: #111;
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.12);
-    font-family: 'Times New Roman', Times, serif;
+    font-family: var(--doc-font-family, 'Times New Roman', Times, serif);
   }
   .a4-page .contract-content th { background: #f3f3f3; }
   .a4-page .contract-content th,

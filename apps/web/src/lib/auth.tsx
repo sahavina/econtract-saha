@@ -3,7 +3,9 @@
 import type { Permission } from '@saha/shared';
 import { useQueryClient } from '@tanstack/react-query';
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import type { DocumentFont } from '@saha/shared';
 import { api, refreshAccessToken, setAccessToken, setSessionExpiredHandler } from './api';
+import { applyDocumentFont } from './document-font';
 import type { Me } from './types';
 
 type Status = 'loading' | 'authenticated' | 'anonymous';
@@ -14,6 +16,8 @@ interface AuthContextValue {
   login: (input: { tenantCode: string; email: string; password: string }) => Promise<void>;
   logout: () => Promise<void>;
   can: (...permissions: Permission[]) => boolean;
+  /** Cập nhật phông chữ văn bản ngay sau khi quản trị lưu cấu hình. */
+  setDocumentFont: (font: DocumentFont) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -22,6 +26,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<Status>('loading');
   const [user, setUser] = useState<Me | null>(null);
+
+  // Phông chữ văn bản của doanh nghiệp áp dụng cho mọi trang (xem, in, xuất PDF).
+  useEffect(() => applyDocumentFont(user?.documentFont), [user?.documentFont]);
+  const setDocumentFont = useCallback((documentFont: DocumentFont) => setUser((u) => (u ? { ...u, documentFont } : u)), []);
 
   const clear = useCallback(() => {
     setAccessToken(null);
@@ -71,8 +79,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => {
     const perms = new Set(user?.permissions ?? []);
-    return { status, user, login, logout, can: (...p) => p.some((x) => perms.has(x)) };
-  }, [status, user, login, logout]);
+    return { status, user, login, logout, can: (...p) => p.some((x) => perms.has(x)), setDocumentFont };
+  }, [status, user, login, logout, setDocumentFont]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

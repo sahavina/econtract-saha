@@ -4,6 +4,7 @@ import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
 import { type DocSigner, ROLE_LABELS } from '@/components/signed-document';
 import { formatDateTime } from '@/lib/format';
 import { fitTables } from '@/lib/pdf-tables';
+import { currentDocumentFont } from '@/lib/document-font';
 import { setupPdfFonts } from '@/lib/pdf-fonts';
 
 /**
@@ -152,7 +153,7 @@ async function createContractPdf({ title, html, signed, digitalSigners }: Omit<C
     info: { title, creator: 'SAHA eContract' },
     pageSize: 'A4',
     pageMargins: [MARGIN, MARGIN, MARGIN, MARGIN],
-    defaultStyle: { font, fontSize: 12, lineHeight: 1.25 },
+    defaultStyle: { font, fontSize: currentDocumentFont().size, lineHeight: 1.25 },
     footer: (current, total) => ({ text: `${current}/${total}`, alignment: 'center', fontSize: 8, color: '#888888', margin: [0, 20, 0, 0] }),
     content: [...body, ...(signed ? signedSection(signed.documentHash, signed.signers) : []), ...(digitalSigners?.length ? digitalPage(digitalSigners) : [])],
   };

@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import { DOCUMENT_FONT_FAMILIES, DOCUMENT_FONT_LABELS, DOCUMENT_FONT_SIZES, type DocumentFont, parseDocumentFont } from '@saha/shared';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
@@ -26,7 +27,16 @@ export const companyProfileSchema = z.object({
 });
 export type CompanyProfile = z.infer<typeof companyProfileSchema>;
 
-type TenantSettings = { companyProfile?: Partial<CompanyProfile> } & Record<string, unknown>;
+/** Phông chữ văn bản khi xem/in/xuất PDF (Cấu hình → Phông chữ văn bản). */
+export const documentFontSchema = z.object({
+  family: z.enum(DOCUMENT_FONT_FAMILIES, 'Chọn phông chữ'),
+  size: z.coerce
+    .number()
+    .int()
+    .refine((n) => (DOCUMENT_FONT_SIZES as readonly number[]).includes(n), `Cỡ chữ phải là ${DOCUMENT_FONT_SIZES.join(', ')}`),
+});
+
+type TenantSettings = { companyProfile?: Partial<CompanyProfile>; documentFont?: unknown } & Record<string, unknown>;
 
 @Injectable()
 export class CompanyService {
@@ -64,5 +74,22 @@ export class CompanyService {
       );
     });
     return this.get(user);
+  }
+
+  async documentFont(user: AuthUser): Promise<DocumentFont> {
+    const t = await this.prisma.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { settings: true } });
+    return parseDocumentFont(((t.settings ?? {}) as TenantSettings).documentFont);
+  }
+
+  async updateDocumentFont(user: AuthUser, input: DocumentFont) {
+    await this.prisma.$transaction(async (tx) => {
+      const t = await tx.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { settings: true } });
+      const prev = (t.settings ?? {}) as TenantSettings;
+      const before = parseDocumentFont(prev.documentFont);
+      await tx.tenant.update({ where: { id: user.tenantId }, data: { settings: { ...prev, documentFont: { ...input } } as unknown as Prisma.InputJsonValue } });
+      const label = (f: DocumentFont) => `${DOCUMENT_FONT_LABELS[f.family]} ${f.size}pt`;
+      await this.audit.log(user, { action: 'company.document_font', entityType: 'tenant', entityId: user.tenantId, data: { font: `${label(before)} → ${label(input)}` } }, tx);
+    });
+    return this.documentFont(user);
   }
 }

@@ -1,4 +1,4 @@
-import type { ContractCategory, ContractStatus, PartnerType, Permission } from '@saha/shared';
+import type { ContractCategory, ContractStatus, PartnerType, Permission, DocumentFont } from '@saha/shared';
 
 export interface Me {
   id: string;
@@ -12,6 +12,8 @@ export interface Me {
   roles: { code: string; name: string }[];
   tenant: { id: string; code: string; name: string };
   permissions: Permission[];
+  /** Phông chữ văn bản của doanh nghiệp (xem/in/xuất PDF). */
+  documentFont?: DocumentFont;
 }
 
 export type ApprovalStatus = 'NOT_SUBMITTED' | 'PENDING' | 'APPROVED' | 'REJECTED' | 'CHANGES_REQUESTED';
