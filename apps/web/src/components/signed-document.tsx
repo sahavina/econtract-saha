@@ -1,4 +1,5 @@
 import { SignatureMarkView } from '@/components/signature-pad';
+import { type SignatureAppearanceInfo, SignaturePreview } from '@/components/signature-appearance-card';
 import { formatDateTime } from '@/lib/format';
 import type { PartyRole, SignerStatus } from '@/lib/types';
 
@@ -18,6 +19,14 @@ export interface DocSigner {
   signedHash?: string | null;
 }
 
+/** Tên chủ chứng thư của người ký số MISA (lưu dạng "text:Ký số MISA eSign – <tên>"). */
+export function misaOwner(s: Pick<DocSigner, 'signatureImage' | 'name'>): string {
+  const t = s.signatureImage?.startsWith('text:') ? s.signatureImage.slice(5) : '';
+  return t.split('Ký số MISA eSign – ')[1]?.trim() || s.name;
+}
+
+export const isMisaSigned = (s: Pick<DocSigner, 'method' | 'status'>) => s.method === 'MISA_ESIGN' && s.status === 'SIGNED';
+
 /**
  * Văn bản hợp đồng đã đóng băng để ký (A4) + khối chữ ký các bên + chứng thư ký điện tử.
  * `snapshot` là HTML do backend dựng từ nội dung đã làm sạch.
@@ -27,11 +36,14 @@ export function SignedDocument({
   documentHash,
   signers,
   showCertificate = true,
+  misaAppearance,
 }: {
   snapshot: string;
   documentHash: string;
   signers: DocSigner[];
   showCertificate?: boolean;
+  /** Cấu hình hiển thị chữ ký số (người ký số MISA vẽ theo cấu hình); không có ⇒ hiện dòng chữ như chữ ký thường. */
+  misaAppearance?: SignatureAppearanceInfo;
 }) {
   // Khối chữ ký theo thứ tự Bên A, B, C, bên liên quan.
   const rank = (r: PartyRole | null) => (r ? ['PARTY_A', 'PARTY_B', 'PARTY_C', 'RELATED'].indexOf(r) : 9);
@@ -47,8 +59,10 @@ export function SignedDocument({
             <div key={s.id}>
               <p className="font-bold">{s.partyRole ? ROLE_LABELS[s.partyRole] : 'NGƯỜI KÝ'}</p>
               {s.title && <p className="italic">{s.title}</p>}
-              <div className="flex h-20 items-center justify-center">
-                {s.status === 'SIGNED' ? (
+              <div className="flex min-h-20 items-center justify-center">
+                {misaAppearance && isMisaSigned(s) && s.signedAt ? (
+                  <SignaturePreview appearance={misaAppearance.appearance} logo={misaAppearance.logo} owner={misaOwner(s)} signedAt={new Date(s.signedAt)} framed={false} scale={1.1} />
+                ) : s.status === 'SIGNED' ? (
                   <SignatureMarkView value={s.signatureImage} />
                 ) : (
                   <span className="text-xs text-gray-400">{s.status === 'REJECTED' ? 'Đã từ chối ký' : 'Chưa ký'}</span>

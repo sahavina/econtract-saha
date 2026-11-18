@@ -1,7 +1,10 @@
 'use client';
 
+import { SIGNATURE_CHECK_PNG_BASE64, signatureBoxSize, signatureTextLines } from '@saha/shared';
 import type { Content, TDocumentDefinitions } from 'pdfmake/interfaces';
-import { type DocSigner, ROLE_LABELS } from '@/components/signed-document';
+import type { SignatureAppearanceInfo } from '@/components/signature-appearance-card';
+import { type DocSigner, isMisaSigned, misaOwner, ROLE_LABELS } from '@/components/signed-document';
+import { api } from '@/lib/api';
 import { formatDateTime } from '@/lib/format';
 import { fitTables } from '@/lib/pdf-tables';
 import { currentDocumentFont } from '@/lib/document-font';
@@ -31,9 +34,30 @@ function withColumnPercents(html: string): string {
   return doc.body.firstElementChild?.innerHTML ?? html;
 }
 
-function signatureBlock(s: DocSigner): Content {
+/** Chữ ký của người ký số MISA vẽ theo Cấu hình → Hiển thị chữ ký số (ảnh logo/con dấu, dấu tích, các dòng chữ). */
+function misaMark(s: DocSigner, info: SignatureAppearanceInfo): Content {
+  const a = info.appearance;
+  const { width, height } = signatureBoxSize(a);
+  const lines = signatureTextLines(a, { owner: misaOwner(s), signedAt: new Date(s.signedAt!) });
+  const vertical = a.layout === 'VERTICAL';
+  const text: Content = { stack: lines.map((l) => ({ text: l })), fontSize: a.fontSize, alignment: vertical ? 'center' : 'left', color: '#111111' };
+  const images: Content[] = [
+    ...(a.showLogo && info.logo
+      ? [{ image: info.logo, fit: (vertical ? [width, height * 0.45] : [width * 0.4, height]) as [number, number], alignment: 'center' as const }]
+      : []),
+    ...(a.showCheck ? [{ image: `data:image/png;base64,${SIGNATURE_CHECK_PNG_BASE64}`, fit: [16, 16] as [number, number], alignment: 'center' as const }] : []),
+  ];
+  const body: Content = vertical
+    ? { stack: [...images, ...(lines.length ? [text] : [])] }
+    : { columns: [...images.map((im) => ({ width: 'auto' as const, stack: [im] })), ...(lines.length ? [{ width: '*' as const, stack: [text] }] : [])], columnGap: 4 };
+  return { table: { widths: [width], body: [[body]] }, layout: 'noBorders', alignment: 'center', margin: [0, 4, 0, 4] } as Content;
+}
+
+function signatureBlock(s: DocSigner, misa?: SignatureAppearanceInfo | null): Content {
   const mark: Content =
-    s.status !== 'SIGNED' || !s.signatureImage
+    misa && isMisaSigned(s) && s.signedAt
+      ? { columns: [{ width: '*', text: '' }, { width: 'auto', stack: [misaMark(s, misa)] }, { width: '*', text: '' }] }
+      : s.status !== 'SIGNED' || !s.signatureImage
       ? {
           // Người ký số MISA: để trống đúng khoảng chữ ký – khung chữ ký số do MISA đóng lên PDF, không in chữ chú thích.
           text: s.status === 'REJECTED' ? 'Đã từ chối ký' : s.method === 'MISA_ESIGN' ? ' ' : 'Chưa ký',
@@ -69,16 +93,16 @@ function digitalPage(names: string[]): Content[] {
   ];
 }
 
-function signedSection(documentHash: string, signers: DocSigner[]): Content[] {
+function signedSection(documentHash: string, signers: DocSigner[], misa?: SignatureAppearanceInfo | null): Content[] {
   const rank = (r: DocSigner['partyRole']) => (r ? ['PARTY_A', 'PARTY_B', 'PARTY_C', 'RELATED'].indexOf(r) : 9);
   const ordered = [...signers].sort((a, b) => rank(a.partyRole) - rank(b.partyRole));
   const rows: Content[] = [];
   for (let i = 0; i < ordered.length; i += 2) {
-    const pair = ordered.slice(i, i + 2).map(signatureBlock);
+    const pair = ordered.slice(i, i + 2).map((x) => signatureBlock(x, misa));
     rows.push({ columns: pair.length === 2 ? pair : [pair[0], { text: '' }], columnGap: 24, margin: [0, 24, 0, 0] });
   }
   const signed = ordered.filter((s) => s.status === 'SIGNED');
-  const method = (m?: string) => (m === 'EMAIL_OTP' ? 'OTP qua email' : m === 'INTERNAL_PASSWORD' ? 'Tài khoản + mật khẩu' : '—');
+  const method = (m?: string) => (m === 'EMAIL_OTP' ? 'OTP qua email' : m === 'INTERNAL_PASSWORD' ? 'Tài khoản + mật khẩu' : m === 'MISA_ESIGN' ? 'Chữ ký số MISA eSign' : '—');
   const cell = (text: string, bold = false) => ({ text, bold, fontSize: 8, ...(bold && { fillColor: '#f3f3f3' }) });
   const certificate: Content[] = signed.length
     ? [
@@ -125,6 +149,8 @@ async function createContractPdf({ title, html, signed, digitalSigners }: Omit<C
     import('html-to-pdfmake'),
   ]);
   const font = await setupPdfFonts(pdfMake);
+  // Người ký số MISA: vẽ chữ ký theo Cấu hình → Hiển thị chữ ký số (không đọc được cấu hình ⇒ hiện dòng chữ như trước).
+  const misa = signed?.signers.some(isMisaSigned) ? await api<SignatureAppearanceInfo>('/esign/misa/appearance').catch(() => null) : null;
 
   // Ô highlight biến thiếu dữ liệu chỉ có ý nghĩa trên màn hình.
   // Dấu câu toàn chiều rộng (vd "：" trong file Word gõ bằng bộ gõ Trung/Nhật) không có trong font Tinos ⇒ đổi về ký tự thường.
@@ -156,7 +182,7 @@ async function createContractPdf({ title, html, signed, digitalSigners }: Omit<C
     pageMargins: [MARGIN, MARGIN, MARGIN, MARGIN],
     defaultStyle: { font, fontSize: currentDocumentFont().size, lineHeight: 1.25 },
     footer: (current, total) => ({ text: `${current}/${total}`, alignment: 'center', fontSize: 8, color: '#888888', margin: [0, 20, 0, 0] }),
-    content: [...body, ...(signed ? signedSection(signed.documentHash, signed.signers) : []), ...(digitalSigners?.length ? digitalPage(digitalSigners) : [])],
+    content: [...body, ...(signed ? signedSection(signed.documentHash, signed.signers, misa) : []), ...(digitalSigners?.length ? digitalPage(digitalSigners) : [])],
   };
   return pdfMake.createPdf(doc);
 }

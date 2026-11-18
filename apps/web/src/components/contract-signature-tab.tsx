@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { MisaEsignDialog } from '@/components/misa-esign-dialog';
+import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { EmptyState, ErrorState } from '@/components/page-header';
 import { type SignatureMark, SignaturePad } from '@/components/signature-pad';
 import { SignedDocument } from '@/components/signed-document';
@@ -220,6 +221,7 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
 function SignDialog({ contract, request, open, onClose }: { contract: ContractDetail; request: SignatureRequestInfo; open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const { user } = useAuth();
+  const misaAppearance = useSignatureAppearance();
   const [mark, setMark] = useState<SignatureMark | null>(null);
   const [password, setPassword] = useState('');
   const [consent, setConsent] = useState(false);
@@ -243,7 +245,7 @@ function SignDialog({ contract, request, open, onClose }: { contract: ContractDe
           <DialogDescription>Vui lòng đọc kỹ nội dung trước khi ký. Mã băm văn bản: {request.documentHash.slice(0, 16)}…</DialogDescription>
         </DialogHeader>
         <div className="max-h-72 overflow-y-auto rounded-lg border">
-          <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={request.signers} showCertificate={false} />
+          <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={request.signers} showCertificate={false} misaAppearance={misaAppearance.data} />
         </div>
         <SignaturePad defaultName={user?.fullName} onChange={setMark} />
         <div className="space-y-1.5">
@@ -303,6 +305,7 @@ function RejectDialog({ contractId, open, onClose }: { contractId: string; open:
 
 function RequestCard({ contract, request }: { contract: ContractDetail; request: SignatureRequestInfo }) {
   const { user, can } = useAuth();
+  const misaAppearance = useSignatureAppearance();
   const qc = useQueryClient();
   const [signing, setSigning] = useState(false);
   const [digitalSigning, setDigitalSigning] = useState(false);
@@ -467,7 +470,7 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
       </Card>
 
       {(request.status === 'COMPLETED' || request.status === 'IN_PROGRESS') && (
-        <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={request.signers} />
+        <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={request.signers} misaAppearance={misaAppearance.data} />
       )}
 
       {mine && <SignDialog contract={contract} request={request} open={signing} onClose={() => setSigning(false)} />}

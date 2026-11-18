@@ -32,8 +32,8 @@ export interface SignatureAppearanceInfo {
 
 export const signatureAppearanceKey = ['esign', 'appearance'] as const;
 
-export function useSignatureAppearance() {
-  return useQuery({ queryKey: signatureAppearanceKey, queryFn: () => api<SignatureAppearanceInfo>('/esign/misa/appearance') });
+export function useSignatureAppearance(enabled = true) {
+  return useQuery({ queryKey: signatureAppearanceKey, queryFn: () => api<SignatureAppearanceInfo>('/esign/misa/appearance'), enabled, retry: false });
 }
 
 const errText = (e: unknown) => (e instanceof ApiError && e.errors.length ? e.errors.map((x) => x.message).join('; ') : e instanceof Error ? e.message : 'Thao tác thất bại');
@@ -81,24 +81,43 @@ function Segmented<T extends string>({ value, options, onChange, label }: { valu
   );
 }
 
-/** Xem trước gần đúng khung chữ ký (MISA tự dựng hình thật khi ký). */
-export function SignaturePreview({ appearance: a, logo, owner }: { appearance: SignatureAppearance; logo: string | null; owner: string }) {
+/**
+ * Khung chữ ký số theo cấu hình: bản xem trước trong Cấu hình (`signedAt` bỏ trống ⇒ thời điểm và chứng thư mẫu)
+ * hoặc chữ ký thật của người ký số trên văn bản đã ký (`signedAt` là thời điểm ký).
+ */
+export function SignaturePreview({
+  appearance: a,
+  logo,
+  owner,
+  signedAt,
+  framed = true,
+  scale = 1.25,
+}: {
+  appearance: SignatureAppearance;
+  logo: string | null;
+  owner: string;
+  signedAt?: Date;
+  /** Viền nét đứt (bản xem trước). */
+  framed?: boolean;
+  /** px trên mỗi pt. */
+  scale?: number;
+}) {
   const { width, height } = signatureBoxSize(a);
-  const scale = 1.25; // px trên mỗi pt
   // Thời điểm mẫu cố định khi mở thẻ (không đổi theo mỗi lần vẽ lại).
   const [sampleAt] = useState(() => new Date());
+  const at = signedAt ?? sampleAt;
   const lines = signatureTextLines(a, {
     owner,
-    signedAt: sampleAt,
-    cert: { serial: '54010C478754CBA588A73F5C9CD0B850', issuer: 'MISA eSign CA', validTo: new Date(sampleAt.getTime() + 3 * 365 * 86_400_000) },
+    signedAt: at,
+    cert: signedAt ? null : { serial: '54010C478754CBA588A73F5C9CD0B850', issuer: 'MISA eSign CA', validTo: new Date(sampleAt.getTime() + 3 * 365 * 86_400_000) },
   });
   const showImage = a.showLogo && !!logo;
   const vertical = a.layout === 'VERTICAL';
   return (
     <div
-      className={cn('relative flex overflow-hidden rounded-md border border-dashed border-gray-300 bg-white p-1 text-[#111]', vertical ? 'flex-col items-center' : 'items-center')}
+      className={cn('relative flex overflow-hidden bg-white p-1 text-[#111]', framed && 'rounded-md border border-dashed border-gray-300', vertical ? 'flex-col items-center' : 'items-center')}
       style={{ width: width * scale, height: height * scale }}
-      aria-label="Xem trước khung chữ ký"
+      aria-label={signedAt ? `Chữ ký số của ${owner}` : 'Xem trước khung chữ ký'}
     >
       {a.showCheck && (
         // eslint-disable-next-line @next/next/no-img-element -- ảnh base64 nhỏ, không qua tối ưu ảnh của Next.

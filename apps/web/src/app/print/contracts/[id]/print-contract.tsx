@@ -8,6 +8,7 @@ import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { SignedDocument } from '@/components/signed-document';
+import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/lib/api';
@@ -46,6 +47,7 @@ export function PrintContract() {
     queryFn: () => api<TemplateDetail>(`/templates/${templateId}`),
     enabled: status === 'authenticated' && !!templateId,
   });
+  const misaAppearance = useSignatureAppearance(signedMode && status === 'authenticated');
   const requests = useQuery({
     queryKey: ['contract', id, 'signature', 'print'],
     queryFn: () => api<SignatureRequestInfo[]>(`/contracts/${id}/signature`),
@@ -131,7 +133,7 @@ export function PrintContract() {
             {signedMode ? 'Hợp đồng chưa có yêu cầu ký đã hoàn tất.' : templateId ? 'Mẫu biên bản chưa có nội dung.' : 'Hợp đồng chưa có nội dung soạn thảo.'}
           </p>
         ) : signedMode && completed ? (
-          <SignedDocument snapshot={completed.contentSnapshot} documentHash={completed.documentHash} signers={completed.signers} />
+          <SignedDocument snapshot={completed.contentSnapshot} documentHash={completed.documentHash} signers={completed.signers} misaAppearance={misaAppearance.data} />
         ) : (
           <div className="a4-page">
             {/* HTML đã được backend làm sạch; giá trị biến được escape khi render. */}
