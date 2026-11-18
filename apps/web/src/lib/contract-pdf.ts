@@ -35,7 +35,8 @@ function signatureBlock(s: DocSigner): Content {
   const mark: Content =
     s.status !== 'SIGNED' || !s.signatureImage
       ? {
-          text: s.status === 'REJECTED' ? 'Đã từ chối ký' : s.method === 'MISA_ESIGN' ? 'Ký số MISA eSign (trang Chữ ký số)' : 'Chưa ký',
+          // Người ký số MISA: để trống đúng khoảng chữ ký – khung chữ ký số do MISA đóng lên PDF, không in chữ chú thích.
+          text: s.status === 'REJECTED' ? 'Đã từ chối ký' : s.method === 'MISA_ESIGN' ? ' ' : 'Chưa ký',
           color: '#888888',
           fontSize: 9,
           margin: [0, 22, 0, 22],
