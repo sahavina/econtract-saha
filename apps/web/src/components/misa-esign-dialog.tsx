@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
 import { type SignaturePlacement, SignaturePlacer } from '@/components/signature-placer';
+import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { api, ApiError } from '@/lib/api';
 import { type MisaCertificate, type MisaSession, type MisaStatus, useMisaStatus } from '@/lib/esign';
 import type { ContractDocument } from '@/lib/types';
@@ -260,6 +261,7 @@ function SignForm({
   /** Vị trí người ký tự chọn trên bản xem trước; null ⇒ vị trí mặc định. */
   const [placement, setPlacement] = useState<SignaturePlacement | null>(null);
   const [placerPath, setPlacerPath] = useState<string | null>(null);
+  const appearance = useSignatureAppearance();
   const openPlacer = useMutation({
     meta: { silent: true },
     mutationFn: async () => `/contracts/${contractId}/documents/${doc ? doc.id : await signature!.prepare()}/download`,
@@ -323,6 +325,7 @@ function SignForm({
         <SignaturePlacer
           path={placerPath}
           initial={placement}
+          size={appearance.data?.box}
           onCancel={() => setPlacerPath(null)}
           onConfirm={(p) => {
             setPlacement(p);

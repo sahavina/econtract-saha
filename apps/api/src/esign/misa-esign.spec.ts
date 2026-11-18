@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../common/auth-user.js';
 import { SecretBox } from '../integrations/secret-box.js';
-import { EsignService, misaSignSchema, signatureBox } from './esign.service.js';
+import { DEFAULT_SIGNATURE_APPEARANCE, parseSignatureAppearance, signatureBoxSize, signatureTextLines } from '@saha/shared';
+import { EsignService, misaSignSchema, signatureAppearanceSchema, signatureBox, signatureLogoSchema } from './esign.service.js';
 import { MisaError, MisaEsignClient, pdfPageCount } from './misa-esign.client.js';
 
 const cfg = { baseUrl: 'https://misa.test/apis/', clientId: 'cid', clientSecret: 'csec' };
@@ -157,6 +158,38 @@ describe('MisaEsignClient', () => {
     // Chỉ có x (thiếu y) ⇒ coi như chưa chọn.
     expect(signatureBox(misaSignSchema.parse({ x: 10 }), 1)).toMatchObject({ positionX: 375 });
     expect(() => misaSignSchema.parse({ x: -1, y: 5 })).toThrow();
+  });
+
+  it('hiển thị chữ ký: dòng chữ theo cấu hình, khung theo bố cục/cỡ hình, ảnh và chế độ hiển thị gửi sang MISA', async () => {
+    const at = new Date('2026-11-18T13:51:22Z'); // 20:51:22 giờ Việt Nam
+    const a = { ...DEFAULT_SIGNATURE_APPEARANCE };
+    expect(signatureTextLines(a, { owner: 'CÔNG TY SAHA', signedAt: at })).toEqual(['Ký số bởi: CÔNG TY SAHA', 'Thời gian: 18/11/2026, 20:51:22']);
+    expect(
+      signatureTextLines(
+        { ...a, showLabels: false, showCertDetails: true, language: 'en' },
+        { owner: 'SAHA', signedAt: at, cert: { serial: 'AB12', issuer: 'MISA CA', validTo: new Date('2029-11-17T06:30:56Z') } },
+      ),
+    ).toEqual(['SAHA', '18/11/2026, 20:51:22', 'AB12', 'MISA CA', '17/11/2029']);
+    expect(signatureTextLines({ ...a, language: 'en', showTime: false }, { owner: 'SAHA', signedAt: at })).toEqual(['Signed by: SAHA']);
+    expect(signatureBoxSize({ layout: 'VERTICAL', imageSize: 'L' })).toEqual({ width: 160, height: 120 });
+    // Không chọn vị trí: sát lề phải theo bề rộng khung, xếp chồng theo chiều cao khung.
+    expect(signatureBox(misaSignSchema.parse({}), 2, 1, { width: 220, height: 75 })).toMatchObject({ page: 2, positionX: 335, positionY: 125, width: 220, height: 75 });
+    expect(parseSignatureAppearance({ layout: 'X', fontSize: 99, showLogo: true })).toEqual({ ...a, showLogo: true });
+    expect(signatureAppearanceSchema.safeParse({ ...a, fontSize: 11 }).success).toBe(false);
+    expect(signatureLogoSchema.safeParse({ dataUrl: 'data:image/gif;base64,AAAA' }).success).toBe(false);
+    expect(signatureLogoSchema.safeParse({ dataUrl: 'data:image/png;base64,iVBORw0K' }).success).toBe(true);
+
+    const fetchMock = vi.fn().mockImplementation(async () => json({ pdfDocs: [{ documentId: 'd1', digest: 'DG' }] }));
+    const box = { page: 1, positionX: 1, positionY: 1, width: 180, height: 60, signedBy: 'A', reason: 'R', location: 'L', contact: 'c' };
+    const cert = { keyAlias: 'k1', keyStatus: 'ACTIVE', certificate: 'C', certificateChain: [] };
+    await new MisaEsignClient(cfg, fetchMock).hashPdf(cert, 'd1', 'UERG', { ...box, appearance: { fontSize: 9, displayText: 'X\nY', signatureImage: 'IMG', logoImage: 'LOGO' } }, 'S');
+    const info = JSON.parse(fetchMock.mock.calls[0][1].body).pdfDocs[0].signatureInfo;
+    expect(info).toMatchObject({ renderingMode: 1, fontSize: 9, signatureImage: 'IMG', logoImage: 'LOGO' });
+    expect(info.signatureDescription).toMatchObject({ displayText: 'X\nY', showSignedDate: false });
+    await new MisaEsignClient(cfg, fetchMock).hashPdf(cert, 'd1', 'UERG', { ...box, appearance: { fontSize: 8, displayText: '', signatureImage: 'IMG' } }, 'S');
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).pdfDocs[0].signatureInfo.renderingMode).toBe(2);
+    await new MisaEsignClient(cfg, fetchMock).hashPdf(cert, 'd1', 'UERG', box, 'S');
+    expect(JSON.parse(fetchMock.mock.calls[2][1].body).pdfDocs[0].signatureInfo).toMatchObject({ renderingMode: 0, fontSize: 8 });
   });
 
   it('đếm số trang PDF', () => {

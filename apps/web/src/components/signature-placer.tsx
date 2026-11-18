@@ -8,9 +8,8 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { apiRaw } from '@/lib/api';
 import { loadPdfjs } from '@/lib/pdf-text';
 
-/** Khung chữ ký số (khớp SIGNATURE_BOX phía API): 180 × 60 pt. */
-export const SIG_W = 180;
-export const SIG_H = 60;
+/** Khung chữ ký số mặc định (bố cục ngang, hình vừa): 180 × 60 pt; kích thước thật theo Cấu hình → Hiển thị chữ ký số. */
+const DEFAULT_SIZE = { width: 180, height: 60 };
 
 /** Vị trí khung chữ ký: trang (từ 1) và góc dưới trái khung theo tọa độ PDF (pt, gốc góc dưới trái trang). */
 export interface SignaturePlacement {
@@ -29,9 +28,12 @@ const MAX_WIDTH = 640;
 export function SignaturePlacer({
   path,
   initial,
+  size = DEFAULT_SIZE,
   onCancel,
   onConfirm,
 }: {
+  /** Kích thước khung chữ ký (pt). */
+  size?: { width: number; height: number };
   /** Đường dẫn API tải tệp PDF (kèm phiên đăng nhập). */
   path: string;
   initial: SignaturePlacement | null;
@@ -107,8 +109,8 @@ export function SignaturePlacer({
     const r = wrapRef.current.getBoundingClientRect();
     const [px, py] = view.viewport.convertToPdfPoint(clientX - r.left, clientY - r.top) as [number, number];
     // Điểm bấm là tâm khung chữ ký; giữ khung nằm trọn trong trang.
-    const x = Math.min(Math.max(px - bounds.x0 - SIG_W / 2, 0), Math.max(bounds.w - SIG_W, 0));
-    const y = Math.min(Math.max(py - bounds.y0 - SIG_H / 2, 0), Math.max(bounds.h - SIG_H, 0));
+    const x = Math.min(Math.max(px - bounds.x0 - size.width / 2, 0), Math.max(bounds.w - size.width, 0));
+    const y = Math.min(Math.max(py - bounds.y0 - size.height / 2, 0), Math.max(bounds.h - size.height, 0));
     setPlace({ page: pageNo, x: Math.round(x), y: Math.round(y) });
   };
 
@@ -116,7 +118,7 @@ export function SignaturePlacer({
     view && bounds && place && place.page === pageNo
       ? (() => {
           const [x1, y1] = view.viewport.convertToViewportPoint(place.x + bounds.x0, place.y + bounds.y0) as [number, number];
-          const [x2, y2] = view.viewport.convertToViewportPoint(place.x + bounds.x0 + SIG_W, place.y + bounds.y0 + SIG_H) as [number, number];
+          const [x2, y2] = view.viewport.convertToViewportPoint(place.x + bounds.x0 + size.width, place.y + bounds.y0 + size.height) as [number, number];
           return { left: Math.min(x1, x2), top: Math.min(y1, y2), width: Math.abs(x2 - x1), height: Math.abs(y2 - y1) };
         })()
       : null;

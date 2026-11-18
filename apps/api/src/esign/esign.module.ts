@@ -17,7 +17,10 @@ import {
   misaOtpSchema,
   type MisaSignInput,
   misaSignSchema,
+  signatureAppearanceSchema,
+  signatureLogoSchema,
 } from './esign.service.js';
+import type { SignatureAppearance } from '@saha/shared';
 
 const VIEW = [PERMISSIONS.CONTRACT_VIEW_ALL, PERMISSIONS.CONTRACT_VIEW_OWN] as const;
 
@@ -52,6 +55,31 @@ class EsignController {
   @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
   test(@CurrentUser() user: AuthUser) {
     return this.esign.test(user);
+  }
+
+  // Hiển thị chữ ký trên PDF (doanh nghiệp). Người ký đọc để chọn vị trí đúng kích thước khung.
+  @Get('appearance')
+  @RequireAnyPermission(PERMISSIONS.SETTINGS_MANAGE, ...VIEW)
+  appearance(@CurrentUser() user: AuthUser) {
+    return this.esign.getAppearance(user);
+  }
+
+  @Put('appearance')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  saveAppearance(@CurrentUser() user: AuthUser, @Body(new ZodPipe(signatureAppearanceSchema)) body: SignatureAppearance) {
+    return this.esign.saveAppearance(user, body);
+  }
+
+  @Put('appearance/logo')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  saveLogo(@CurrentUser() user: AuthUser, @Body(new ZodPipe(signatureLogoSchema)) body: z.infer<typeof signatureLogoSchema>) {
+    return this.esign.saveLogo(user, body.dataUrl);
+  }
+
+  @Delete('appearance/logo')
+  @RequirePermissions(PERMISSIONS.SETTINGS_MANAGE)
+  removeLogo(@CurrentUser() user: AuthUser) {
+    return this.esign.removeLogo(user);
   }
 
   // Tài khoản MISA eSign của chính người dùng.

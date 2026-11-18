@@ -2,7 +2,7 @@
 
 import { renderCode, validateCodePattern } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Building2, FileCode2, Hash, Loader2, type LucideIcon, Mail, Pencil, PenLine, Plug, Plus, Type } from 'lucide-react';
+import { Building2, FileCode2, Hash, Loader2, type LucideIcon, Mail, Pencil, PenLine, Plug, Plus, Stamp, Type } from 'lucide-react';
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { CompanyProfileCard } from '@/components/company-profile-card';
@@ -10,6 +10,7 @@ import { DocumentFontCard } from '@/components/document-font-card';
 import { EmailSettingsCard } from '@/components/email-settings-card';
 import { MobileCard, StatusPill, TitleCell, Th } from '@/components/list-ui';
 import { MisaEsignSettingsCard } from '@/components/misa-esign-settings-card';
+import { SignatureAppearanceCard } from '@/components/signature-appearance-card';
 import { OdooSettingsCard } from '@/components/odoo-settings-card';
 import { QuoteCodeSettingsCard } from '@/components/quote-code-settings-card';
 import { SettingsSection } from '@/components/settings-section';
@@ -131,6 +132,7 @@ const SECTIONS: { id: string; icon: LucideIcon; label: string }[] = [
   { id: 'email', icon: Mail, label: 'Email gửi đi (SMTP)' },
   { id: 'odoo', icon: Plug, label: 'Tích hợp Odoo' },
   { id: 'misa', icon: PenLine, label: 'Chữ ký số MISA eSign' },
+  { id: 'misa-appearance', icon: Stamp, label: 'Hiển thị chữ ký số' },
 ];
 
 export default function AdminSettingsPage() {
@@ -245,6 +247,7 @@ export default function AdminSettingsPage() {
           <EmailSettingsCard id="email" />
           <OdooSettingsCard id="odoo" />
           <MisaEsignSettingsCard id="misa" />
+          <SignatureAppearanceCard id="misa-appearance" />
         </div>
       </div>
       {editing && <TypeDialog draft={editing} onClose={() => setEditing(null)} />}

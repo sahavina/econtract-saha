@@ -42,6 +42,16 @@ export interface MisaSignatureBox {
   reason: string;
   location: string;
   contact: string;
+  /** Hiển thị (Cấu hình → Hiển thị chữ ký); thiếu ⇒ như trước: chỉ diễn giải mặc định của MISA, cỡ chữ 8. */
+  appearance?: {
+    fontSize: number;
+    /** Dòng chữ tự soạn, xuống dòng bằng "\n"; rỗng ⇒ không có chữ. */
+    displayText: string;
+    /** Ảnh logo/con dấu (base64, không kèm tiền tố data:). */
+    signatureImage?: string;
+    /** Ảnh nền nhỏ (dấu tích xanh). */
+    logoImage?: string;
+  };
 }
 
 /** Dữ liệu trả về từ bước băm, cần giữ lại để gắn chữ ký. */
@@ -245,21 +255,26 @@ export class MisaEsignClient {
           FileToSign: pdfBase64,
           signatureInfo: {
             textColor: 0,
-            renderingMode: 0,
+            // 0: chỉ chữ diễn giải, 1: chữ + ảnh, 2: chỉ ảnh.
+            renderingMode: box.appearance?.signatureImage ? (box.appearance.displayText ? 1 : 2) : 0,
             positionX: box.positionX,
             positionY: box.positionY,
             width: box.width,
             height: box.height,
-            fontSize: 8,
+            fontSize: box.appearance?.fontSize ?? 8,
             page: box.page,
             signatureName,
             hashAlgorithm: 'SHA256',
+            ...(box.appearance?.signatureImage && { signatureImage: box.appearance.signatureImage }),
+            ...(box.appearance?.logoImage && { logoImage: box.appearance.logoImage }),
             signatureDescription: {
               signedBy: box.signedBy,
-              showSignedDate: true,
+              // Có dòng chữ tự soạn (đã gồm thời gian nếu bật) ⇒ không để MISA thêm ngày ký lần nữa.
+              showSignedDate: !box.appearance,
               location: box.location,
               reason: box.reason,
               contact: box.contact,
+              ...(box.appearance && { displayText: box.appearance.displayText }),
             },
           },
         },

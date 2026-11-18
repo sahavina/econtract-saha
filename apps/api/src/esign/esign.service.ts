@@ -2,6 +2,17 @@ import { X509Certificate } from 'node:crypto';
 import { randomUUID } from 'node:crypto';
 import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import {
+  parseSignatureAppearance,
+  SIGNATURE_CHECK_PNG_BASE64,
+  SIGNATURE_FONT_SIZES,
+  SIGNATURE_IMAGE_SIZES,
+  SIGNATURE_LANGUAGES,
+  SIGNATURE_LAYOUTS,
+  type SignatureAppearance,
+  signatureBoxSize,
+  signatureTextLines,
+} from '@saha/shared';
 import { z } from 'zod';
 import { AuditService } from '../audit/audit.service.js';
 import type { AuthUser } from '../common/auth-user.js';
@@ -58,22 +69,64 @@ export const misaSignSchema = z.object({
 });
 export type MisaSignInput = z.infer<typeof misaSignSchema>;
 
-/** Khung chữ ký số hiển thị: 180 × 60 pt. */
+/** Khung chữ ký số mặc định: 180 × 60 pt (bố cục ngang, hình vừa). */
 export const SIGNATURE_BOX = { width: 180, height: 60 } as const;
+
+/** Cấu hình hiển thị chữ ký (doanh nghiệp). */
+export const signatureAppearanceSchema = z.object({
+  showOwner: z.boolean(),
+  showLogo: z.boolean(),
+  showTime: z.boolean(),
+  showCertDetails: z.boolean(),
+  showLabels: z.boolean(),
+  showCheck: z.boolean(),
+  layout: z.enum(SIGNATURE_LAYOUTS),
+  imageSize: z.enum(SIGNATURE_IMAGE_SIZES),
+  fontSize: z.coerce.number().int().refine((n) => (SIGNATURE_FONT_SIZES as readonly number[]).includes(n), 'Cỡ chữ không hợp lệ'),
+  language: z.enum(SIGNATURE_LANGUAGES),
+});
+
+/** Ảnh logo/con dấu: data URL PNG/JPEG, tối đa ~300 KB. */
+export const signatureLogoSchema = z.object({
+  dataUrl: z
+    .string()
+    .max(420_000, 'Ảnh tối đa 300 KB')
+    .regex(/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/=]+$/, 'Chỉ nhận ảnh PNG hoặc JPG'),
+});
+
+type EsignSettings = { signatureAppearance?: unknown; signatureLogo?: string } & Record<string, unknown>;
+
+/** Thông tin hiển thị của chứng thư (đọc từ X.509). */
+export function certificateDetails(certBase64: string): { serial: string; issuer: string | null; validTo: Date | null } | null {
+  try {
+    const x = new X509Certificate(Buffer.from(certBase64, 'base64'));
+    const cn = /(?:^|\n)CN=([^\n]+)/.exec(x.issuer)?.[1] ?? null;
+    const to = new Date(x.validTo);
+    return { serial: x.serialNumber.toUpperCase(), issuer: cn, validTo: Number.isNaN(to.getTime()) ? null : to };
+  } catch {
+    return null;
+  }
+}
 
 /**
  * Vị trí khung chữ ký (tọa độ PDF tính từ góc dưới trái trang, đơn vị pt; A4 = 595 × 842).
  * Người ký chọn trên bản xem trước (x, y) ⇒ dùng đúng chỗ đó; không chọn ⇒ cuối trang, nhiều người ký số
  * xếp chồng theo thứ tự đã ký (`slot`).
  */
-export function signatureBox(input: Pick<MisaSignInput, 'page' | 'position' | 'x' | 'y'>, pages: number, slot = 0) {
+export function signatureBox(
+  input: Pick<MisaSignInput, 'page' | 'position' | 'x' | 'y'>,
+  pages: number,
+  slot = 0,
+  size: { width: number; height: number } = SIGNATURE_BOX,
+) {
   const page = Math.min(input.page ?? pages, pages);
   const chosen = input.x !== undefined && input.y !== undefined;
   return {
     page,
-    positionX: chosen ? Math.round(input.x!) : input.position === 'BOTTOM_LEFT' ? 40 : 375,
-    positionY: chosen ? Math.round(input.y!) : 40 + slot * 70,
-    ...SIGNATURE_BOX,
+    // Mặc định: lề trái 40pt hoặc sát lề phải (mép phải 555pt trên A4).
+    positionX: chosen ? Math.round(input.x!) : input.position === 'BOTTOM_LEFT' ? 40 : 555 - size.width,
+    positionY: chosen ? Math.round(input.y!) : 40 + slot * (size.height + 10),
+    ...size,
   };
 }
 
@@ -220,6 +273,52 @@ export class EsignService {
       data: { lastTestedAt: new Date(), lastTestOk: ok },
     });
     return { ok, message };
+  }
+
+  // ───────────── Hiển thị chữ ký (doanh nghiệp) ─────────────
+
+  private async appearanceOf(tenantId: string) {
+    const t = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId }, select: { settings: true } });
+    const s = (t.settings ?? {}) as EsignSettings;
+    return { appearance: parseSignatureAppearance(s.signatureAppearance), logo: typeof s.signatureLogo === 'string' ? s.signatureLogo : null };
+  }
+
+  /** Cấu hình hiển thị + ảnh logo (data URL) + kích thước khung để chọn vị trí ký đúng cỡ. */
+  async getAppearance(user: AuthUser) {
+    const { appearance, logo } = await this.appearanceOf(user.tenantId);
+    return { appearance, logo, box: signatureBoxSize(appearance) };
+  }
+
+  private async saveSettings(user: AuthUser, patch: Partial<EsignSettings>, removeLogo = false) {
+    await this.prisma.$transaction(async (tx) => {
+      const t = await tx.tenant.findUniqueOrThrow({ where: { id: user.tenantId }, select: { settings: true } });
+      const next: EsignSettings = { ...((t.settings ?? {}) as EsignSettings), ...patch };
+      if (removeLogo) delete next.signatureLogo;
+      await tx.tenant.update({ where: { id: user.tenantId }, data: { settings: next as unknown as Prisma.InputJsonValue } });
+      await this.audit.log(
+        user,
+        {
+          action: 'integration.esign_appearance',
+          entityType: 'integration',
+          entityId: PROVIDER,
+          data: { appearance: !!patch.signatureAppearance, logo: removeLogo ? 'removed' : patch.signatureLogo ? 'updated' : undefined },
+        },
+        tx,
+      );
+    });
+    return this.getAppearance(user);
+  }
+
+  saveAppearance(user: AuthUser, input: SignatureAppearance) {
+    return this.saveSettings(user, { signatureAppearance: input });
+  }
+
+  saveLogo(user: AuthUser, dataUrl: string) {
+    return this.saveSettings(user, { signatureLogo: dataUrl });
+  }
+
+  removeLogo(user: AuthUser) {
+    return this.saveSettings(user, {}, true);
   }
 
   // ───────────── Tài khoản MISA eSign của người dùng ─────────────
@@ -396,12 +495,21 @@ export class EsignService {
     const cert = (await this.certificatesWith(user, client)).find((c) => c.keyAlias === account.certAlias);
     if (!cert || cert.keyStatus.toUpperCase() !== 'ACTIVE') throw new BadRequestException('Chứng thư số đã chọn không còn hoạt động – chọn lại chứng thư');
 
+    const { appearance, logo } = await this.appearanceOf(user.tenantId);
+    const owner = account.certSubject ?? account.displayName ?? user.fullName;
+    const lines = signatureTextLines(appearance, { owner, signedAt: new Date(), cert: certificateDetails(cert.certificate) });
     const box: MisaSignatureBox = {
-      ...signatureBox(input, pdfPageCount(buffer), signer?.slot ?? 0),
-      signedBy: account.certSubject ?? account.displayName ?? user.fullName,
+      ...signatureBox(input, pdfPageCount(buffer), signer?.slot ?? 0, signatureBoxSize(appearance)),
+      signedBy: owner,
       reason: input.reason || `Ký hợp đồng ${contract.code}`,
       location: input.location || 'Việt Nam',
       contact: user.email ?? account.username,
+      appearance: {
+        fontSize: appearance.fontSize,
+        displayText: lines.join('\n'),
+        ...(appearance.showLogo && logo && { signatureImage: logo.split(',')[1] }),
+        ...(appearance.showCheck && { logoImage: SIGNATURE_CHECK_PNG_BASE64 }),
+      },
     };
     const docKey = randomUUID();
     const hash = await this.wrap(() => client.hashPdf(cert, docKey, buffer.toString('base64'), box, `SAHA_${Date.now()}`));

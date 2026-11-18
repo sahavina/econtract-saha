@@ -12,3 +12,4 @@ export * from './quote.js';
 export * from './xlsx.js';
 export * from './inspection.js';
 export * from './document-font.js';
+export * from './signature-appearance.js';
