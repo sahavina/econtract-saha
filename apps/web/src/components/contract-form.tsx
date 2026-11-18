@@ -78,6 +78,7 @@ import { attachMainDocument, DOCUMENT_ACCEPT, DOCUMENT_MAX_BYTES, formatFileSize
 import { formatMoney, toDateInput } from '@/lib/format';
 import { odooReady, useOdooConfig } from '@/lib/odoo';
 import { isPaymentTemplate } from '@/lib/payment-request';
+import { isRecordTemplate } from '@/components/record-print-dialog';
 import { useLookups } from '@/lib/queries';
 import type { ContractDetail, ContractDocument, ContractKind, ContractListItem, Partner, Product, QuoteDetail, TemplateDetail, TemplateListItem } from '@/lib/types';
 
@@ -893,7 +894,7 @@ export function ContractForm({
   // trừ mẫu đề nghị thanh toán (chỉ dùng ở trang Đề nghị thanh toán).
   const kindTypes = (lookups.data?.contractTypes ?? []).filter((t) => (t.kind ?? 'CONTRACT') === kind);
   const typeKind = (id?: string) => lookups.data?.contractTypes.find((t) => t.id === id)?.kind ?? 'CONTRACT';
-  const kindTemplates = (templates.data?.items ?? []).filter((t) => (t.contractType ? typeKind(t.contractType.id) === kind : !isPaymentTemplate(t)));
+  const kindTemplates = (templates.data?.items ?? []).filter((t) => !isRecordTemplate(t) && (t.contractType ? typeKind(t.contractType.id) === kind : !isPaymentTemplate(t)));
   const selectedTemplate = templates.data?.items.find((t) => t.id === templateId);
   const selectedType =
     lookups.data?.contractTypes.find((t) => t.id === contractTypeId) ??

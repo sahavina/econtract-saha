@@ -40,6 +40,14 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
     ],
   },
   {
+    // Biên bản giao hàng, biên bản xác nhận đơn… in từ hồ sơ có sẵn: ngày lập là ngày in (giờ Việt Nam).
+    group: 'Biên bản',
+    items: [
+      { key: 'doc.date', label: 'Ngày lập biên bản' },
+      { key: 'doc.date_text', label: 'Ngày lập biên bản (ngày … tháng … năm …)' },
+    ],
+  },
+  {
     // Lập từ trang Đề nghị thanh toán thì lấy theo nội dung đã nhập; lập hồ sơ từ mẫu thì suy ra từ dữ liệu hợp đồng/đơn hàng.
     group: 'Đề nghị thanh toán',
     items: [
@@ -74,7 +82,7 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
 export const TEMPLATE_VARIABLE_KEYS = new Set(TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => i.key)));
 
 const VARIABLE_LABELS = new Map(
-  TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => [i.key, g.group === 'Hợp đồng' || g.group === 'Đơn đặt hàng' || g.group === 'Đề nghị thanh toán' ? i.label : `${g.group} – ${i.label}`] as const)),
+  TEMPLATE_VARIABLES.flatMap((g) => g.items.map((i) => [i.key, g.group === 'Hợp đồng' || g.group === 'Đơn đặt hàng' || g.group === 'Đề nghị thanh toán' || g.group === 'Biên bản' ? i.label : `${g.group} – ${i.label}`] as const)),
 );
 
 /** Tên tiếng Việt của biến cho người dùng: "contract.vat_rate" → "Thuế VAT (%)", "party_b.phone" → "Bên B – Điện thoại". */
@@ -142,8 +150,8 @@ export function formatNumberVi(value: string | number | null | undefined): strin
   return frac && Number(frac) !== 0 ? `${grouped},${frac.replace(/0+$/, '')}` : grouped;
 }
 
-/** Bảng giá trị biến từ dữ liệu hợp đồng; biến không có dữ liệu mang giá trị null. */
-export function buildTemplateValues(c: TemplateContract): Record<string, string | null> {
+/** Bảng giá trị biến từ dữ liệu hợp đồng; biến không có dữ liệu mang giá trị null. `now`: thời điểm lập biên bản (mặc định lúc gọi). */
+export function buildTemplateValues(c: TemplateContract, now: Date = new Date()): Record<string, string | null> {
   const party = (role: string) => c.parties.find((p) => p.role === role);
   const values: Record<string, string | null> = {
     'contract.code': c.code,
@@ -155,6 +163,10 @@ export function buildTemplateValues(c: TemplateContract): Record<string, string 
     'contract.end_date': formatDateVi(c.expiryDate),
     'contract.sign_date': formatDateVi(c.expectedSignDate),
   };
+  // Ngày theo giờ Việt Nam (UTC+7); formatDateVi đọc theo UTC nên dời mốc trước khi định dạng.
+  const today = new Date(now.getTime() + 7 * 3_600_000);
+  values['doc.date'] = formatDateVi(today);
+  values['doc.date_text'] = dateTextVi(today);
   const items = (c.items ?? []).map((i) => ({ ...i, quantity: String(i.quantity), unitPrice: String(i.unitPrice), amount: i.amount == null ? null : String(i.amount) }));
   const vat = c.vatRate === null || c.vatRate === undefined ? null : String(c.vatRate);
   const totals = items.length ? orderTotals(items, vat) : null;

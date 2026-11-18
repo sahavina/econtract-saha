@@ -2,7 +2,7 @@
 
 import { type ContractStatus } from '@saha/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { Archive, ArchiveRestore, CheckCircle2, ChevronRight, ClipboardCheck, Copy, FileText, FileX2, MoreHorizontal, Package, PackageMinus, Pencil, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
+import { Archive, ArchiveRestore, CheckCircle2, ChevronRight, ClipboardCheck, Copy, FileText, FileX2, MoreHorizontal, Package, PackageMinus, Pencil, Printer, Receipt, RotateCcw, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
@@ -19,6 +19,7 @@ import { OrderDeliveries } from '@/components/order-deliveries';
 import { ContractRevisionsTab } from '@/components/contract-revisions-tab';
 import { ContractInspectionsTab, useContractInspections } from '@/components/contract-inspections';
 import { InspectionRequestDialog } from '@/components/inspection-request-dialog';
+import { RecordPrintDialog } from '@/components/record-print-dialog';
 import { LiquidateDialog } from '@/components/liquidate-dialog';
 import { ContractSignatureTab } from '@/components/contract-signature-tab';
 import { EmptyState, ErrorState } from '@/components/page-header';
@@ -114,6 +115,7 @@ export default function ContractDetailPage() {
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
   const [liquidating, setLiquidating] = useState(false);
   const [inspecting, setInspecting] = useState(false);
+  const [printingRecord, setPrintingRecord] = useState(false);
   const inspections = useContractInspections(id);
   const [tab, setTab] = useState(initialTab);
   /** Mở một tab từ nút trong tab Tổng quan và cuộn tới thanh tab. */
@@ -221,6 +223,11 @@ export default function ContractDetailPage() {
                     {can('inspection.create') && (
                       <DropdownMenuItem onSelect={() => setInspecting(true)}>
                         <ClipboardCheck /> Yêu cầu kiểm tra
+                      </DropdownMenuItem>
+                    )}
+                    {(can('contract.create') || can('template.view')) && (
+                      <DropdownMenuItem onSelect={() => setPrintingRecord(true)}>
+                        <Printer /> In biên bản
                       </DropdownMenuItem>
                     )}
                     {isOrder && can('delivery.manage') && (
@@ -444,6 +451,7 @@ export default function ContractDetailPage() {
 
       <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
       <LiquidateDialog contractId={c.id} code={c.code} open={liquidating} onClose={() => setLiquidating(false)} />
+      {printingRecord && <RecordPrintDialog contractId={c.id} onClose={() => setPrintingRecord(false)} />}
       {inspecting && <InspectionRequestDialog open target={{ contractId: c.id, code: c.code, kind: c.kind }} onClose={() => setInspecting(false)} />}
     </>
   );

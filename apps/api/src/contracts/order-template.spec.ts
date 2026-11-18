@@ -42,4 +42,10 @@ describe('đơn đặt hàng – tính tiền và nội dung', () => {
     expect(html).toContain('Keo &lt;b&gt;A&lt;/b&gt;');
     expect(html).toContain('2.160.000 – Hai triệu một trăm sáu mươi nghìn đồng – 0501/2026/HĐNT/APOLLO-SAHA');
   });
+  it('ngày lập biên bản theo giờ Việt Nam', () => {
+    // 18/11/2026 20:30 UTC = 03:30 ngày 19/11 giờ Việt Nam.
+    const v = buildTemplateValues({ code: 'X', title: 'X', value: '0', currency: 'VND', parties: [] }, new Date('2026-11-18T20:30:00Z'));
+    expect(v['doc.date']).toBe('19/11/2026');
+    expect(v['doc.date_text']).toBe('ngày 19 tháng 11 năm 2026');
+  });
 });
