@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
-import { type SignaturePlacement, SignaturePlacer } from '@/components/signature-placer';
+import { findAnchorPlacement, type SignaturePlacement, SignaturePlacer } from '@/components/signature-placer';
 import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { api, ApiError } from '@/lib/api';
 import { type MisaCertificate, type MisaSession, type MisaStatus, useMisaStatus } from '@/lib/esign';
@@ -25,6 +25,9 @@ export interface SignatureTarget {
   prepare: () => Promise<string>;
 }
 
+/** Dòng neo đặt chữ ký của bên nội bộ, vd "ĐẠI DIỆN BÊN B". */
+export const anchorFor = (role: string | null | undefined) => (role === 'PARTY_A' ? 'ĐẠI DIỆN BÊN A' : role === 'PARTY_C' ? 'ĐẠI DIỆN BÊN C' : 'ĐẠI DIỆN BÊN B');
+
 /**
  * Ký số bằng tài khoản MISA eSign của người dùng hiện tại: một tệp PDF trong tab Tài liệu (`doc`)
  * hoặc lượt ký của mình trong yêu cầu ký điện tử (`signature`).
@@ -33,12 +36,15 @@ export function MisaEsignDialog({
   contractId,
   doc,
   signature,
+  anchor,
   onClose,
   onSigned,
 }: {
   contractId: string;
   doc?: ContractDocument;
   signature?: SignatureTarget;
+  /** Dòng neo để tự đặt chữ ký (vd "ĐẠI DIỆN BÊN B"); chỉnh lại được bằng "Chọn trên bản ký". */
+  anchor?: string;
   onClose: () => void;
   onSigned: () => void;
 }) {
@@ -71,7 +77,7 @@ export function MisaEsignDialog({
         ) : !s.account.certAlias ? (
           <ChooseCertificate />
         ) : (
-          <SignForm contractId={contractId} doc={doc} signature={signature} account={s.account} onStarted={setSessionId} onCancel={onClose} />
+          <SignForm contractId={contractId} doc={doc} signature={signature} anchor={anchor} account={s.account} onStarted={setSessionId} onCancel={onClose} />
         )}
       </DialogContent>
     </Dialog>
@@ -243,6 +249,7 @@ function SignForm({
   contractId,
   doc,
   signature,
+  anchor,
   account,
   onStarted,
   onCancel,
@@ -250,6 +257,7 @@ function SignForm({
   contractId: string;
   doc?: ContractDocument;
   signature?: SignatureTarget;
+  anchor?: string;
   account: NonNullable<MisaStatus['account']>;
   onStarted: (id: string) => void;
   onCancel: () => void;
@@ -262,22 +270,31 @@ function SignForm({
   const [placement, setPlacement] = useState<SignaturePlacement | null>(null);
   const [placerPath, setPlacerPath] = useState<string | null>(null);
   const appearance = useSignatureAppearance();
+  /** Vị trí tự tìm theo dòng neo (vd "ĐẠI DIỆN BÊN B") – làm điểm bắt đầu khi chọn trên bản ký. */
+  const [anchorSpot, setAnchorSpot] = useState<SignaturePlacement | null>(null);
+  const docPath = async () => `/contracts/${contractId}/documents/${doc ? doc.id : await signature!.prepare()}/download`;
+  const locate = async (path: string) => (anchor ? await findAnchorPlacement(path, anchor, appearance.data?.box).catch(() => null) : null);
   const openPlacer = useMutation({
     meta: { silent: true },
-    mutationFn: async () => `/contracts/${contractId}/documents/${doc ? doc.id : await signature!.prepare()}/download`,
+    mutationFn: async () => {
+      const path = await docPath();
+      if (!placement) setAnchorSpot(await locate(path));
+      return path;
+    },
     onSuccess: setPlacerPath,
     onError: (e) => setError(errText(e)),
   });
   const start = useMutation({
     meta: { silent: true },
     mutationFn: async () => {
-      if (signature) await signature.prepare();
+      // Chưa chọn vị trí ⇒ tự đặt ngay dưới dòng neo nếu tìm thấy trong bản PDF.
+      const where = placement ?? (await locate(await docPath()));
       const path = doc ? `/esign/misa/contracts/${contractId}/documents/${doc.id}/sign` : `/esign/misa/contracts/${contractId}/signature/sign`;
       return api<{ sessionId: string }>(path, {
         method: 'POST',
-        // Đã chọn trên bản xem trước ⇒ đúng chỗ đó; không thì tệp PDF: trang/góc theo ô chọn, yêu cầu ký: trang "Chữ ký số" cuối văn bản.
-        body: placement
-          ? { page: placement.page, x: placement.x, y: placement.y, reason: opts.reason || undefined }
+        // Đã chọn trên bản xem trước / tìm được dòng neo ⇒ đúng chỗ đó; không thì tệp PDF: trang/góc theo ô chọn, yêu cầu ký: cuối trang cuối.
+        body: where
+          ? { page: where.page, x: where.x, y: where.y, reason: opts.reason || undefined }
           : doc
             ? { page: opts.page ? Number(opts.page) : undefined, position: opts.position, reason: opts.reason || undefined }
             : { reason: opts.reason || undefined },
@@ -310,7 +327,7 @@ function SignForm({
       <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
         <span>
           Vị trí chữ ký:{' '}
-          <span className="font-medium">{placement ? `trang ${placement.page} – vị trí đã chọn trên bản ký` : doc ? 'theo trang/vị trí bên dưới' : 'trang "Chữ ký số" cuối văn bản (mặc định)'}</span>
+          <span className="font-medium">{placement ? `trang ${placement.page} – vị trí đã chọn trên bản ký` : anchor ? `tự đặt dưới "${anchor}" (không thấy thì ${doc ? 'theo ô bên dưới' : 'cuối trang cuối'})` : doc ? 'theo trang/vị trí bên dưới' : 'cuối trang cuối (mặc định)'}</span>
           {placement && (
             <button type="button" className="ml-2 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setPlacement(null)}>
               Dùng mặc định
@@ -324,7 +341,7 @@ function SignForm({
       {placerPath && (
         <SignaturePlacer
           path={placerPath}
-          initial={placement}
+          initial={placement ?? anchorSpot}
           size={appearance.data?.box}
           onCancel={() => setPlacerPath(null)}
           onConfirm={(p) => {

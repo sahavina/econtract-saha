@@ -7,7 +7,7 @@ import { useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { DocumentPreviewDialog } from '@/components/document-preview-dialog';
-import { MisaEsignDialog } from '@/components/misa-esign-dialog';
+import { anchorFor, MisaEsignDialog } from '@/components/misa-esign-dialog';
 import { EmptyState, ErrorState } from '@/components/page-header';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -216,6 +216,7 @@ export function ContractDocumentsTab({
         <MisaEsignDialog
           contractId={contractId}
           doc={signing}
+          anchor={contract ? anchorFor(contract.parties.find((p) => p.isInternal)?.role) : undefined}
           onClose={() => setSigning(null)}
           onSigned={() => {
             invalidate();

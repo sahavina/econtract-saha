@@ -18,6 +18,51 @@ export interface SignaturePlacement {
   y: number;
 }
 
+/** Chuẩn hóa để so khớp chữ (bỏ mọi khoảng trắng, viết hoa) – PDF có thể tách/bỏ dấu cách giữa các mẩu chữ. */
+const norm = (s: string) => s.replace(/\s+/g, '').toLocaleUpperCase('vi');
+
+/**
+ * Tìm dòng neo (vd "ĐẠI DIỆN BÊN B") trong bản PDF, từ trang cuối lên, và trả vị trí khung chữ ký ngay bên dưới,
+ * căn giữa theo dòng neo, giới hạn trong trang. Không tìm thấy ⇒ null.
+ */
+export async function findAnchorPlacement(path: string, anchor: string, size: { width: number; height: number } = DEFAULT_SIZE): Promise<SignaturePlacement | null> {
+  const [pdfjs, res] = await Promise.all([loadPdfjs(), apiRaw(path)]);
+  const task = pdfjs.getDocument({ data: new Uint8Array(await res.arrayBuffer()) });
+  try {
+    const doc = await task.promise;
+    const target = norm(anchor);
+    for (let n = doc.numPages; n >= 1; n--) {
+      const page = await doc.getPage(n);
+      const [x0, y0, x1, y1] = page.view;
+      const items = (await page.getTextContent()).items.filter((i): i is (typeof i & { str: string; transform: number[]; width: number }) => 'str' in i);
+      // Gom các mẩu chữ sát nhau trên cùng dòng (sai lệch y ≤ 2pt, cách nhau ≤ 6pt) thành cụm – khớp cả khi dòng neo
+      // bị tách nhiều mẩu, nhưng không gộp hai cột cùng hàng (vd "ĐẠI DIỆN BÊN A" và "ĐẠI DIỆN BÊN B").
+      const sorted = items
+        // Bỏ mẩu chỉ có khoảng trắng: pdfmake có thể chèn một khoảng trắng dài nối hai cột cùng hàng.
+        .filter((it) => it.str.trim())
+        .map((it) => ({ x: it.transform[4], y: it.transform[5], w: it.width, s: it.str }))
+        .sort((a, b) => b.y - a.y || a.x - b.x);
+      const lines: { y: number; x: number; end: number; text: string }[] = [];
+      for (const it of sorted) {
+        const line = lines.find((l) => Math.abs(l.y - it.y) <= 2 && it.x - l.end <= 6 && it.x >= l.x - 1);
+        if (line) {
+          line.text += it.s;
+          line.end = Math.max(line.end, it.x + it.w);
+        } else lines.push({ y: it.y, x: it.x, end: it.x + it.w, text: it.s });
+      }
+      const hit = lines.find((l) => norm(l.text).includes(target));
+      if (!hit) continue;
+      const cx = (hit.x + hit.end) / 2;
+      const x = Math.min(Math.max(cx - size.width / 2 - x0, 0), Math.max(x1 - x0 - size.width, 0));
+      const y = Math.min(Math.max(hit.y - 6 - size.height - y0, 0), Math.max(y1 - y0 - size.height, 0));
+      return { page: n, x: Math.round(x), y: Math.round(y) };
+    }
+    return null;
+  } finally {
+    void task.destroy();
+  }
+}
+
 /** Bề rộng tối đa của trang xem trước (px). */
 const MAX_WIDTH = 640;
 

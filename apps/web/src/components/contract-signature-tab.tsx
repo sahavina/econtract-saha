@@ -5,7 +5,7 @@ import { Ban, Check, Copy, Download, FileKey2, Link2, Loader2, PenLine, Plus, Pr
 import { useState } from 'react';
 import { toast } from 'sonner';
 import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
-import { MisaEsignDialog } from '@/components/misa-esign-dialog';
+import { anchorFor, MisaEsignDialog } from '@/components/misa-esign-dialog';
 import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { EmptyState, ErrorState } from '@/components/page-header';
 import { type SignatureMark, SignaturePad } from '@/components/signature-pad';
@@ -323,12 +323,17 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
   /** Bản PDF để ký số: tạo một lần từ nội dung đóng băng + chữ ký các bên đã ký, thêm trang "Chữ ký số". */
   const prepareDigitalPdf = async (): Promise<string> => {
     if (request.signedDocumentId) return request.signedDocumentId;
+    const others = request.signers.filter((x) => x.method !== 'MISA_ESIGN');
+    const hasAnchor = request.contentSnapshot.toLocaleUpperCase('vi').includes('ĐẠI DIỆN BÊN');
     const file = await contractPdfFile({
       fileName: `${contract.code} - ban ky so`,
       title: `${contract.code} – ${contract.title}`,
       html: request.contentSnapshot,
-      signed: { documentHash: request.documentHash, signers: request.signers },
-      digitalSigners: request.signers.filter((x) => x.method === 'MISA_ESIGN').map((x) => x.name),
+      // Bản để ký số chỉ có nội dung hợp đồng – không thêm khối chữ ký/chứng thư ở cuối (chữ ký số đóng ngay dưới
+      // "ĐẠI DIỆN BÊN …"). Người ký thường (OTP, mật khẩu) đã ký thì vẫn giữ khối chữ ký và chứng thư của họ.
+      signed: others.some((x) => x.status === 'SIGNED') ? { documentHash: request.documentHash, signers: others } : undefined,
+      // Nội dung không có dòng "ĐẠI DIỆN BÊN …" ⇒ thêm trang "Chữ ký số" để có chỗ đóng chữ ký.
+      digitalSigners: hasAnchor ? undefined : request.signers.filter((x) => x.method === 'MISA_ESIGN').map((x) => x.name),
     });
     const fd = new FormData();
     fd.append('file', file);
@@ -478,6 +483,7 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
         <MisaEsignDialog
           contractId={contract.id}
           signature={{ prepare: prepareDigitalPdf }}
+          anchor={mine ? anchorFor(mine.partyRole) : undefined}
           onClose={() => {
             setDigitalSigning(false);
             refresh();
