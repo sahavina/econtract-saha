@@ -24,7 +24,7 @@ interface Line {
 const HEADER_NAME = /^(ten hang|ten san pham|ten vat tu|hang hoa|san pham|dien giai|mo ta|description)/;
 const HEADER_QTY = /^(so luong|sl|khoi luong|qty|quantity)/;
 
-async function loadPdfjs() {
+export async function loadPdfjs() {
   const pdfjs = await import('pdfjs-dist');
   // Worker chép vào public/vendor khi dev/build (scripts/copy-pdf-worker.mjs) – cùng origin, không tải từ CDN.
   pdfjs.GlobalWorkerOptions.workerSrc = '/vendor/pdf.worker.min.mjs';

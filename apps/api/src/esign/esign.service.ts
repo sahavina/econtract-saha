@@ -50,10 +50,32 @@ export const misaSignSchema = z.object({
   /** Trang đặt chữ ký (mặc định trang cuối). */
   page: z.coerce.number().int().min(1).max(5000).optional(),
   position: z.enum(['BOTTOM_RIGHT', 'BOTTOM_LEFT']).default('BOTTOM_RIGHT'),
+  /** Vị trí người ký tự chọn trên bản xem trước: góc dưới trái khung chữ ký, đơn vị pt, gốc ở góc dưới trái trang. */
+  x: z.coerce.number().min(0).max(14400).optional(),
+  y: z.coerce.number().min(0).max(14400).optional(),
   reason: z.string().trim().max(200).optional(),
   location: z.string().trim().max(100).optional(),
 });
 export type MisaSignInput = z.infer<typeof misaSignSchema>;
+
+/** Khung chữ ký số hiển thị: 180 × 60 pt. */
+export const SIGNATURE_BOX = { width: 180, height: 60 } as const;
+
+/**
+ * Vị trí khung chữ ký (tọa độ PDF tính từ góc dưới trái trang, đơn vị pt; A4 = 595 × 842).
+ * Người ký chọn trên bản xem trước (x, y) ⇒ dùng đúng chỗ đó; không chọn ⇒ cuối trang, nhiều người ký số
+ * xếp chồng theo thứ tự đã ký (`slot`).
+ */
+export function signatureBox(input: Pick<MisaSignInput, 'page' | 'position' | 'x' | 'y'>, pages: number, slot = 0) {
+  const page = Math.min(input.page ?? pages, pages);
+  const chosen = input.x !== undefined && input.y !== undefined;
+  return {
+    page,
+    positionX: chosen ? Math.round(input.x!) : input.position === 'BOTTOM_LEFT' ? 40 : 375,
+    positionY: chosen ? Math.round(input.y!) : 40 + slot * 70,
+    ...SIGNATURE_BOX,
+  };
+}
 
 interface StoredSecret {
   clientId: string;
@@ -374,15 +396,8 @@ export class EsignService {
     const cert = (await this.certificatesWith(user, client)).find((c) => c.keyAlias === account.certAlias);
     if (!cert || cert.keyStatus.toUpperCase() !== 'ACTIVE') throw new BadRequestException('Chứng thư số đã chọn không còn hoạt động – chọn lại chứng thư');
 
-    const pages = pdfPageCount(buffer);
-    const page = Math.min(input.page ?? pages, pages);
     const box: MisaSignatureBox = {
-      page,
-      // Tọa độ PDF tính từ góc dưới trái trang (A4 = 595 × 842 pt).
-      positionX: input.position === 'BOTTOM_LEFT' ? 40 : 375,
-      positionY: 40 + (signer?.slot ?? 0) * 70,
-      width: 180,
-      height: 60,
+      ...signatureBox(input, pdfPageCount(buffer), signer?.slot ?? 0),
       signedBy: account.certSubject ?? account.displayName ?? user.fullName,
       reason: input.reason || `Ký hợp đồng ${contract.code}`,
       location: input.location || 'Việt Nam',
@@ -417,12 +432,12 @@ export class EsignService {
       });
       await this.audit.log(
         user,
-        { action: 'contract.esign_request', entityType: 'contract', entityId: contractId, data: { code: contract.code, documentId, fileName: doc.fileName, page, certSubject: account.certSubject, transactionId, signature: signer ? true : undefined } },
+        { action: 'contract.esign_request', entityType: 'contract', entityId: contractId, data: { code: contract.code, documentId, fileName: doc.fileName, page: box.page, certSubject: account.certSubject, transactionId, signature: signer ? true : undefined } },
         tx,
       );
       return s;
     });
-    return { sessionId: session.id, expiresAt: session.expiresAt, page };
+    return { sessionId: session.id, expiresAt: session.expiresAt, page: box.page };
   }
 
   /** Trạng thái lượt ký; khi người ký đã xác nhận ⇒ gắn chữ ký và lưu PDF đã ký thành phiên bản mới (chỉ một lần). */

@@ -318,8 +318,8 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
     qc.invalidateQueries({ queryKey: ['signatures'] });
   };
   /** Bản PDF để ký số: tạo một lần từ nội dung đóng băng + chữ ký các bên đã ký, thêm trang "Chữ ký số". */
-  const prepareDigitalPdf = async () => {
-    if (request.signedDocumentId) return;
+  const prepareDigitalPdf = async (): Promise<string> => {
+    if (request.signedDocumentId) return request.signedDocumentId;
     const file = await contractPdfFile({
       fileName: `${contract.code} - ban ky so`,
       title: `${contract.code} – ${contract.title}`,
@@ -329,7 +329,8 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
     });
     const fd = new FormData();
     fd.append('file', file);
-    await api(`/contracts/${contract.id}/signature/digital-pdf`, { method: 'POST', formData: fd });
+    const r = await api<{ documentId: string }>(`/contracts/${contract.id}/signature/digital-pdf`, { method: 'POST', formData: fd });
+    return r.documentId;
   };
 
   const resend = useMutation({

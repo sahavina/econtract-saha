@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../common/auth-user.js';
 import { SecretBox } from '../integrations/secret-box.js';
-import { EsignService } from './esign.service.js';
+import { EsignService, misaSignSchema, signatureBox } from './esign.service.js';
 import { MisaError, MisaEsignClient, pdfPageCount } from './misa-esign.client.js';
 
 const cfg = { baseUrl: 'https://misa.test/apis/', clientId: 'cid', clientSecret: 'csec' };
@@ -148,6 +148,15 @@ describe('MisaEsignClient', () => {
     });
     const offline = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
     expect(await new MisaEsignClient(cfg, offline).checkCredentials()).toMatchObject({ ok: false });
+  });
+
+  it('vị trí khung chữ ký: người ký chọn (x, y) thì dùng đúng chỗ; không chọn thì cuối trang, xếp chồng theo lượt', () => {
+    expect(signatureBox(misaSignSchema.parse({ page: 2, x: 100.4, y: 300.6 }), 3)).toEqual({ page: 2, positionX: 100, positionY: 301, width: 180, height: 60 });
+    expect(signatureBox(misaSignSchema.parse({}), 3, 1)).toEqual({ page: 3, positionX: 375, positionY: 110, width: 180, height: 60 });
+    expect(signatureBox(misaSignSchema.parse({ page: 9, position: 'BOTTOM_LEFT' }), 3)).toMatchObject({ page: 3, positionX: 40, positionY: 40 });
+    // Chỉ có x (thiếu y) ⇒ coi như chưa chọn.
+    expect(signatureBox(misaSignSchema.parse({ x: 10 }), 1)).toMatchObject({ positionX: 375 });
+    expect(() => misaSignSchema.parse({ x: -1, y: 5 })).toThrow();
   });
 
   it('đếm số trang PDF', () => {

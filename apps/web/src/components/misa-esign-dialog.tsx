@@ -1,7 +1,7 @@
 'use client';
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { CheckCircle2, Loader2, LogOut, PenTool, Smartphone, XCircle } from 'lucide-react';
+import { CheckCircle2, Loader2, LogOut, MapPin, PenTool, Smartphone, XCircle } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { type SignaturePlacement, SignaturePlacer } from '@/components/signature-placer';
 import { api, ApiError } from '@/lib/api';
 import { type MisaCertificate, type MisaSession, type MisaStatus, useMisaStatus } from '@/lib/esign';
 import type { ContractDocument } from '@/lib/types';
@@ -19,7 +20,8 @@ const ACTIVE = ['PENDING', 'ATTACHING'];
 
 /** Ký số trong yêu cầu ký điện tử: chuẩn bị bản PDF (tạo/tải lên nếu chưa có) rồi ký lượt của người dùng. */
 export interface SignatureTarget {
-  prepare: () => Promise<void>;
+  /** Tạo (nếu chưa có) bản PDF của yêu cầu ký; trả mã tài liệu PDF đó. */
+  prepare: () => Promise<string>;
 }
 
 /**
@@ -255,6 +257,15 @@ function SignForm({
   const [changeCert, setChangeCert] = useState(false);
   const [opts, setOpts] = useState({ page: '', position: 'BOTTOM_RIGHT', reason: '' });
   const [error, setError] = useState<string | null>(null);
+  /** Vị trí người ký tự chọn trên bản xem trước; null ⇒ vị trí mặc định. */
+  const [placement, setPlacement] = useState<SignaturePlacement | null>(null);
+  const [placerPath, setPlacerPath] = useState<string | null>(null);
+  const openPlacer = useMutation({
+    meta: { silent: true },
+    mutationFn: async () => `/contracts/${contractId}/documents/${doc ? doc.id : await signature!.prepare()}/download`,
+    onSuccess: setPlacerPath,
+    onError: (e) => setError(errText(e)),
+  });
   const start = useMutation({
     meta: { silent: true },
     mutationFn: async () => {
@@ -262,8 +273,12 @@ function SignForm({
       const path = doc ? `/esign/misa/contracts/${contractId}/documents/${doc.id}/sign` : `/esign/misa/contracts/${contractId}/signature/sign`;
       return api<{ sessionId: string }>(path, {
         method: 'POST',
-        // Ký trong yêu cầu ký: luôn ở trang "Chữ ký số" cuối văn bản, góc dưới phải.
-        body: doc ? { page: opts.page ? Number(opts.page) : undefined, position: opts.position, reason: opts.reason || undefined } : { reason: opts.reason || undefined },
+        // Đã chọn trên bản xem trước ⇒ đúng chỗ đó; không thì tệp PDF: trang/góc theo ô chọn, yêu cầu ký: trang "Chữ ký số" cuối văn bản.
+        body: placement
+          ? { page: placement.page, x: placement.x, y: placement.y, reason: opts.reason || undefined }
+          : doc
+            ? { page: opts.page ? Number(opts.page) : undefined, position: opts.position, reason: opts.reason || undefined }
+            : { reason: opts.reason || undefined },
       });
     },
     onSuccess: (r) => onStarted(r.sessionId),
@@ -290,8 +305,33 @@ function SignForm({
           </button>
         </div>
       </div>
+      <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-dashed px-3 py-2 text-sm">
+        <span>
+          Vị trí chữ ký:{' '}
+          <span className="font-medium">{placement ? `trang ${placement.page} – vị trí đã chọn trên bản ký` : doc ? 'theo trang/vị trí bên dưới' : 'trang "Chữ ký số" cuối văn bản (mặc định)'}</span>
+          {placement && (
+            <button type="button" className="ml-2 text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => setPlacement(null)}>
+              Dùng mặc định
+            </button>
+          )}
+        </span>
+        <Button type="button" variant="outline" size="sm" disabled={openPlacer.isPending} onClick={() => openPlacer.mutate()}>
+          {openPlacer.isPending ? <Loader2 className="animate-spin" /> : <MapPin />} Chọn trên bản ký
+        </Button>
+      </div>
+      {placerPath && (
+        <SignaturePlacer
+          path={placerPath}
+          initial={placement}
+          onCancel={() => setPlacerPath(null)}
+          onConfirm={(p) => {
+            setPlacement(p);
+            setPlacerPath(null);
+          }}
+        />
+      )}
       <div className="grid gap-3 sm:grid-cols-2">
-        {doc && (
+        {doc && !placement && (
           <>
         <div className="space-y-1.5">
           <Label htmlFor="misa-page">Trang đặt chữ ký</Label>
