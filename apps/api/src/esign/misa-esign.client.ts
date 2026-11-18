@@ -74,6 +74,9 @@ const ERROR_TEXT: Record<string, string> = {
   'Auth:004': 'Thiếu thông tin xác thực MISA eSign',
   'Business:001': 'Gói MISA eSign đã hết hạn – liên hệ MISA để gia hạn',
   'Business:002': 'Đã hết số lượt ký của gói MISA eSign – liên hệ MISA để mua thêm',
+  // Không có trong bảng mã lỗi công bố – MISA xác nhận (phiếu hỗ trợ 10/2026): login-api trả e401
+  // "Không tìm thấy client." (HTTP 422) khi ClientSecret không khớp ClientID.
+  e401: 'ClientSecret MISA eSign không đúng (MISA báo "Không tìm thấy client") – sao chép lại Client Secret của ứng dụng trên developer.misa.vn rồi lưu cấu hình',
   // Hai mã dưới không có trong bảng mã lỗi công bố – ghi nhận thực tế ở bước two-factor-auth (2026-10).
   e111: 'Mã OTP không đúng – kiểm tra lại mã và loại OTP (SMS/email hay ứng dụng MISA eSign)',
   e2003:
@@ -190,19 +193,22 @@ export class MisaEsignClient {
   }
 
   /**
-   * Kiểm tra ClientID/ClientSecret: gọi làm mới token bằng mã giả. Cổng MISA chấp nhận ứng dụng thì yêu cầu đi qua
-   * (MISA trả 2xx – kể cả 204 không có nội dung – hoặc lỗi token Auth:002/003); sai ClientID/Secret ⇒ Auth:001/004 hoặc 401/403.
+   * Kiểm tra ClientID/ClientSecret: đăng nhập login-api bằng một tài khoản giả (tên miền .invalid, không thể tồn tại).
+   * Cổng refreshtoken không kiểm ClientSecret (sai Secret vẫn qua) nên không dùng được. Với login-api, MISA kiểm ứng dụng
+   * trước: sai ClientID/Secret ⇒ e401 "Không tìm thấy client." / Auth:001/004 / HTTP 401, 403; ứng dụng đúng thì đi tiếp
+   * tới bước kiểm tài khoản và báo sai tên đăng nhập/mật khẩu ⇒ hợp lệ. Lỗi mạng (không có mã, không có HTTP) ⇒ không đạt.
    */
   async checkCredentials(): Promise<{ ok: boolean; message: string }> {
+    const valid = { ok: true, message: 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng' };
     try {
-      await this.call('POST', '/esign/v1/auth/refreshtoken', { refreshToken: 'econtract-connection-test' });
-      return { ok: true, message: 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng' };
+      await this.call('POST', '/esign/v1/auth/login-api', { userName: 'econtract-connection-test@example.invalid', password: 'econtract-connection-test' });
+      return valid;
     } catch (e) {
       if (!(e instanceof MisaError)) throw e;
       const code = String(e.code ?? '');
-      if (code === 'Auth:002' || code === 'Auth:003')
-        return { ok: true, message: 'ClientID/ClientSecret hợp lệ – MISA eSign đã chấp nhận ứng dụng' };
-      return { ok: false, message: e.message };
+      const badClient = ['e401', 'Auth:001', 'Auth:004'].includes(code) || e.httpStatus === 401 || e.httpStatus === 403;
+      if (badClient || e.httpStatus === undefined) return { ok: false, message: e.message };
+      return valid;
     }
   }
 

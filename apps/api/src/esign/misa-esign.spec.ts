@@ -130,18 +130,24 @@ describe('MisaEsignClient', () => {
     });
   });
 
-  it('kiểm tra ClientID/Secret: MISA trả 204 rỗng hoặc Auth:003 ⇒ hợp lệ; Auth:001 ⇒ không hợp lệ', async () => {
-    const empty = vi.fn().mockResolvedValue(new Response(null, { status: 204 }));
-    expect(await new MisaEsignClient(cfg, empty).checkCredentials()).toMatchObject({ ok: true });
-    const badToken = vi
+  it('kiểm tra ClientID/Secret qua login-api tài khoản giả: sai tài khoản ⇒ hợp lệ; e401/Auth:001/lỗi mạng ⇒ không hợp lệ', async () => {
+    const wrongUser = vi
       .fn()
-      .mockResolvedValue(json({ status: { type: 'fail', error: true, errorCode: 'Auth:003' } }, 400));
-    expect(await new MisaEsignClient(cfg, badToken).checkCredentials()).toMatchObject({ ok: true });
+      .mockResolvedValue(json({ status: { type: 'fail', error: true, errorCode: 'e100', userMsg: 'Tên đăng nhập hoặc mật khẩu không đúng' } }, 422));
+    expect(await new MisaEsignClient(cfg, wrongUser).checkCredentials()).toMatchObject({ ok: true });
+    expect(wrongUser.mock.calls[0][0]).toContain('/esign/v1/auth/login-api');
+    expect(JSON.parse(wrongUser.mock.calls[0][1].body).userName).toMatch(/\.invalid$/);
+    const badSecret = vi
+      .fn()
+      .mockResolvedValue(json({ status: { type: 'fail', error: true, errorCode: 'e401' }, userMsg: 'Không tìm thấy client.' }, 422));
+    expect(await new MisaEsignClient(cfg, badSecret).checkCredentials()).toMatchObject({ ok: false, message: expect.stringContaining('ClientSecret') });
     const badClient = vi.fn().mockResolvedValue(json({ errorCode: 'Auth:001' }, 401));
     expect(await new MisaEsignClient(cfg, badClient).checkCredentials()).toEqual({
       ok: false,
       message: 'ClientID/ClientSecret MISA eSign không hợp lệ',
     });
+    const offline = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+    expect(await new MisaEsignClient(cfg, offline).checkCredentials()).toMatchObject({ ok: false });
   });
 
   it('đếm số trang PDF', () => {
