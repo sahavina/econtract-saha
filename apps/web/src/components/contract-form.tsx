@@ -49,7 +49,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { cloneElement, isValidElement, useId, useRef, useState } from 'react';
+import { cloneElement, isValidElement, useEffect, useId, useRef, useState } from 'react';
 import { Controller, useFieldArray, useForm, type UseFormReturn, useWatch } from 'react-hook-form';
 import { toast } from 'sonner';
 import { z } from 'zod';
@@ -756,6 +756,15 @@ export function ContractForm({
     form.setValue('parties', toForm(parent).parties, { shouldValidate: true });
     toast.success(`Đã lấy các bên từ hợp đồng ${parent.code}`);
   };
+
+  // Lập đơn từ trang hợp đồng nguyên tắc (?parent=): tự điền đối tác và các bên của hợp đồng đó (một lần, khi mở form).
+  const parentApplied = useRef(false);
+  useEffect(() => {
+    if (isEdit || !parentId || presetPartner || presetQuote || parentApplied.current) return;
+    parentApplied.current = true;
+    void applyParentParties(parentId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- chỉ chạy một lần khi mở form.
+  }, [parentId]);
 
   /** Mã nhập tay/điền từ file đã được dùng (kể cả hợp đồng trong thùng rác) ⇒ báo ngay tại ô mã, không đợi đến lúc lưu. */
   const checkCode = async (raw: string) => {
