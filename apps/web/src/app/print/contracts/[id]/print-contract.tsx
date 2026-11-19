@@ -7,7 +7,7 @@ import Link from 'next/link';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
-import { SignedDocument } from '@/components/signed-document';
+import { SignedDocument, withUnsignedParties } from '@/components/signed-document';
 import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -81,7 +81,7 @@ export function PrintContract() {
               fileName: `${c.code} - ban da ky`,
               title: `${c.code} – ${c.title} (bản đã ký)`,
               html: completed.contentSnapshot,
-              signed: { documentHash: completed.documentHash, signers: completed.signers },
+              signed: { documentHash: completed.documentHash, signers: withUnsignedParties(completed.signers, c.parties) },
             }
           : record
             ? { fileName: `${c.code} - ${record.name}`, title: `${record.name} – ${c.code}`, html }
@@ -133,7 +133,7 @@ export function PrintContract() {
             {signedMode ? 'Hợp đồng chưa có yêu cầu ký đã hoàn tất.' : templateId ? 'Mẫu biên bản chưa có nội dung.' : 'Hợp đồng chưa có nội dung soạn thảo.'}
           </p>
         ) : signedMode && completed ? (
-          <SignedDocument snapshot={completed.contentSnapshot} documentHash={completed.documentHash} signers={completed.signers} misaAppearance={misaAppearance.data} />
+          <SignedDocument snapshot={completed.contentSnapshot} documentHash={completed.documentHash} signers={withUnsignedParties(completed.signers, contract.data?.parties)} misaAppearance={misaAppearance.data} />
         ) : (
           <div className="a4-page">
             {/* HTML đã được backend làm sạch; giá trị biến được escape khi render. */}

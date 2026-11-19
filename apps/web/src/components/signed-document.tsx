@@ -27,6 +27,34 @@ export function misaOwner(s: Pick<DocSigner, 'signatureImage' | 'name'>): string
   return t.split('Ký số MISA eSign – ')[1]?.trim() || s.name;
 }
 
+/** Bên tham gia hợp đồng (tối thiểu để dựng khối "Chưa ký"). */
+export interface PartyLike {
+  role: PartyRole;
+  name: string;
+  representative?: string | null;
+  position?: string | null;
+}
+
+/**
+ * Người ký + các bên của hợp đồng chưa có trong yêu cầu ký (không được gửi ký) – để khối chữ ký vẫn đủ các bên,
+ * bên chưa ký hiện "Chưa ký". Bên đã có người ký trong yêu cầu thì giữ nguyên.
+ */
+export function withUnsignedParties<T extends DocSigner>(signers: T[], parties: PartyLike[] | undefined): DocSigner[] {
+  const roles = new Set(signers.map((s) => s.partyRole).filter(Boolean));
+  const extra: DocSigner[] = (parties ?? [])
+    .filter((p) => !roles.has(p.role))
+    .map((p) => ({
+      id: `party-${p.role}`,
+      name: p.representative || p.name,
+      title: p.position ? `${p.position} – ${p.name}` : p.representative ? p.name : null,
+      partyRole: p.role,
+      status: 'WAITING',
+      signedAt: null,
+      signatureImage: null,
+    }));
+  return [...signers, ...extra];
+}
+
 export const isMisaSigned = (s: Pick<DocSigner, 'method' | 'status'>) => s.method === 'MISA_ESIGN' && s.status === 'SIGNED';
 
 /**

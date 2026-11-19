@@ -31,6 +31,7 @@ import {
 import Link from 'next/link';
 import { toast } from 'sonner';
 import { InitialsAvatar, StatusPill, type Tone } from '@/components/list-ui';
+import { withUnsignedParties } from '@/components/signed-document';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -105,6 +106,9 @@ export function ContractOverview({ contract: c, editInfo, onOpenTab }: { contrac
   const partner = c.parties.find((p) => !p.isInternal);
   const signers = signature.data?.[0]?.signers ?? [];
   const signedRole = (role: string) => signers.some((s) => s.partyRole === role && s.status === 'SIGNED');
+  /** Đã gửi ký: bên chưa ký hiện "Chờ ký" (có lượt ký đang chờ) hoặc "Chưa ký". */
+  const pendingRole = (role: string) => signers.some((s) => s.partyRole === role && (s.status === 'PENDING' || s.status === 'WAITING'));
+  const signerList = withUnsignedParties(signers, c.parties);
   const payments = (lifecycle.data?.payments ?? []).filter((p) => p.status !== 'CANCELLED');
   const total = Number(c.value) || 0;
   const daysLeft = (d: string) => (now ? Math.ceil((new Date(d).getTime() - now) / DAY) : null);
@@ -228,11 +232,13 @@ export function ContractOverview({ contract: c, editInfo, onOpenTab }: { contrac
                     <Badge variant="secondary" className="bg-primary/10 text-primary">
                       {ROLE_LABELS[p.role]}
                     </Badge>
-                    {signedRole(p.role) && (
+                    {signedRole(p.role) ? (
                       <StatusPill tone="green">
                         <Check className="size-3" /> Đã ký
                       </StatusPill>
-                    )}
+                    ) : signers.length > 0 ? (
+                      <StatusPill tone={pendingRole(p.role) ? 'amber' : 'gray'}>{pendingRole(p.role) ? 'Chờ ký' : 'Chưa ký'}</StatusPill>
+                    ) : null}
                   </div>
                   <div className="flex items-start gap-3">
                     <span className={cn('flex size-11 shrink-0 items-center justify-center rounded-xl', p.isInternal ? 'bg-primary text-primary-foreground' : 'bg-sky-50 text-sky-600 dark:bg-sky-950 dark:text-sky-300')}>
@@ -468,14 +474,14 @@ export function ContractOverview({ contract: c, editInfo, onOpenTab }: { contrac
         {signature.data && signature.data.length > 0 && signers.length > 0 && (
           <Section icon={ShieldCheck} title="Người ký" action={<TabLink onClick={() => onOpenTab('signature')}>Ký điện tử</TabLink>}>
             <ul className="space-y-2 text-sm">
-              {signers.map((s) => (
+              {signerList.map((s) => (
                 <li key={s.id} className="flex items-center justify-between gap-2">
                   <span className="min-w-0">
                     <span className="font-medium">{s.name}</span>
                     {s.partyRole && <span className="text-xs text-muted-foreground"> · {ROLE_LABELS[s.partyRole]}</span>}
                   </span>
-                  <StatusPill tone={s.status === 'SIGNED' ? 'green' : s.status === 'REJECTED' ? 'red' : 'amber'}>
-                    {s.status === 'SIGNED' ? 'Đã ký' : s.status === 'REJECTED' ? 'Từ chối' : 'Chờ ký'}
+                  <StatusPill tone={s.status === 'SIGNED' ? 'green' : s.status === 'REJECTED' ? 'red' : s.id.startsWith('party-') ? 'gray' : 'amber'}>
+                    {s.status === 'SIGNED' ? 'Đã ký' : s.status === 'REJECTED' ? 'Từ chối' : s.id.startsWith('party-') ? 'Chưa ký' : 'Chờ ký'}
                   </StatusPill>
                 </li>
               ))}

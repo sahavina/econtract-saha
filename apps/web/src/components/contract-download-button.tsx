@@ -6,6 +6,7 @@ import { useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { api, downloadFile } from '@/lib/api';
+import { withUnsignedParties } from '@/components/signed-document';
 import { downloadContractPdf } from '@/lib/contract-pdf';
 import type { ContractDetail, ContractDocument, SignatureRequestInfo } from '@/lib/types';
 
@@ -30,7 +31,7 @@ export function ContractDownloadButton({ id, code }: { id: string; code: string 
           fileName: `${contract.code} - ban da ky`,
           title: `${contract.code} – ${contract.title} (bản đã ký)`,
           html: completed.contentSnapshot,
-          signed: { documentHash: completed.documentHash, signers: completed.signers },
+          signed: { documentHash: completed.documentHash, signers: withUnsignedParties(completed.signers, contract.parties) },
         });
       } else if (main) {
         await downloadFile(`/contracts/${id}/documents/${main.id}/download`);

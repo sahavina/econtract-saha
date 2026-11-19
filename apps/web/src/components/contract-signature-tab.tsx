@@ -9,7 +9,7 @@ import { anchorFor, MisaEsignDialog } from '@/components/misa-esign-dialog';
 import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { EmptyState, ErrorState } from '@/components/page-header';
 import { type SignatureMark, SignaturePad } from '@/components/signature-pad';
-import { SignedDocument } from '@/components/signed-document';
+import { SignedDocument, withUnsignedParties } from '@/components/signed-document';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -266,7 +266,7 @@ function SignDialog({ contract, request, open, onClose }: { contract: ContractDe
           <DialogDescription>Vui lòng đọc kỹ nội dung trước khi ký. Mã băm văn bản: {request.documentHash.slice(0, 16)}…</DialogDescription>
         </DialogHeader>
         <div className="max-h-72 overflow-y-auto rounded-lg border">
-          <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={request.signers} showCertificate={false} misaAppearance={misaAppearance.data} />
+          <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={withUnsignedParties(request.signers, contract.parties)} showCertificate={false} misaAppearance={misaAppearance.data} />
         </div>
         <SignaturePad defaultName={user?.fullName} onChange={setMark} />
         <div className="space-y-1.5">
@@ -496,7 +496,7 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
       </Card>
 
       {(request.status === 'COMPLETED' || request.status === 'IN_PROGRESS') && (
-        <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={request.signers} misaAppearance={misaAppearance.data} />
+        <SignedDocument snapshot={request.contentSnapshot} documentHash={request.documentHash} signers={withUnsignedParties(request.signers, contract.parties)} misaAppearance={misaAppearance.data} />
       )}
 
       {mine && <SignDialog contract={contract} request={request} open={signing} onClose={() => setSigning(false)} />}
