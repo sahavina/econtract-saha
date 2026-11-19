@@ -1,11 +1,13 @@
 'use client';
 
 import { CONTRACT_STATUS_LABELS, type ContractStatus, ORDER_FULFILLMENT_LABELS } from '@saha/shared';
-import { keepPreviousData, useQueries, useQuery } from '@tanstack/react-query';
-import { ChevronDown, CircleDollarSign, Package, PackageCheck, Plus, Search, SlidersHorizontal, Truck } from 'lucide-react';
+import { keepPreviousData, useMutation, useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
+import { ChevronDown, CircleDollarSign, Eye, Package, PackageCheck, Plus, Search, SlidersHorizontal, Trash2, Truck } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { toast } from 'sonner';
+import { ConfirmDialog, type ConfirmState } from '@/components/confirm-dialog';
 import { FilterSelect } from '@/components/filter-select';
 import { EmptyState, ErrorState, PageHeader } from '@/components/page-header';
 import { Pager } from '@/components/pager';
@@ -125,6 +127,49 @@ export default function OrdersPage() {
     queryKey: ['contracts', 'parents', filters.partnerId],
     queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { kind: 'CONTRACT', partnerId: filters.partnerId, pageSize: 100 } }),
   });
+  const qc = useQueryClient();
+  const [confirm, setConfirm] = useState<ConfirmState | null>(null);
+  /** Chỉ xóa được đơn Nháp hoặc Đã hủy (giống trang chi tiết; máy chủ cũng kiểm tra). */
+  const deletable = (o: ContractListItem) => can('contract.delete') && (o.status === 'DRAFT' || o.status === 'CANCELLED');
+  const remove = useMutation({
+    mutationFn: (id: string) => api<undefined>(`/contracts/${id}`, { method: 'DELETE' }),
+    onSuccess: () => {
+      toast.success('Đã chuyển đơn vào thùng rác');
+      qc.invalidateQueries({ queryKey: ['orders'] });
+      qc.invalidateQueries({ queryKey: ['contracts'] });
+    },
+  });
+  const askDelete = (o: ContractListItem) =>
+    setConfirm({
+      title: `Chuyển đơn ${o.code} vào thùng rác?`,
+      description: 'Có thể khôi phục từ Thùng rác.',
+      destructive: true,
+      confirmLabel: 'Xóa',
+      onConfirm: () => remove.mutateAsync(o.id).then(() => undefined),
+    });
+  /** Nút Xem (mở bản xem/in của đơn ở tab mới) và Xóa trên từng đơn. */
+  const rowActions = (o: ContractListItem) => (
+    <span className="flex items-center justify-end gap-1">
+      <Button variant="ghost" size="icon-sm" asChild>
+        <a href={`/print/contracts/${o.id}`} target="_blank" rel="noopener noreferrer" aria-label={`Xem đơn ${o.code}`} title="Xem bản in của đơn">
+          <Eye />
+        </a>
+      </Button>
+      {can('contract.delete') && (
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="text-destructive hover:text-destructive"
+          aria-label={`Xóa đơn ${o.code}`}
+          title={deletable(o) ? 'Chuyển vào thùng rác' : 'Chỉ xóa được đơn Nháp hoặc Đã hủy'}
+          disabled={!deletable(o) || remove.isPending}
+          onClick={() => askDelete(o)}
+        >
+          <Trash2 />
+        </Button>
+      )}
+    </span>
+  );
   const orders = useQuery({
     queryKey: ['orders', filters, page],
     queryFn: () => api<Paginated<ContractListItem>>('/contracts', { query: { ...filters, kind: 'ORDER', page, pageSize: PAGE_SIZE } }),
@@ -313,6 +358,7 @@ export default function OrdersPage() {
                       <DeliveryProgress order={o} />
                     </span>
                   </Link>
+                  <div className="-mt-1 px-3 pb-2">{rowActions(o)}</div>
                 </li>
               ))}
             </ul>
@@ -321,8 +367,8 @@ export default function OrdersPage() {
               <Table>
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    {['Đơn hàng', 'Khách hàng', 'HĐ nguyên tắc', 'Ngày giao', 'Giá trị', 'Giao hàng', 'Trạng thái'].map((h) => (
-                      <TableHead key={h} className={cn('h-11 text-[13px] tracking-normal text-foreground/80 normal-case', h === 'Giá trị' && 'text-right', h === 'Đơn hàng' && 'pl-4')}>
+                    {['Đơn hàng', 'Khách hàng', 'HĐ nguyên tắc', 'Ngày giao', 'Giá trị', 'Giao hàng', 'Trạng thái', 'Thao tác'].map((h) => (
+                      <TableHead key={h} className={cn('h-11 text-[13px] tracking-normal text-foreground/80 normal-case', (h === 'Giá trị' || h === 'Thao tác') && 'text-right', h === 'Đơn hàng' && 'pl-4', h === 'Thao tác' && 'pr-4')}>
                         {h}
                       </TableHead>
                     ))}
@@ -370,11 +416,13 @@ export default function OrdersPage() {
                       <TableCell>
                         <ContractStatusBadge status={o.status} />
                       </TableCell>
+                      <TableCell className="pr-4">{rowActions(o)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
               </Table>
             </div>
+            <ConfirmDialog state={confirm} onClose={() => setConfirm(null)} />
             <Pager className="mt-0 border-t px-4 py-3" page={page} totalPages={totalPages} total={orders.data.total} pageSize={PAGE_SIZE} unit="đơn" onPage={(p) => setParam('page', String(p))} />
           </>
         )}
