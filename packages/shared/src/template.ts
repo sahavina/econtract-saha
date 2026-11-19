@@ -3,7 +3,7 @@
  * Dùng chung cho trình soạn thảo (chèn/xem trước) và backend (xuất PDF sau này).
  */
 
-import { amountInWordsVnd, type OrderItemLike, orderItemsTableHtml, orderTotals } from './order.js';
+import { amountInWordsVnd, type OrderItemLike, orderItemsQtyTableHtml, orderItemsTableHtml, orderTotals } from './order.js';
 
 export interface TemplateVariable {
   key: string;
@@ -28,6 +28,7 @@ export const TEMPLATE_VARIABLES: { group: string; items: TemplateVariable[] }[] 
     group: 'Đơn đặt hàng',
     items: [
       { key: 'order.items_table', label: 'Bảng hàng hóa' },
+      { key: 'order.items_table_qty', label: 'Bảng hàng hóa (không giá)' },
       { key: 'order.subtotal', label: 'Cộng tiền hàng' },
       { key: 'order.vat_amount', label: 'Tiền thuế GTGT' },
       { key: 'order.total', label: 'Tổng thanh toán' },
@@ -123,7 +124,7 @@ export interface TemplateContract {
 }
 
 /** Biến có giá trị là HTML dựng sẵn (đã escape bên trong) – không escape lại khi thay. */
-const RAW_HTML_VARIABLES = new Set(['order.items_table']);
+const RAW_HTML_VARIABLES = new Set(['order.items_table', 'order.items_table_qty']);
 
 const pad = (n: number) => String(n).padStart(2, '0');
 
@@ -171,6 +172,7 @@ export function buildTemplateValues(c: TemplateContract, now: Date = new Date())
   const vat = c.vatRate === null || c.vatRate === undefined ? null : String(c.vatRate);
   const totals = items.length ? orderTotals(items, vat) : null;
   values['order.items_table'] = orderItemsTableHtml(items, vat);
+  values['order.items_table_qty'] = orderItemsQtyTableHtml(items);
   values['order.subtotal'] = totals ? formatNumberVi(totals.subtotal) : null;
   values['order.vat_amount'] = totals?.vatAmount ? formatNumberVi(totals.vatAmount) : null;
   values['order.total'] = totals ? formatNumberVi(totals.total) : null;

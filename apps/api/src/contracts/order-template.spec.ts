@@ -48,4 +48,15 @@ describe('đơn đặt hàng – tính tiền và nội dung', () => {
     expect(v['doc.date']).toBe('19/11/2026');
     expect(v['doc.date_text']).toBe('ngày 19 tháng 11 năm 2026');
   });
+  it('bảng hàng hóa không giá: chỉ STT, mã, tên, ĐVT, số lượng', () => {
+    const v = buildTemplateValues({ code: 'X', title: 'X', value: '0', currency: 'VND', parties: [], items: [{ name: 'Keo <A>', code: 'K1', unit: 'Chai', quantity: 3, unitPrice: 50000 }] });
+    const html = v['order.items_table_qty']!;
+    expect(html).toContain('Số lượng');
+    expect(html).not.toContain('Đơn giá');
+    expect(html).not.toContain('Thành tiền');
+    expect(html).not.toContain('50.000');
+    expect(html).toContain('Keo &lt;A&gt;');
+    const out = renderTemplate('<p>{{order.items_table_qty}}</p>', v).html;
+    expect(out.startsWith('<table>')).toBe(true);
+  });
 });

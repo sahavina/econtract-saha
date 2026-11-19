@@ -201,6 +201,22 @@ export function orderItemsTableHtml(items: OrderItemLike[], vatRate?: NumLike | 
   );
 }
 
+/**
+ * Bảng hàng hóa không giá (biên bản giao nhận, phiếu giao hàng…): STT, mã hàng, tên hàng, ĐVT, số lượng;
+ * không có đơn giá, thành tiền và các dòng cộng tiền.
+ */
+export function orderItemsQtyTableHtml(items: OrderItemLike[]): string | null {
+  if (!items.length) return null;
+  const th = (s: string) => `<th><p>${s}</p></th>`;
+  const td = (s: string, align?: 'right' | 'center') => `<td><p${align ? ` style="text-align: ${align}"` : ''}>${s}</p></td>`;
+  const rows = items
+    .map((i, k) => [td(String(k + 1), 'center'), td(esc(i.code ?? '')), td(esc(i.name)), td(esc(i.unit ?? ''), 'center'), td(formatQtyVi(i.quantity), 'right')].join(''))
+    .map((r) => `<tr>${r}</tr>`)
+    .join('');
+  const colgroup = `<colgroup>${[48, 95, 300, 70, 85].map((w) => `<col style="width: ${w}px">`).join('')}</colgroup>`;
+  return `<table>${colgroup}<tbody><tr>${['STT', 'Mã hàng', 'Tên hàng hóa', 'ĐVT', 'Số lượng'].map(th).join('')}</tr>${rows}</tbody></table>`;
+}
+
 /** Nội dung mặc định khi lập đơn không chọn mẫu (soạn tiếp ở tab Nội dung). */
 export const DEFAULT_ORDER_HTML = [
   '<p style="text-align: center"><strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong></p>',
