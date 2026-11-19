@@ -76,6 +76,8 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
   const [days, setDays] = useState('7');
   const [message, setMessage] = useState('');
   const [digital, setDigital] = useState(false);
+  /** Ký số: SAHA (người ký nội bộ) ký số trước rồi mới gửi đối tác ký tiếp. */
+  const [digitalFirst, setDigitalFirst] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
   const misa = useMisaStatus();
   const hasInternal = signers.some((s) => s.internal);
@@ -91,6 +93,7 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
           expiresInDays: Number(days) || 7,
           message: message || null,
           internalDigital: digital && hasInternal,
+          digitalFirst: digital && hasInternal && digitalFirst,
           signers: signers.map((s) => {
             const u = lookups.data?.users.find((x) => x.id === s.userId);
             return s.internal
@@ -188,16 +191,34 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
           </div>
         </div>
         {misa.data?.ready && hasInternal && (
-          <label className="flex items-start gap-2 rounded-md border p-3 text-sm">
-            <Checkbox className="mt-0.5" checked={digital} onCheckedChange={(v) => setDigital(!!v)} />
-            <span>
-              <span className="font-medium">Người ký nội bộ ký bằng chữ ký số MISA eSign</span>
-              <span className="block text-xs text-muted-foreground">
-                Đối tác ký trước qua liên kết + OTP; sau đó người ký nội bộ ký số (chứng thư MISA eSign) lên bản PDF gồm nội dung và chữ ký các bên – hệ thống tự xếp
-                người ký số sau cùng. Bản PDF ký số kiểm tra được bằng Adobe Reader.
+          <div className="space-y-3 rounded-md border p-3 text-sm">
+            <label className="flex items-start gap-2">
+              <Checkbox className="mt-0.5" checked={digital} onCheckedChange={(v) => setDigital(!!v)} />
+              <span>
+                <span className="font-medium">Người ký nội bộ ký bằng chữ ký số MISA eSign</span>
+                <span className="block text-xs text-muted-foreground">
+                  Người ký nội bộ ký số (chứng thư MISA eSign) lên bản PDF của hợp đồng, chữ ký đặt dưới “ĐẠI DIỆN BÊN …”. Bản PDF ký số kiểm tra được bằng Adobe Reader.
+                </span>
               </span>
-            </span>
-          </label>
+            </label>
+            {digital && (
+              <div className="space-y-1.5 pl-6">
+                <Label>Ai ký trước</Label>
+                <Select value={digitalFirst ? 'internal' : 'partner'} onValueChange={(v) => setDigitalFirst(v === 'internal')}>
+                  <SelectTrigger className="w-full" aria-label="Ai ký trước">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="partner">Đối tác ký trước (liên kết + OTP), nội bộ ký số sau cùng</SelectItem>
+                    <SelectItem value="internal">Nội bộ ký số trước, xong tự gửi đối tác ký tiếp</SelectItem>
+                  </SelectContent>
+                </Select>
+                {digitalFirst && (
+                  <p className="text-xs text-muted-foreground">Đối tác nhận email mời ký sau khi nội bộ ký số xong; trang ký của đối tác có bản PDF đã ký số để xem.</p>
+                )}
+              </div>
+            )}
+          </div>
         )}
         <div className="space-y-1.5">
           <Label htmlFor="sig-msg">Lời nhắn trong email mời ký</Label>

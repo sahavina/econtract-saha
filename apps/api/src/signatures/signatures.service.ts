@@ -102,7 +102,7 @@ export class SignaturesService {
     const expiresAt = new Date(Date.now() + input.expiresInDays * DAY);
     const sequential = input.signingOrder === 'SEQUENTIAL';
 
-    const signers = orderSigners(input.signers, sequential, digital).map(({ signer: s, order }) => {
+    const signers = orderSigners(input.signers, sequential, digital, digital && input.digitalFirst).map(({ signer: s, order }) => {
       const u = internal.find((x) => x.id === s.userId);
       const token = u ? null : randomBytes(32).toString('base64url');
       return {
@@ -494,6 +494,8 @@ export class SignaturesService {
         status: true,
         signedAt: true,
         signatureImage: true,
+        method: true,
+        evidence: true,
       },
     });
     return {
@@ -507,9 +509,23 @@ export class SignaturesService {
         contentSnapshot: s.request.contentSnapshot,
       },
       signer: { id: s.id, name: s.name, email: maskEmail(s.email), status: s.status, otpSentAt: s.otpSentAt },
-      signers,
-      documents: await this.frozenDocuments(s.request),
+      // Chỉ đưa khung chữ ký số đã đóng lên PDF (để hiển thị), không đưa mã giao dịch/bằng chứng khác.
+      signers: signers.map(({ evidence, ...x }) => ({ ...x, evidence: { stamp: (evidence as { stamp?: unknown } | null)?.stamp ?? null } })),
+      documents: await this.publicDocuments(s.request),
     };
+  }
+
+  /** Tài liệu đối tác được xem: tài liệu đóng băng lúc gửi ký + bản PDF đã ký số (nếu người ký số đã ký trước). */
+  private async publicDocuments(request: { contractId: string; tenantId: string; contentSnapshot: string; signedDocumentId: string | null }) {
+    const frozen = await this.frozenDocuments(request);
+    if (!request.signedDocumentId) return frozen;
+    const digitalSigned = await this.prisma.signer.count({ where: { request: { signedDocumentId: request.signedDocumentId }, method: 'MISA_ESIGN', status: 'SIGNED' } });
+    if (!digitalSigned) return frozen;
+    const signed = await this.prisma.contractDocument.findFirst({
+      where: { id: request.signedDocumentId, tenantId: request.tenantId },
+      select: { id: true, fileName: true, version: true, size: true, mimeType: true, sha256: true },
+    });
+    return signed ? [signed, ...frozen.filter((d) => d.id !== signed.id)] : frozen;
   }
 
   /**
@@ -538,7 +554,7 @@ export class SignaturesService {
   /** Đối tác mở/tải một tài liệu đã đóng băng qua liên kết ký; ghi nhật ký mỗi lần mở. */
   async publicDocument(token: string, documentId: string, meta: { ip?: string; userAgent?: string }) {
     const s = await this.signerByToken(token);
-    const allowed = await this.frozenDocuments(s.request);
+    const allowed = await this.publicDocuments(s.request);
     if (!allowed.some((d) => d.id === documentId))
       throw new NotFoundException('Không tìm thấy tài liệu trong yêu cầu ký này');
     const doc = await this.prisma.contractDocument.findUniqueOrThrow({ where: { id: documentId } });
@@ -921,10 +937,22 @@ export class SignaturesService {
  * Thứ tự ký: lần lượt ⇒ 1, 2, 3…; đồng thời ⇒ cùng lượt 1. Có ký số MISA ⇒ chữ ký số phải nằm sau cùng trên PDF
  * (PDF đã ký số không thêm được nội dung) nên người ký nội bộ xếp sau mọi người ký bên ngoài (đồng thời: lượt 2).
  */
-export function orderSigners<T extends { userId?: string | null }>(signers: T[], sequential: boolean, digital: boolean) {
-  const ordered = digital ? [...signers.filter((s) => !s.userId), ...signers.filter((s) => s.userId)] : signers;
-  const external = ordered.filter((s) => !s.userId).length;
-  return ordered.map((signer, i) => ({ signer, order: sequential ? i + 1 : digital && signer.userId && external > 0 ? 2 : 1 }));
+/**
+ * Thứ tự ký. Có ký số MISA: mặc định người ký bên ngoài ký trước, người ký số (nội bộ) sau cùng;
+ * `digitalFirst` ⇒ người ký số ký trước, xong mới mở lượt cho người ký bên ngoài.
+ */
+export function orderSigners<T extends { userId?: string | null }>(signers: T[], sequential: boolean, digital: boolean, digitalFirst = false) {
+  const internal = signers.filter((s) => s.userId);
+  const outside = signers.filter((s) => !s.userId);
+  const ordered = digital ? (digitalFirst ? [...internal, ...outside] : [...outside, ...internal]) : signers;
+  return ordered.map((signer, i) => {
+    if (sequential) return { signer, order: i + 1 };
+    if (!digital) return { signer, order: 1 };
+    // Ký đồng thời: nhóm ký trước lượt 1, nhóm còn lại lượt 2 (chỉ khi cả hai nhóm đều có người).
+    const firstGroup = digitalFirst ? !!signer.userId : !signer.userId;
+    const both = internal.length > 0 && outside.length > 0;
+    return { signer, order: !both || firstGroup ? 1 : 2 };
+  });
 }
 
 /** Đọc lại bảng "Tài liệu đính kèm" mà buildSnapshot ghi vào nội dung đóng băng (tên file đã escape HTML). */

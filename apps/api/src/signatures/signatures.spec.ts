@@ -75,6 +75,18 @@ describe('orderSigners – ký số MISA ký sau cùng', () => {
     expect(orderSigners([saha, partner], false, false).map((x) => x.order)).toEqual([1, 1]);
     expect(orderSigners([saha, partner], true, false).map((x) => x.signer.name)).toEqual(['SAHA', 'Đối tác']);
   });
+  it('SAHA ký số trước (digitalFirst): người ký nội bộ lượt 1, đối tác ký tiếp sau', () => {
+    expect(orderSigners([partner, saha], true, true, true).map((x) => [x.signer.name, x.order])).toEqual([
+      ['SAHA', 1],
+      ['Đối tác', 2],
+    ]);
+    expect(orderSigners([partner, saha], false, true, true).map((x) => [x.signer.name, x.order])).toEqual([
+      ['SAHA', 1],
+      ['Đối tác', 2],
+    ]);
+    // Không bật ký số thì bỏ qua digitalFirst.
+    expect(orderSigners([partner, saha], true, false, true).map((x) => x.signer.name)).toEqual(['Đối tác', 'SAHA']);
+  });
   it('chỉ có người ký nội bộ ký số ⇒ bắt đầu ngay ở lượt 1', () => {
     expect(orderSigners([saha], false, true).map((x) => x.order)).toEqual([1]);
   });

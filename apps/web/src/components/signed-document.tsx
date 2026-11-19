@@ -1,4 +1,4 @@
-import type { SignatureStamp } from '@saha/shared';
+import { DEFAULT_SIGNATURE_APPEARANCE, type SignatureStamp } from '@saha/shared';
 import { SignatureMarkView } from '@/components/signature-pad';
 import { type SignatureAppearanceInfo, SignaturePreview } from '@/components/signature-appearance-card';
 import { formatDateTime } from '@/lib/format';
@@ -62,8 +62,16 @@ export function SignedDocument({
               <p className="font-bold">{s.partyRole ? ROLE_LABELS[s.partyRole] : 'NGƯỜI KÝ'}</p>
               {s.title && <p className="italic">{s.title}</p>}
               <div className="flex min-h-20 items-center justify-center">
-                {misaAppearance && isMisaSigned(s) && s.signedAt ? (
-                  <SignaturePreview appearance={misaAppearance.appearance} logo={misaAppearance.logo} owner={misaOwner(s)} signedAt={new Date(s.signedAt)} stamp={s.evidence?.stamp} framed={false} scale={1.1} />
+                {(misaAppearance || s.evidence?.stamp) && isMisaSigned(s) && s.signedAt ? (
+                  <SignaturePreview
+                    appearance={misaAppearance?.appearance ?? DEFAULT_SIGNATURE_APPEARANCE}
+                    logo={misaAppearance?.logo ?? null}
+                    owner={misaOwner(s)}
+                    signedAt={new Date(s.signedAt)}
+                    stamp={s.evidence?.stamp}
+                    framed={false}
+                    scale={1.1}
+                  />
                 ) : s.status === 'SIGNED' ? (
                   <SignatureMarkView value={s.signatureImage} />
                 ) : (
