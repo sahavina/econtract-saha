@@ -239,7 +239,7 @@ function CreateRequest({ contract }: { contract: ContractDetail }) {
   );
 }
 
-function SignDialog({ contract, request, open, onClose }: { contract: ContractDetail; request: SignatureRequestInfo; open: boolean; onClose: () => void }) {
+export function SignDialog({ contract, request, open, onClose }: { contract: ContractDetail; request: SignatureRequestInfo; open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const { user } = useAuth();
   const misaAppearance = useSignatureAppearance();
@@ -290,7 +290,7 @@ function SignDialog({ contract, request, open, onClose }: { contract: ContractDe
   );
 }
 
-function RejectDialog({ contractId, open, onClose }: { contractId: string; open: boolean; onClose: () => void }) {
+export function RejectDialog({ contractId, open, onClose }: { contractId: string; open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const [reason, setReason] = useState('');
   const reject = useMutation({
@@ -298,6 +298,7 @@ function RejectDialog({ contractId, open, onClose }: { contractId: string; open:
     onSuccess: () => {
       toast.success('Đã từ chối ký');
       qc.invalidateQueries({ queryKey: ['contract', contractId] });
+      qc.invalidateQueries({ queryKey: ['signatures'] });
       onClose();
     },
   });
@@ -324,6 +325,27 @@ function RejectDialog({ contractId, open, onClose }: { contractId: string; open:
   );
 }
 
+/**
+ * Bản PDF để ký số của yêu cầu ký: tạo một lần từ nội dung đóng băng (chỉ nội dung hợp đồng; người ký thường đã ký thì
+ * giữ khối chữ ký của họ; không có dòng "ĐẠI DIỆN BÊN …" thì thêm trang "Chữ ký số"); đã có thì dùng lại.
+ */
+export async function prepareSigningPdf(contract: Pick<ContractDetail, 'id' | 'code' | 'title'>, request: SignatureRequestInfo): Promise<string> {
+  if (request.signedDocumentId) return request.signedDocumentId;
+  const others = request.signers.filter((x) => x.method !== 'MISA_ESIGN');
+  const hasAnchor = request.contentSnapshot.toLocaleUpperCase('vi').includes('ĐẠI DIỆN BÊN');
+  const file = await contractPdfFile({
+    fileName: `${contract.code} - ban ky so`,
+    title: `${contract.code} – ${contract.title}`,
+    html: request.contentSnapshot,
+    signed: others.some((x) => x.status === 'SIGNED') ? { documentHash: request.documentHash, signers: others } : undefined,
+    digitalSigners: hasAnchor ? undefined : request.signers.filter((x) => x.method === 'MISA_ESIGN').map((x) => x.name),
+  });
+  const fd = new FormData();
+  fd.append('file', file);
+  const r = await api<{ documentId: string }>(`/contracts/${contract.id}/signature/digital-pdf`, { method: 'POST', formData: fd });
+  return r.documentId;
+}
+
 function RequestCard({ contract, request }: { contract: ContractDetail; request: SignatureRequestInfo }) {
   const { user, can } = useAuth();
   const misaAppearance = useSignatureAppearance();
@@ -341,26 +363,7 @@ function RequestCard({ contract, request }: { contract: ContractDetail; request:
     qc.invalidateQueries({ queryKey: ['contracts'] });
     qc.invalidateQueries({ queryKey: ['signatures'] });
   };
-  /** Bản PDF để ký số: tạo một lần từ nội dung đóng băng + chữ ký các bên đã ký, thêm trang "Chữ ký số". */
-  const prepareDigitalPdf = async (): Promise<string> => {
-    if (request.signedDocumentId) return request.signedDocumentId;
-    const others = request.signers.filter((x) => x.method !== 'MISA_ESIGN');
-    const hasAnchor = request.contentSnapshot.toLocaleUpperCase('vi').includes('ĐẠI DIỆN BÊN');
-    const file = await contractPdfFile({
-      fileName: `${contract.code} - ban ky so`,
-      title: `${contract.code} – ${contract.title}`,
-      html: request.contentSnapshot,
-      // Bản để ký số chỉ có nội dung hợp đồng – không thêm khối chữ ký/chứng thư ở cuối (chữ ký số đóng ngay dưới
-      // "ĐẠI DIỆN BÊN …"). Người ký thường (OTP, mật khẩu) đã ký thì vẫn giữ khối chữ ký và chứng thư của họ.
-      signed: others.some((x) => x.status === 'SIGNED') ? { documentHash: request.documentHash, signers: others } : undefined,
-      // Nội dung không có dòng "ĐẠI DIỆN BÊN …" ⇒ thêm trang "Chữ ký số" để có chỗ đóng chữ ký.
-      digitalSigners: hasAnchor ? undefined : request.signers.filter((x) => x.method === 'MISA_ESIGN').map((x) => x.name),
-    });
-    const fd = new FormData();
-    fd.append('file', file);
-    const r = await api<{ documentId: string }>(`/contracts/${contract.id}/signature/digital-pdf`, { method: 'POST', formData: fd });
-    return r.documentId;
-  };
+  const prepareDigitalPdf = () => prepareSigningPdf(contract, request);
 
   const resend = useMutation({
     mutationFn: (signerId: string) => api<{ url: string }>(`/contracts/${contract.id}/signature/signers/${signerId}/resend`, { method: 'POST' }),
