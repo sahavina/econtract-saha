@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, type Paginated } from '@/lib/api';
@@ -19,6 +21,12 @@ import { cn } from '@/lib/utils';
  */
 export const isRecordTemplate = (t: Pick<TemplateListItem, 'code' | 'name'>) => /^BB/i.test(t.code) || /biên bản/i.test(t.name);
 
+/** Hôm nay theo giờ Việt Nam, dạng yyyy-mm-dd (cho ô chọn ngày). */
+export const todayVn = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+
+/** Ngày yyyy-mm-dd ⇒ thời điểm 12:00 giờ Việt Nam ngày đó (để buildTemplateValues ra đúng ngày). */
+export const vnNoon = (d: string) => new Date(`${d}T12:00:00+07:00`);
+
 /** Chọn mẫu biên bản rồi mở bản in của hồ sơ theo mẫu đó (tự điền thông tin đơn, hàng hóa, các bên). */
 export function RecordPrintDialog({ contractId, onClose }: { contractId: string; onClose: () => void }) {
   const router = useRouter();
@@ -29,6 +37,8 @@ export function RecordPrintDialog({ contractId, onClose }: { contractId: string;
   });
   const records = (templates.data?.items ?? []).filter(isRecordTemplate);
   const [picked, setPicked] = useState<string | null>(null);
+  /** Ngày lập biên bản (mặc định hôm nay theo giờ Việt Nam). */
+  const [date, setDate] = useState(todayVn);
   const selected = picked ?? records[0]?.id ?? null;
 
   return (
@@ -79,11 +89,18 @@ export function RecordPrintDialog({ contractId, onClose }: { contractId: string;
             ))}
           </ul>
         )}
+        {records.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Label htmlFor="record-date">Ngày lập biên bản</Label>
+            <Input id="record-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-44" />
+            <span className="text-xs text-muted-foreground">Điền vào {'{{doc.date}}'}, {'{{doc.date_text}}'} của mẫu.</span>
+          </div>
+        )}
         <DialogFooter>
           <Button variant="ghost" onClick={onClose}>
             Đóng
           </Button>
-          <Button disabled={!selected} onClick={() => selected && router.push(`/print/contracts/${contractId}?template=${selected}`)}>
+          <Button disabled={!selected} onClick={() => selected && router.push(`/print/contracts/${contractId}?template=${selected}${date ? `&date=${date}` : ''}`)}>
             <Printer /> Mở bản in
           </Button>
         </DialogFooter>

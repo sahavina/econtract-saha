@@ -10,6 +10,8 @@ import { toast } from 'sonner';
 import { SignedDocument, withUnsignedParties } from '@/components/signed-document';
 import { useSignatureAppearance } from '@/components/signature-appearance-card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { todayVn, vnNoon } from '@/components/record-print-dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 import { api, ApiError } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
@@ -28,6 +30,8 @@ const MISSING_MARK = /<mark data-missing="(?:empty|unknown)">\{\{[^<]*?\}\}<\/ma
 export function PrintContract() {
   const { id } = useParams<{ id: string }>();
   const params = useSearchParams();
+  // Ngày lập biên bản: từ ?date= (chọn ở hộp thoại In biên bản) hoặc hôm nay; đổi được trên thanh công cụ.
+  const [docDate, setDocDate] = useState(() => (/^\d{4}-\d{2}-\d{2}$/.test(params.get('date') ?? '') ? params.get('date')! : todayVn()));
   const templateId = params.get('template');
   const signedMode = !templateId && params.get('doc') === 'signed';
   const { status } = useAuth();
@@ -58,10 +62,10 @@ export function PrintContract() {
     const c = contract.data;
     const source = templateId ? template.data?.contentHtml : c?.contentHtml;
     if (!c || !source) return '';
-    const out = renderTemplate(source, buildTemplateValues(c)).html;
+    const out = renderTemplate(source, buildTemplateValues(c, templateId && docDate ? vnNoon(docDate) : undefined)).html;
     // Biên bản: chỗ chưa có dữ liệu để dòng chấm cho người dùng điền tay khi in.
     return templateId ? out.replace(MISSING_MARK, '……………………') : out;
-  }, [contract.data, templateId, template.data]);
+  }, [contract.data, templateId, template.data, docDate]);
   const record = templateId ? template.data : undefined;
   const completed = requests.data?.find((r) => r.status === 'COMPLETED');
 
@@ -109,6 +113,12 @@ export function PrintContract() {
           <p className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
             {contract.data ? `${contract.data.code} · ${record ? record.name : signedMode ? 'Bản đã ký' : 'Nội dung hợp đồng'}` : ''}
           </p>
+          {templateId && (
+            <label className="flex items-center gap-1.5 text-sm">
+              <span className="text-muted-foreground">Ngày lập</span>
+              <Input type="date" value={docDate} onChange={(e) => setDocDate(e.target.value)} className="h-8 w-40" aria-label="Ngày lập biên bản" />
+            </label>
+          )}
           <Button size="sm" variant="outline" disabled={loading || empty} onClick={() => window.print()}>
             <Printer /> In
           </Button>
